@@ -1,5 +1,11 @@
+import { Metadata } from 'next'
 import Link from 'next/link'
 import { CheckCircle } from 'lucide-react'
+
+export const metadata: Metadata = {
+  title: 'Pricing | Simple £49/year',
+  description: 'Unlimited transactions and HMRC-compliant CGT computations for one simple annual fee. Try it 14 days free.',
+}
 
 export default function PricingPage() {
   return (

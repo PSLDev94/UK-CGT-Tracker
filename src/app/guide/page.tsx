@@ -1,9 +1,15 @@
 import Link from 'next/link'
 import { ArrowLeft, BookOpen } from 'lucide-react'
 
-export const metadata = {
-  title: 'UK CGT Guide — CGT Tracker',
-  description: 'A plain-English guide to UK Capital Gains Tax rules for self-directed investors. Learn about the Section 104 pool, 30-day rule, annual exempt amount, and how to report on self-assessment.',
+import { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'UK Capital Gains Tax Guide for Investors',
+  description: 'A plain-English guide to UK Capital Gains Tax rules for self-directed investors. Learn about the Section 104 pool, 30-day bed and breakfast rule, annual exempt amounts, and how to report on your SA108 self-assessment.',
+  openGraph: {
+    title: 'UK Capital Gains Tax Guide for Investors',
+    description: 'A plain-English guide to UK Capital Gains Tax rules for self-directed investors.',
+  }
 }
 
 export default function GuidePage() {
