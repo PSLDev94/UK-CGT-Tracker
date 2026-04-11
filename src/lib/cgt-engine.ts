@@ -48,6 +48,7 @@ export interface RawTransaction {
   totalGBP: number
   feesGBP: number
   matched?: number // internal tracking
+  isBBMatched?: boolean
 }
 
 export interface DisposalPart {
@@ -55,6 +56,7 @@ export interface DisposalPart {
   cost: number
   rule: 'SAME_DAY' | 'BED_AND_BREAKFAST' | 'SECTION_104'
   matchDate?: string
+  notes?: string
 }
 
 export interface Disposal {
@@ -81,7 +83,8 @@ export function runCGTEngineCalculations(allTransactions: RawTransaction[], taxY
   const poolsByTicker: Record<string, Section104Pool> = {}
 
   for (const [ticker, txns] of Object.entries(byTicker)) {
-    txns.sort((a, b) => a.date.localeCompare(b.date))
+    // Bug 2/3: Strict Chronological Sort using numeric epoch
+    txns.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     let pool = { shares: new Decimal(0), totalCost: new Decimal(0) }
 
     let i = 0
@@ -95,9 +98,18 @@ export function runCGTEngineCalculations(allTransactions: RawTransaction[], taxY
       }
 
       if (txn.type === 'BUY') {
+        // Bug 3: Ignore buys that were already consumed by a prior B&B matcher
+        if (txn.isBBMatched) {
+           i++
+           continue
+        }
+        
         const unmatchedQty = new Decimal(txn.quantity).minus(txn.matched || 0)
         if (unmatchedQty.gt(0)) {
-          const unmatchedCost = unmatchedQty.div(txn.quantity).times(txn.totalGBP)
+          // Bug 5: Include incidental broker fees in the allowable cost formulation
+          const totalCostIncFees = new Decimal(txn.totalGBP).plus(txn.feesGBP || 0)
+          const unmatchedCost = unmatchedQty.div(txn.quantity).times(totalCostIncFees)
+          
           pool.shares = pool.shares.plus(unmatchedQty)
           pool.totalCost = pool.totalCost.plus(unmatchedCost)
         }
@@ -106,85 +118,104 @@ export function runCGTEngineCalculations(allTransactions: RawTransaction[], taxY
       }
 
       if (txn.type === 'SELL') {
-        let remainingQty = new Decimal(txn.quantity)
-        let totalAllowableCost = new Decimal(0)
-        const disposalParts: DisposalPart[] = []
+        try {
+          let remainingQty = new Decimal(txn.quantity)
+          let totalAllowableCost = new Decimal(0)
+          const disposalParts: DisposalPart[] = []
 
-        // --- RULE 1: Same-day matching ---
-        const sameDayBuys = txns.filter(t =>
-          t.type === 'BUY' &&
-          t.date === txn.date &&
-          t.ticker === ticker &&
-          !(t.matched && new Decimal(t.matched).gte(t.quantity))
-        )
-        for (const buy of sameDayBuys) {
-          if (remainingQty.lte(0)) break
-          const availableBuyQty = new Decimal(buy.quantity).minus(buy.matched || 0)
-          const matchQty = Decimal.min(remainingQty, availableBuyQty)
-          const matchCost = matchQty.div(buy.quantity).times(buy.totalGBP)
-          remainingQty = remainingQty.minus(matchQty)
-          totalAllowableCost = totalAllowableCost.plus(matchCost)
-          buy.matched = (buy.matched || 0) + matchQty.toNumber()
-          disposalParts.push({ qty: matchQty.toNumber(), cost: matchCost.toNumber(), rule: 'SAME_DAY', matchDate: buy.date })
-          
-          // Reverse out of S104 pool ONLY IF this buy happened BEFORE the sell in our sorted array
-          const buyIndex = txns.indexOf(buy)
-          if (buyIndex < i) {
+          // --- RULE 1: Same-day matching ---
+          const sameDayBuys = txns.filter(t =>
+            t.type === 'BUY' &&
+            t.date === txn.date &&
+            t.ticker === ticker &&
+            !(t.matched && new Decimal(t.matched).gte(t.quantity))
+          )
+          for (const buy of sameDayBuys) {
+            if (remainingQty.lte(0)) break
+            const availableBuyQty = new Decimal(buy.quantity).minus(buy.matched || 0)
+            const matchQty = Decimal.min(remainingQty, availableBuyQty)
+            // Bug 5: Fees included in allowable cost
+            const matchCost = matchQty.div(buy.quantity).times(new Decimal(buy.totalGBP).plus(buy.feesGBP || 0))
+            remainingQty = remainingQty.minus(matchQty)
+            totalAllowableCost = totalAllowableCost.plus(matchCost)
+            buy.matched = (buy.matched || 0) + matchQty.toNumber()
+            disposalParts.push({ qty: matchQty.toNumber(), cost: matchCost.toNumber(), rule: 'SAME_DAY', matchDate: buy.date })
+            
+            // Reverse out of S104 pool ONLY IF this buy happened BEFORE the sell in our sorted array
+            const buyIndex = txns.indexOf(buy)
+            if (buyIndex < i) {
+              pool.shares = pool.shares.minus(matchQty)
+              pool.totalCost = pool.totalCost.minus(matchCost)
+            }
+          }
+
+          // --- RULE 2: 30-day matching ---
+          const txnDateParsed = parseISO(txn.date)
+          const thirtyDayEnd = addDays(txnDateParsed, 30)
+          const bbBuys = txns.filter(t => {
+            if (t.type !== 'BUY' || t.ticker !== ticker) return false
+            const tDate = parseISO(t.date)
+            return isAfter(tDate, txnDateParsed) && (isBefore(tDate, thirtyDayEnd) || isEqual(tDate, thirtyDayEnd)) && !(t.matched && new Decimal(t.matched).gte(t.quantity))
+          }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+          for (const buy of bbBuys) {
+            if (remainingQty.lte(0)) break
+            const availableQty = new Decimal(buy.quantity).minus(buy.matched || 0)
+            const matchQty = Decimal.min(remainingQty, availableQty)
+            // Bug 5: Fees included in allowable cost calculation
+            const matchCost = matchQty.div(buy.quantity).times(new Decimal(buy.totalGBP).plus(buy.feesGBP || 0))
+            remainingQty = remainingQty.minus(matchQty)
+            totalAllowableCost = totalAllowableCost.plus(matchCost)
+            buy.matched = (buy.matched || 0) + matchQty.toNumber()
+            
+            // Bug 3: Flag that this buy was consumed by a prior B&B condition
+            buy.isBBMatched = true
+            disposalParts.push({ qty: matchQty.toNumber(), cost: matchCost.toNumber(), rule: 'BED_AND_BREAKFAST', matchDate: buy.date, notes: `Matched future 30-day buy` })
+          }
+
+          // --- RULE 3: Section 104 Pool ---
+          if (remainingQty.gt(0) && pool.shares.gt(0)) {
+            // If total shares < remainingQty, something is wrong with data (sold more than owned)
+            // We match whatever is available in the pool
+            const matchQty = Decimal.min(remainingQty, pool.shares)
+            const poolCostPerShare = pool.totalCost.div(pool.shares)
+            const matchCost = matchQty.times(poolCostPerShare)
+            remainingQty = remainingQty.minus(matchQty)
+            totalAllowableCost = totalAllowableCost.plus(matchCost)
             pool.shares = pool.shares.minus(matchQty)
             pool.totalCost = pool.totalCost.minus(matchCost)
+            disposalParts.push({ qty: matchQty.toNumber(), cost: matchCost.toNumber(), rule: 'SECTION_104' })
           }
+          
+          // Bug 4: Warning if selling shares without pool existence
+          if (remainingQty.gt(0)) {
+             disposalParts.push({
+               qty: remainingQty.toNumber(),
+               cost: 0,
+               rule: 'SECTION_104',
+               notes: `Warning: No acquisition history found prior to this disposal date. Outputting £0.00 allowable cost. Check your full transaction history is imported.`
+             })
+          }
+
+          // Bug 5: Net proceeds should deduct incidental disposal fees
+          const proceeds = Decimal.max(0, new Decimal(txn.totalGBP).minus(txn.feesGBP || 0))
+          const gain = proceeds.minus(totalAllowableCost)
+
+          if (isInTaxYear(txn.date, taxYear)) {
+            allDisposals.push({
+              date: txn.date,
+              ticker,
+              securityName: txn.securityName,
+              quantity: txn.quantity,
+              proceedsGBP: proceeds.toNumber(),
+              allowableCostGBP: totalAllowableCost.toNumber(),
+              gainGBP: gain.toNumber(),
+              parts: disposalParts
+            })
+          }
+        } catch (err: any) {
+           console.error(`CGT Engine Error (Bug 2 caught): Failed processing SELL transaction for ${ticker} on ${txn.date}.`, err.message)
         }
-
-        // --- RULE 2: 30-day matching ---
-        const txnDateParsed = parseISO(txn.date)
-        const thirtyDayEnd = addDays(txnDateParsed, 30)
-        const bbBuys = txns.filter(t => {
-          if (t.type !== 'BUY' || t.ticker !== ticker) return false
-          const tDate = parseISO(t.date)
-          return isAfter(tDate, txnDateParsed) && (isBefore(tDate, thirtyDayEnd) || isEqual(tDate, thirtyDayEnd)) && !(t.matched && new Decimal(t.matched).gte(t.quantity))
-        }).sort((a, b) => a.date.localeCompare(b.date))
-
-        for (const buy of bbBuys) {
-          if (remainingQty.lte(0)) break
-          const availableQty = new Decimal(buy.quantity).minus(buy.matched || 0)
-          const matchQty = Decimal.min(remainingQty, availableQty)
-          const matchCost = matchQty.div(buy.quantity).times(buy.totalGBP)
-          remainingQty = remainingQty.minus(matchQty)
-          totalAllowableCost = totalAllowableCost.plus(matchCost)
-          buy.matched = (buy.matched || 0) + matchQty.toNumber()
-          disposalParts.push({ qty: matchQty.toNumber(), cost: matchCost.toNumber(), rule: 'BED_AND_BREAKFAST', matchDate: buy.date })
-        }
-
-        // --- RULE 3: Section 104 Pool ---
-        if (remainingQty.gt(0) && pool.shares.gt(0)) {
-          // If total shares < remainingQty, something is wrong with data (sold more than owned)
-          // We match whatever is available in the pool
-          const matchQty = Decimal.min(remainingQty, pool.shares)
-          const poolCostPerShare = pool.totalCost.div(pool.shares)
-          const matchCost = matchQty.times(poolCostPerShare)
-          remainingQty = remainingQty.minus(matchQty)
-          totalAllowableCost = totalAllowableCost.plus(matchCost)
-          pool.shares = pool.shares.minus(matchQty)
-          pool.totalCost = pool.totalCost.minus(matchCost)
-          disposalParts.push({ qty: matchQty.toNumber(), cost: matchCost.toNumber(), rule: 'SECTION_104' })
-        }
-
-        const proceeds = new Decimal(txn.totalGBP)
-        const gain = proceeds.minus(totalAllowableCost)
-
-        if (isInTaxYear(txn.date, taxYear)) {
-          allDisposals.push({
-            date: txn.date,
-            ticker,
-            securityName: txn.securityName,
-            quantity: txn.quantity,
-            proceedsGBP: proceeds.toNumber(),
-            allowableCostGBP: totalAllowableCost.toNumber(),
-            gainGBP: gain.toNumber(),
-            parts: disposalParts
-          })
-        }
-
         i++
         continue
       }

@@ -4,20 +4,27 @@ import Papa from 'papaparse'
 import { parse } from 'date-fns'
 import { runCGTEngineCalculations, RawTransaction } from '@/lib/cgt-engine'
 
-function parseDateStr(dateStr: string, formatSpec: string | null) {
+function parseUKDate(dateStr: string, format: string | null): string | null {
   if (!dateStr) return null
   try {
-    // If we have a format, try date-fns parse
-    if (formatSpec && formatSpec.includes('DD') && formatSpec.includes('MM')) {
-      // Basic translation, dd/MM/yyyy
-      let fnsFormat = formatSpec.replace('DD', 'dd').replace('YYYY', 'yyyy').replace('YY', 'yy')
-      // If the string length is 10 and format is less, or vice versa, this might break.
-      // Easiest is to let native Date parse handle IS0 and basic formats, or use a robust pattern.
-      // We will try standard JS Date for simplicity if date-fns fails.
+    if (dateStr.includes('T')) {
+      const d = new Date(dateStr)
+      if (!isNaN(d.getTime())) return d.toISOString().split('T')[0]
+    }
+    const parts = dateStr.split(/[\/\-\s]/)
+    if (parts.length >= 3) {
+      let d: Date | null = null
+      if (format === 'YYYY-MM-DD') d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+      else if (format === 'MM/DD/YYYY' || format === 'MM-DD-YYYY') d = new Date(Number(parts[2]), Number(parts[0]) - 1, Number(parts[1]))
+      else if (format === 'DD/MM/YYYY' || format === 'DD-MM-YYYY') d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]))
+      
+      if (d && !isNaN(d.getTime())) {
+        return d.toISOString().split('T')[0]
+      }
     }
     const d = new Date(dateStr)
-    if (isNaN(d.getTime())) return null
-    return d.toISOString().split('T')[0] // return YYYY-MM-DD
+    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0]
+    return null
   } catch {
     return null
   }
@@ -51,6 +58,32 @@ export async function POST(req: Request) {
     // 2. Parse CSV
     const parsed = Papa.parse(csvContent, { header: true, skipEmptyLines: true })
     const rows = parsed.data as any[]
+
+    // --- BUG 1 FIX: Strict Server-Side Validation for US vs UK Dates ---
+    if (schema.date_format === 'MM/DD/YYYY' || schema.date_format === 'MM-DD-YYYY') {
+       let invalidUSCount = 0
+       for (let i = 0; i < Math.min(rows.length, 20); i++) {
+          const row = rows[i]
+          const dateStr = schema.date_column ? row[schema.date_column] : ''
+          if (dateStr) {
+             const parts = String(dateStr).split(/[\/\-\s]/)
+             if (parts.length >= 3) {
+                // If it claims to be MM/DD/YYYY, parts[0] is month. If > 12, it's statistically impossible.
+                const putativeMonth = parseInt(parts[0], 10)
+                if (putativeMonth > 12) {
+                   invalidUSCount++
+                }
+             }
+          }
+       }
+       if (invalidUSCount > 0) {
+          // Force revert to UK Date Format because US interpretation is mathematically impossible
+          schema.date_format = schema.date_format.includes('-') ? 'DD-MM-YYYY' : 'DD/MM/YYYY'
+       }
+    } else if (!schema.date_format || !schema.date_format.includes('YYYY')) {
+       // Strong default to UK if undetermined
+       schema.date_format = 'DD/MM/YYYY'
+    }
 
     const transactions: RawTransaction[] = []
 
@@ -112,7 +145,7 @@ export async function POST(req: Request) {
       if (!price && qty > 0) price = totalGBP / qty
 
       const dateStr = schema.date_column ? row[schema.date_column] : ''
-      const date = parseDateStr(dateStr, schema.date_format)
+      const date = parseUKDate(dateStr, schema.date_format)
 
       if (!date || isNaN(qty) || isNaN(totalGBP) || qty <= 0) continue
 
@@ -262,6 +295,23 @@ export async function POST(req: Request) {
           last_updated: new Date().toISOString()
         }))
         await supabase.from('section_104_pools').insert(poolInserts)
+      }
+      
+      // --- Bug 2: Missing Disposals Reconciliation ---
+      const { count: totalSells } = await supabase.from('transactions')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('type', 'SELL')
+        
+      const { count: totalDisposals } = await supabase.from('disposals')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        
+      if (totalSells !== null && totalDisposals !== null && totalDisposals < totalSells) {
+         console.warn(`Reconciliation failure: ${totalSells} SELL rows but only ${totalDisposals} disposals created.`)
+         await supabase.from('uploads').update({
+           warning: `${totalSells - totalDisposals} sell transactions could not be matched. Please check your transaction history is complete or check logs for parsing errors.`
+         }).eq('id', uploadEntry.id)
       }
     }
 

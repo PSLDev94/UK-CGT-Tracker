@@ -18,7 +18,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Missing csvSample' }, { status: 400 })
     }
 
-    const prompt = `You are a financial data parser. You will receive the first rows of a CSV export from a UK stock broker. Analyse the headers and sample rows, then return ONLY valid JSON matching the schema with no other text, markdown, or explanation.\n\nCSV Sample:\n${csvSample}`
+    const prompt = `You are a financial data parser. You will receive the first rows of a CSV export from a UK stock broker. Analyse the headers and sample rows, then return ONLY valid JSON matching the schema with no other text, markdown, or explanation.\n\nCRITICAL DATE RULE: This is a UK broker CSV. Always default the date format to DD/MM/YYYY unless the format is unambiguously MM/DD/YYYY (e.g. a month value > 12 appears in the first position). Never assume MM/DD/YYYY for UK broker data.\n\nCSV Sample:\n${csvSample}`
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-pro',

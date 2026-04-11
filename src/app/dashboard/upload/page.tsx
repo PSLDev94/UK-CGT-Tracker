@@ -40,8 +40,21 @@ export default function UploadPage() {
         throw new Error(d.error || 'Failed to detect schema')
       }
 
-      const data = await res.json()
-      setSchema(data.schema)
+        const data = await res.json()
+      
+      // Extract the first row's raw date to present a visual parsing confirmation to the user (Bug 1 Fix UI)
+      let sampleRawDate = ''
+      try {
+        const Papa = (await import('papaparse')).default
+        const parsedData = Papa.parse(text, { header: true, skipEmptyLines: true })
+        if (parsedData.data.length > 0 && data.schema.date_column) {
+            sampleRawDate = (parsedData.data[0] as any)[data.schema.date_column] || ''
+        }
+      } catch (err) {
+        console.warn('Failed client-side CSV preview parse', err)
+      }
+
+      setSchema({ ...data.schema, sampleRawDate })
       setStatus('detected')
     } catch (err: any) {
       setErrorMsg(err.message)
@@ -77,6 +90,26 @@ export default function UploadPage() {
       setErrorMsg(err.message)
       setStatus('error')
     }
+  }
+
+  // Formatting helper for the Bug 1 UI
+  const formatSampleDate = (dateStr: string, format: string) => {
+     if (!dateStr || !format) return 'Unknown Format'
+     try {
+       const parts = dateStr.split(/[\/\-\s]/)
+       if (parts.length >= 3) {
+         let d: Date | null = null
+         if (format === 'YYYY-MM-DD') d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+         else if (format === 'MM/DD/YYYY' || format === 'MM-DD-YYYY') d = new Date(Number(parts[2]), Number(parts[0]) - 1, Number(parts[1]))
+         else if (format === 'DD/MM/YYYY' || format === 'DD-MM-YYYY') d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]))
+         if (d && !isNaN(d.getTime())) {
+           return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+         }
+       }
+       return 'Invalid Data'
+     } catch {
+       return 'Parsing Error'
+     }
   }
 
   return (
@@ -134,7 +167,16 @@ export default function UploadPage() {
             <div className="bg-gray-50 p-4 rounded-lg mb-6 border">
               <h4 className="font-semibold mb-2 text-sm text-gray-700">Schema mapping identified:</h4>
               <ul className="grid grid-cols-2 gap-2 text-sm text-gray-600">
-                <li><span className="font-medium text-gray-800">Date:</span> {schema.date_column} ({schema.date_format})</li>
+                <li className="col-span-2 sm:col-span-1">
+                   <span className="font-medium text-gray-800">Date:</span> {schema.date_column} 
+                   <span className="ml-1 px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">{schema.date_format}</span>
+                </li>
+                {schema.sampleRawDate && (
+                  <li className="col-span-2 sm:col-span-1 border-l pl-3 border-gray-200">
+                     <span className="font-medium text-gray-800">Date Interpreted As:</span><br/>
+                     <span className="text-blue-700 font-medium">"{schema.sampleRawDate}" <span className="text-gray-400">→</span> {formatSampleDate(schema.sampleRawDate, schema.date_format)}</span>
+                  </li>
+                )}
                 <li><span className="font-medium text-gray-800">Ticker:</span> {schema.ticker_column ? schema.ticker_column : schema.description_column + ' (parsed)'}</li>
                 <li><span className="font-medium text-gray-800">Quantity:</span> {schema.quantity_column}</li>
                 <li><span className="font-medium text-gray-800">Price/Amount:</span> {schema.price_column || schema.amount_column}</li>
