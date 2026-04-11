@@ -99,11 +99,6 @@ export function runCGTEngineCalculations(allTransactions: RawTransaction[], taxY
 
       if (txn.type === 'BUY') {
         // Bug 3: Ignore buys that were already consumed by a prior B&B matcher
-        if (txn.isBBMatched) {
-           i++
-           continue
-        }
-        
         const unmatchedQty = new Decimal(txn.quantity).minus(txn.matched || 0)
         if (unmatchedQty.gt(0)) {
           // Bug 5: Include incidental broker fees in the allowable cost formulation
@@ -124,23 +119,25 @@ export function runCGTEngineCalculations(allTransactions: RawTransaction[], taxY
           const disposalParts: DisposalPart[] = []
 
           // --- RULE 1: Same-day matching ---
-          const sameDayBuys = txns.filter(t =>
-            t.type === 'BUY' &&
-            t.date === txn.date &&
-            t.ticker === ticker &&
-            !(t.matched && new Decimal(t.matched).gte(t.quantity))
-          )
+          const sameDayBuys = txns.filter(t => {
+            const isMatch = t.type === 'BUY' && t.date === txn.date && t.ticker === ticker && !(t.matched && new Decimal(t.matched).gte(t.quantity))
+            return isMatch
+          })
+          
+          if (sameDayBuys.length > 0) console.log(`[Diagnostic] Found ${sameDayBuys.length} SAME_DAY buys for SELL on ${txn.date} [Qty: ${txn.quantity}]`)
+
           for (const buy of sameDayBuys) {
             if (remainingQty.lte(0)) break
             const availableBuyQty = new Decimal(buy.quantity).minus(buy.matched || 0)
             const matchQty = Decimal.min(remainingQty, availableBuyQty)
-            // Bug 5: Fees included in allowable cost
             const matchCost = matchQty.div(buy.quantity).times(new Decimal(buy.totalGBP).plus(buy.feesGBP || 0))
             remainingQty = remainingQty.minus(matchQty)
             totalAllowableCost = totalAllowableCost.plus(matchCost)
             buy.matched = (buy.matched || 0) + matchQty.toNumber()
             disposalParts.push({ qty: matchQty.toNumber(), cost: matchCost.toNumber(), rule: 'SAME_DAY', matchDate: buy.date })
             
+            console.log(`[Diagnostic] MATCHED SAME_DAY: matchQty ${matchQty.toNumber()} | matchedCost £${matchCost.toNumber()} | Remaining: ${remainingQty.toNumber()}`)
+
             // Reverse out of S104 pool ONLY IF this buy happened BEFORE the sell in our sorted array
             const buyIndex = txns.indexOf(buy)
             if (buyIndex < i) {
@@ -155,21 +152,22 @@ export function runCGTEngineCalculations(allTransactions: RawTransaction[], taxY
           const bbBuys = txns.filter(t => {
             if (t.type !== 'BUY' || t.ticker !== ticker) return false
             const tDate = parseISO(t.date)
-            return isAfter(tDate, txnDateParsed) && (isBefore(tDate, thirtyDayEnd) || isEqual(tDate, thirtyDayEnd)) && !(t.matched && new Decimal(t.matched).gte(t.quantity))
+            const isEligible = isAfter(tDate, txnDateParsed) && (isBefore(tDate, thirtyDayEnd) || isEqual(tDate, thirtyDayEnd)) && !(t.matched && new Decimal(t.matched).gte(t.quantity))
+            return isEligible
           }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+          if (bbBuys.length > 0) console.log(`[Diagnostic] Found ${bbBuys.length} BB buys for SELL on ${txn.date} [Qty: ${txn.quantity}] between ${txn.date} and ${thirtyDayEnd.toISOString()}`)
 
           for (const buy of bbBuys) {
             if (remainingQty.lte(0)) break
             const availableQty = new Decimal(buy.quantity).minus(buy.matched || 0)
             const matchQty = Decimal.min(remainingQty, availableQty)
-            // Bug 5: Fees included in allowable cost calculation
             const matchCost = matchQty.div(buy.quantity).times(new Decimal(buy.totalGBP).plus(buy.feesGBP || 0))
             remainingQty = remainingQty.minus(matchQty)
             totalAllowableCost = totalAllowableCost.plus(matchCost)
             buy.matched = (buy.matched || 0) + matchQty.toNumber()
             
-            // Bug 3: Flag that this buy was consumed by a prior B&B condition
-            buy.isBBMatched = true
+            console.log(`[Diagnostic] MATCHED BB_BUY: matchQty ${matchQty.toNumber()} | matchedCost £${matchCost.toNumber()} | Remaining: ${remainingQty.toNumber()}`)
             disposalParts.push({ qty: matchQty.toNumber(), cost: matchCost.toNumber(), rule: 'BED_AND_BREAKFAST', matchDate: buy.date, notes: `Matched future 30-day buy` })
           }
 
