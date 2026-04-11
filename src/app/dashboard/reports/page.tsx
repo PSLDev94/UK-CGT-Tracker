@@ -57,12 +57,16 @@ export default function ReportsPage() {
       const blob = await res.blob()
       const blobUrl = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
+      a.style.display = 'none'
       a.href = blobUrl
       a.download = filename
       document.body.appendChild(a)
       a.click()
-      a.remove()
-      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000)
+      
+      setTimeout(() => {
+        a.remove()
+        window.URL.revokeObjectURL(blobUrl)
+      }, 1000)
     } catch (err: any) {
       alert(err.message || 'Failed to download report')
     } finally {
