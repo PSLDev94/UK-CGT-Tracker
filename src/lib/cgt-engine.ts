@@ -207,9 +207,9 @@ export function runCGTEngineCalculations(allTransactions: RawTransaction[], taxY
               ticker,
               securityName: txn.securityName,
               quantity: txn.quantity,
-              proceedsGBP: proceeds.toNumber(),
-              allowableCostGBP: totalAllowableCost.toNumber(),
-              gainGBP: gain.toNumber(),
+              proceedsGBP: Number(proceeds.toFixed(2)),
+              allowableCostGBP: Number(totalAllowableCost.toFixed(2)),
+              gainGBP: Number(gain.toFixed(2)),
               parts: disposalParts
             })
           }
@@ -225,7 +225,7 @@ export function runCGTEngineCalculations(allTransactions: RawTransaction[], taxY
     poolsByTicker[ticker] = {
       ticker,
       shares: pool.shares.toNumber(),
-      totalCost: pool.totalCost.toNumber()
+      totalCost: Number(pool.totalCost.toFixed(2))
     }
   }
 
@@ -243,13 +243,14 @@ export function runCGTEngineCalculations(allTransactions: RawTransaction[], taxY
     disposals: taxYearDisposals,
     pools: Object.values(poolsByTicker).filter(p => Math.abs(p.shares) > 0.00000001), // return pools with valid shares
     summary: {
-      totalProceeds: totalProceeds.toNumber(),
-      totalCost: totalCost.toNumber(),
-      totalGain: totalGain.toNumber(),
-      totalLoss: totalLoss.toNumber(),
-      netGain: netGain.toNumber(),
-      annualExemptAmount: exemption.toNumber(),
-      taxableGain: taxableGain.toNumber()
+      totalProceeds: Number(totalProceeds.toFixed(2)),
+      totalCost: Number(totalCost.toFixed(2)),
+      totalGain: Number(totalGain.toFixed(2)),
+      totalLoss: Number(totalLoss.toFixed(2)),
+      netGain: Number(netGain.toFixed(2)),
+      annualExemptAmount: Number(exemption.toFixed(2)),
+      taxableGain: Number(taxableGain.toFixed(2))
     }
   }
 }
+
