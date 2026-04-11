@@ -16,6 +16,7 @@ export default function SignupPage() {
   
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState(false)
   
   const router = useRouter()
   const supabase = createClient()
@@ -25,7 +26,10 @@ export default function SignupPage() {
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signUp({
+    // Ensure we use the exact current window origin for the email redirect
+    const origin = typeof window !== 'undefined' ? window.location.origin : ''
+
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -36,12 +40,16 @@ export default function SignupPage() {
           country,
           heard_from: heardFrom
         },
-        emailRedirectTo: `${location.origin}/auth/callback`,
+        emailRedirectTo: `${origin}/auth/callback`,
       },
     })
 
     if (error) {
       setError(error.message)
+      setLoading(false)
+    } else if (data?.user && !data.session) {
+      // Supabase requires email verification
+      setSuccess(true)
       setLoading(false)
     } else {
       router.push('/dashboard')
@@ -54,20 +62,35 @@ export default function SignupPage() {
       {/* Left side - Form */}
       <div className="flex-1 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-20 xl:px-24">
         <div className="mx-auto w-full max-w-sm lg:max-w-md">
-          <div>
-            <Link href="/" className="text-sm text-blue-600 hover:text-blue-500 font-medium mb-6 inline-block">
-              &larr; Back to home
-            </Link>
-            <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Create your account</h2>
-            <p className="mt-2 text-sm text-gray-600">Start your 14-day free trial. No credit card required.</p>
-          </div>
-
-          <form className="mt-8 space-y-5 border-t border-gray-200 pt-8" onSubmit={handleSignup}>
-            {error && (
-              <div className="bg-red-50 text-red-700 p-4 rounded-lg text-sm font-medium border border-red-100 flex items-start">
-                <span>{error}</span>
+          {success ? (
+            <div className="text-center py-12">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
+                <CheckCircle className="h-6 w-6 text-green-600" />
               </div>
-            )}
+              <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Check your email</h2>
+              <p className="mt-4 text-gray-600">
+                We've sent a verification link to <strong>{email}</strong>. Please click the link to activate your account and start your 14-day free trial.
+              </p>
+              <Link href="/login" className="mt-8 block w-full bg-white border border-gray-300 text-gray-700 py-3 rounded-md font-medium hover:bg-gray-50 text-center text-sm shadow-sm">
+                Return to Login
+              </Link>
+            </div>
+          ) : (
+            <>
+              <div>
+                <Link href="/" className="text-sm text-blue-600 hover:text-blue-500 font-medium mb-6 inline-block">
+                  &larr; Back to home
+                </Link>
+                <h2 className="text-3xl font-extrabold text-gray-900 tracking-tight">Create your account</h2>
+                <p className="mt-2 text-sm text-gray-600">Start your 14-day free trial. No credit card required.</p>
+              </div>
+
+              <form className="mt-8 space-y-5 border-t border-gray-200 pt-8" onSubmit={handleSignup}>
+                {error && (
+                  <div className="bg-red-50 text-red-700 p-4 rounded-lg text-sm font-medium border border-red-100 flex items-start">
+                    <span>{error}</span>
+                  </div>
+                )}
             
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -181,6 +204,8 @@ export default function SignupPage() {
               Sign in securely
             </Link>
           </p>
+          </>
+          )}
         </div>
       </div>
       
