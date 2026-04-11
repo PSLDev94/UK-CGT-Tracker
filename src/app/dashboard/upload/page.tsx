@@ -96,12 +96,13 @@ export default function UploadPage() {
   const formatSampleDate = (dateStr: string, format: string) => {
      if (!dateStr || !format) return 'Unknown Format'
      try {
+       const upperFormat = format.toUpperCase()
        const parts = dateStr.split(/[\/\-\s]/)
        if (parts.length >= 3) {
          let d: Date | null = null
-         if (format === 'YYYY-MM-DD') d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
-         else if (format === 'MM/DD/YYYY' || format === 'MM-DD-YYYY') d = new Date(Number(parts[2]), Number(parts[0]) - 1, Number(parts[1]))
-         else if (format === 'DD/MM/YYYY' || format === 'DD-MM-YYYY') d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]))
+         if (upperFormat === 'YYYY-MM-DD') d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+         else if (upperFormat === 'MM/DD/YYYY' || upperFormat === 'MM-DD-YYYY') d = new Date(Number(parts[2]), Number(parts[0]) - 1, Number(parts[1]))
+         else if (upperFormat === 'DD/MM/YYYY' || upperFormat === 'DD-MM-YYYY') d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]))
          if (d && !isNaN(d.getTime())) {
            return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
          }

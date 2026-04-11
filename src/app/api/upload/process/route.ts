@@ -11,19 +11,30 @@ function parseUKDate(dateStr: string, format: string | null): string | null {
       const d = new Date(dateStr)
       if (!isNaN(d.getTime())) return d.toISOString().split('T')[0]
     }
+    
+    const upperFormat = format ? format.toUpperCase() : ''
     const parts = dateStr.split(/[\/\-\s]/)
+    
     if (parts.length >= 3) {
       let d: Date | null = null
-      if (format === 'YYYY-MM-DD') d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
-      else if (format === 'MM/DD/YYYY' || format === 'MM-DD-YYYY') d = new Date(Number(parts[2]), Number(parts[0]) - 1, Number(parts[1]))
-      else if (format === 'DD/MM/YYYY' || format === 'DD-MM-YYYY') d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]))
+      if (upperFormat === 'YYYY-MM-DD') d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+      else if (upperFormat === 'MM/DD/YYYY' || upperFormat === 'MM-DD-YYYY') d = new Date(Number(parts[2]), Number(parts[0]) - 1, Number(parts[1]))
+      else if (upperFormat === 'DD/MM/YYYY' || upperFormat === 'DD-MM-YYYY' || upperFormat === 'DD-MMM-YYYY') d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]))
       
       if (d && !isNaN(d.getTime())) {
-        return d.toISOString().split('T')[0]
+        const yyyy = d.getFullYear()
+        const mm = String(d.getMonth() + 1).padStart(2, '0')
+        const dd = String(d.getDate()).padStart(2, '0')
+        return `${yyyy}-${mm}-${dd}`
       }
     }
     const d = new Date(dateStr)
-    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0]
+    if (!isNaN(d.getTime())) {
+        const yyyy = d.getFullYear()
+        const mm = String(d.getMonth() + 1).padStart(2, '0')
+        const dd = String(d.getDate()).padStart(2, '0')
+        return `${yyyy}-${mm}-${dd}`
+    }
     return null
   } catch {
     return null
