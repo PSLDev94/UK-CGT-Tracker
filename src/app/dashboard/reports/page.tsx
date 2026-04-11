@@ -62,7 +62,7 @@ export default function ReportsPage() {
       document.body.appendChild(a)
       a.click()
       a.remove()
-      window.URL.revokeObjectURL(blobUrl)
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1000)
     } catch (err: any) {
       alert(err.message || 'Failed to download report')
     } finally {
