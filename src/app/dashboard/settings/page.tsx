@@ -260,12 +260,12 @@ export default function SettingsPage() {
                 } catch(err: any) {
                   alert(err.message || 'Failed to create checkout session')
                   btn.disabled = false
-                  btn.innerHTML = 'Upgrade to Pro'
+                  btn.innerHTML = 'Buy Annual Subscription'
                 }
               }}
               className="px-4 py-2 bg-blue-600 text-white rounded-md font-medium text-sm hover:bg-blue-700 flex items-center"
             >
-              Upgrade to Pro
+              Buy Annual Subscription
             </button>
           )}
         </div>

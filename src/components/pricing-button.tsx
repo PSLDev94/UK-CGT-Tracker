@@ -29,7 +29,7 @@ export function PricingButton({ userExists }: { userExists: boolean }) {
         disabled={loading}
         className="block w-full bg-blue-600 text-white py-3 rounded-md font-medium hover:bg-blue-700 text-center text-lg disabled:opacity-50"
       >
-        {loading ? 'Redirecting...' : 'Upgrade to Pro'}
+        {loading ? 'Redirecting...' : 'Buy Annual Subscription'}
       </button>
     )
   }

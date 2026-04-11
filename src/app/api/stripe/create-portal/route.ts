@@ -35,7 +35,7 @@ export async function POST(req: Request) {
       return_url: `${origin}/dashboard/settings`,
     })
 
-    return NextResponse.redirect(portalSession.url)
+    return NextResponse.redirect(portalSession.url, { status: 303 })
   } catch (error: any) {
     console.error('Error creating portal session:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
