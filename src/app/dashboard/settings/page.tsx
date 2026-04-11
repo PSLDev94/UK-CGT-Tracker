@@ -239,11 +239,35 @@ export default function SettingsPage() {
               }
             </div>
           </div>
-          <form action="/api/stripe/create-portal" method="POST">
-            <button className="px-4 py-2 border rounded-md font-medium text-sm hover:bg-gray-50 flex items-center">
-              Manage Billing
+          
+          {profile?.stripe_customer_id ? (
+            <form action="/api/stripe/create-portal" method="POST">
+              <button type="submit" className="px-4 py-2 border rounded-md font-medium text-sm hover:bg-gray-50 flex items-center">
+                Manage Billing
+              </button>
+            </form>
+          ) : (
+            <button 
+              onClick={async (e) => {
+                const btn = e.currentTarget
+                btn.disabled = true
+                btn.innerHTML = 'Loading...'
+                try {
+                  const res = await fetch('/api/stripe/create-checkout', { method: 'POST' })
+                  const data = await res.json()
+                  if (data.url) window.location.assign(data.url)
+                  else throw new Error(data.error)
+                } catch(err: any) {
+                  alert(err.message || 'Failed to create checkout session')
+                  btn.disabled = false
+                  btn.innerHTML = 'Upgrade to Pro'
+                }
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md font-medium text-sm hover:bg-blue-700 flex items-center"
+            >
+              Upgrade to Pro
             </button>
-          </form>
+          )}
         </div>
       </div>
 

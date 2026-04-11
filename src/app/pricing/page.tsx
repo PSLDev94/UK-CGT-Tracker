@@ -1,13 +1,18 @@
 import { Metadata } from 'next'
 import Link from 'next/link'
 import { CheckCircle } from 'lucide-react'
+import { createClient } from '@/lib/supabase/server'
+import { PricingButton } from '@/components/pricing-button'
 
 export const metadata: Metadata = {
   title: 'Pricing | Simple £49/year',
   description: 'Unlimited transactions and HMRC-compliant CGT computations for one simple annual fee. Try it 14 days free.',
 }
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  const supabase: any = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center pt-20 px-4">
       <Link href="/" className="text-sm text-blue-600 hover:text-blue-500 font-medium mb-8">
@@ -44,9 +49,7 @@ export default function PricingPage() {
             </li>
           </ul>
           
-          <Link href="/signup" className="block w-full bg-blue-600 text-white py-3 rounded-md font-medium hover:bg-blue-700 text-center text-lg">
-            Start 14-day free trial
-          </Link>
+          <PricingButton userExists={!!user} />
           <p className="mt-4 text-xs text-gray-500">No credit card required for trial.</p>
         </div>
       </div>
