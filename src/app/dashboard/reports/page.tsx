@@ -54,19 +54,15 @@ export default function ReportsPage() {
         throw new Error(err.error || 'Download failed')
       }
 
-      const blob = await res.blob()
-      const blobUrl = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.style.display = 'none'
-      a.href = blobUrl
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
+      // If the API generated the file successfully without an error (200),
+      // we discard the fetch payload and explicitly assign the URL to trigger 
+      // the browser's native file-download header interpreter. This perfectly
+      // respects the `Content-Disposition` filename in all browsers (Chrome, Safari, Edge)
+      // without triggering asynchronous Blob DOM-detachment bugs.
+      window.location.assign(url)
       
-      setTimeout(() => {
-        a.remove()
-        window.URL.revokeObjectURL(blobUrl)
-      }, 1000)
+      // Keep loading spinner alive for 1 extra second while browser initiates download
+      await new Promise(r => setTimeout(r, 1000))
     } catch (err: any) {
       alert(err.message || 'Failed to download report')
     } finally {
