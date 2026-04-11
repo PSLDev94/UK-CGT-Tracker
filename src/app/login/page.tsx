@@ -1,23 +1,34 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { ArrowRight, Loader2 } from 'lucide-react'
+import { ArrowRight, Loader2, CheckCircle } from 'lucide-react'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [isVerified, setIsVerified] = useState(false)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      if (urlParams.get('verified') === 'true') {
+        setIsVerified(true)
+      }
+    }
+  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
+    setIsVerified(false)
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -44,6 +55,13 @@ export default function LoginPage() {
         </div>
         
         <form className="mt-8 space-y-6" onSubmit={handleLogin}>
+          {isVerified && (
+            <div className="bg-green-50 text-green-800 p-4 rounded-md text-sm flex items-start border border-green-200 shadow-sm">
+              <CheckCircle className="w-5 h-5 text-green-600 mr-2 flex-shrink-0" />
+              <span>Email verified successfully! Please sign in to securely access your dashboard.</span>
+            </div>
+          )}
+
           {error && (
             <div className="bg-red-50 text-red-700 p-3 rounded-md text-sm">
               {error}

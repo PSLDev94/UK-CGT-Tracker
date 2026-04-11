@@ -11,7 +11,10 @@ export async function GET(request: Request) {
     const supabase: any = await createClient()
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
-      return NextResponse.redirect(`${origin}${next}`)
+      // For security in a financial app, we destroy the automatic email-link session
+      // and force the user to actually type their password to enter the dashboard.
+      await supabase.auth.signOut()
+      return NextResponse.redirect(`${origin}/login?verified=true`)
     }
   }
 
