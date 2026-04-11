@@ -42,7 +42,8 @@ export async function POST(req: Request) {
     let lastPools: any[] = []
 
     for (const year of taxYearsToProcess) {
-      const result = runCGTEngineCalculations(engineInput, year)
+      const clonedInput = JSON.parse(JSON.stringify(engineInput))
+      const result = runCGTEngineCalculations(clonedInput, year)
 
       // Save computation summary
       await supabase.from('cgt_computations').upsert({
