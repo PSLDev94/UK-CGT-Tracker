@@ -20,7 +20,13 @@ export async function POST(req: Request) {
 
     const prompt = `You are a financial data parser designed to map broker CSV formats. Extract the exact column header names for Date, Ticker, Quantity, Price, Amount, and Fees from the provided sample. 
     
-IMPORTANT: For the date format, analyze the date strings and explicitly output "DD/MM/YYYY" or "MM/DD/YYYY". If ambiguous, always assume "DD/MM/YYYY" for this UK user. Do not return null for columns that exist in the header.
+IMPORTANT RULES:
+1. For the date format, analyze the date strings and explicitly output "DD/MM/YYYY" or "MM/DD/YYYY". If ambiguous, always assume "DD/MM/YYYY" for this UK user. Do not return null for columns that exist in the header.
+2. If the transaction type is embedded in a description field as a word like 'Bought', 'Sold', 'Buy', 'Sell', or a phrase like 'Market buy', 'Market sell' — extract it via substring/word matching, not exact match.
+3. If a price or cost column name contains '(p)' or 'pence' — the values are in pence and must be divided by 100 to convert to pounds.
+4. If there is no explicit BUY/SELL column but there IS a quantity column where negative values represent sells — set type_source to 'quantity_sign'.
+5. If there are metadata/header rows mixed into the data (e.g. a column value of 'Header' or 'SubTotal') — set has_metadata_rows to true and specify which column value identifies them so they can be skipped.
+6. Always return the ticker column name separately from the description column. If the ticker must be extracted from a description field, set ticker_from_description to true and provide a regex pattern.
 
 CSV Sample:
 ${csvSample}`
@@ -43,6 +49,7 @@ ${csvSample}`
             dividend_indicator: { type: Type.STRING, nullable: true },
             ticker_column: { type: Type.STRING, description: "Exact name of the ticker or symbol column" },
             ticker_from_description: { type: Type.BOOLEAN },
+            ticker_regex: { type: Type.STRING, nullable: true, description: "Regex pattern to extract ticker if ticker_from_description is true" },
             description_column: { type: Type.STRING, nullable: true },
             quantity_column: { type: Type.STRING, description: "Exact name of the quantity or shares column" },
             quantity_from_description: { type: Type.BOOLEAN },
@@ -54,7 +61,10 @@ ${csvSample}`
             credit_column: { type: Type.STRING, nullable: true },
             fees_column: { type: Type.STRING, nullable: true, description: "Exact name of the column for broker fees or commission" },
             currency_column: { type: Type.STRING, nullable: true },
-            default_currency: { type: Type.STRING },
+            default_currency: { type: Type.STRING, nullable: true },
+            has_metadata_rows: { type: Type.BOOLEAN },
+            metadata_column: { type: Type.STRING, nullable: true, description: "Column containing metadata line identifiers" },
+            metadata_exclusion_value: { type: Type.STRING, nullable: true, description: "Value marking a row to exclude, like 'Header'" },
             notes: { type: Type.STRING, nullable: true },
           },
           required: ["date_column", "date_format", "ticker_column", "quantity_column", "price_column", "amount_column"]

@@ -6,9 +6,11 @@ import { Upload, Loader2, File, CheckCircle } from 'lucide-react'
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null)
-  const [status, setStatus] = useState<'idle'|'uploading'|'detected'|'processing'|'complete'|'error'>('idle')
+  const [status, setStatus] = useState<'idle'|'uploading'|'detected'|'fx_prompt'|'processing'|'complete'|'error'>('idle')
   const [schema, setSchema] = useState<any>(null)
   const [errorMsg, setErrorMsg] = useState<string>('')
+  const [missingRates, setMissingRates] = useState<{date: string, currency: string}[]>([])
+  const [fxInputs, setFxInputs] = useState<Record<string, string>>({})
   
   const router = useRouter()
 
@@ -17,6 +19,8 @@ export default function UploadPage() {
       setFile(e.target.files[0])
       setStatus('idle')
       setErrorMsg('')
+      setMissingRates([])
+      setFxInputs({})
     }
   }
 
@@ -65,6 +69,7 @@ export default function UploadPage() {
   const handleProcess = async () => {
     if (!file || !schema) return
     setStatus('processing')
+    setErrorMsg('')
 
     try {
       // Read entire file now (spec says max 10MB)
@@ -73,11 +78,16 @@ export default function UploadPage() {
       const res = await fetch('/api/upload/process', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ csvContent: text, schema, filename: file.name })
+        body: JSON.stringify({ csvContent: text, schema, filename: file.name, fx_rates: fxInputs })
       })
 
       if (!res.ok) {
         const d = await res.json()
+        if (d.require_fx) {
+           setMissingRates(d.missing_rates)
+           setStatus('fx_prompt')
+           return
+        }
         throw new Error(d.error || 'Failed to process file')
       }
 
@@ -202,6 +212,54 @@ export default function UploadPage() {
             </div>
           </div>
         ) : null}
+        
+        {/* Step 2.5: FX Missing Rates Flow */}
+        {status === 'fx_prompt' && (
+          <div>
+            <div className="mb-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+               <h3 className="text-lg font-semibold text-yellow-800 flex items-center mb-2">
+                 Foreign Currency Detected
+               </h3>
+               <p className="text-yellow-700 text-sm">
+                 This transaction is in a foreign currency. Please enter the GBP exchange rate to include it in your CGT calculation securely, rather than silently parsing incorrect amounts.
+               </p>
+            </div>
+            
+            <div className="space-y-4 mb-6">
+               {missingRates.map((rate, idx) => (
+                 <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 border rounded-md">
+                    <span className="font-medium text-gray-700">{rate.date}</span>
+                    <div className="flex items-center">
+                       <span className="mr-2 text-sm text-gray-500">1 {rate.currency} = </span>
+                       <input 
+                         type="number" step="0.0001" 
+                         className="border rounded px-3 py-1 w-24 text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
+                         placeholder="£ GBP"
+                         value={fxInputs[`${rate.date}-${rate.currency}`] || ''}
+                         onChange={(e) => setFxInputs({...fxInputs, [`${rate.date}-${rate.currency}`]: e.target.value})}
+                       />
+                    </div>
+                 </div>
+               ))}
+            </div>
+
+            <div className="flex justify-end gap-3">
+               <button
+                 onClick={() => setStatus('detected')}
+                 className="px-6 py-2 border rounded-md hover:bg-gray-50 text-gray-700"
+               >
+                 Cancel
+               </button>
+               <button
+                 onClick={handleProcess}
+                 disabled={missingRates.some(r => !fxInputs[`${r.date}-${r.currency}`] || parseFloat(fxInputs[`${r.date}-${r.currency}`]) <= 0)}
+                 className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
+               >
+                 Confirm Rates & Import
+               </button>
+            </div>
+          </div>
+        )}
 
         {/* Step 3: Complete */}
         {status === 'complete' && (

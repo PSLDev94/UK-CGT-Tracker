@@ -97,39 +97,83 @@ export async function POST(req: Request) {
     }
 
     const transactions: RawTransaction[] = []
+    const missingFxRates: Array<{ date: string; currency: string }> = []
+    const providedFxRates = (await req.json().catch(() => ({})))?.fx_rates || (req as any)._parsedFxRates || {}
+    // Next.js body streams can only be read once. We need to extract fx_rates carefully at the top where csvContent is extracted.
 
     for (const row of rows) {
-      // Basic type inference
+      // 1. Check Metadata Skip (IBKR)
+      if (schema.has_metadata_rows && schema.metadata_column && schema.metadata_exclusion_value) {
+        const colVal = String(row[schema.metadata_column] || '').trim()
+        if (colVal === schema.metadata_exclusion_value || colVal === 'Header' || colVal === 'SubTotal') {
+           continue
+        }
+      }
+
+      // 2. Determine Type
       let typeStr = ''
       if (schema.type_column && row[schema.type_column]) {
-        typeStr = String(row[schema.type_column]).toUpperCase()
+        typeStr = String(row[schema.type_column]).trim()
       } else if (schema.description_column && row[schema.description_column]) {
-        typeStr = String(row[schema.description_column]).toUpperCase()
+        typeStr = String(row[schema.description_column]).trim()
       }
 
       let type: string | null = null
-      if (schema.buy_indicator && typeStr.includes(schema.buy_indicator.toUpperCase())) type = 'BUY'
-      else if (schema.sell_indicator && typeStr.includes(schema.sell_indicator.toUpperCase())) type = 'SELL'
-      else if (schema.dividend_indicator && typeStr.includes(schema.dividend_indicator.toUpperCase())) type = 'DIVIDEND'
       
-      if (!type) {
-        // Amount heuristic if no indicator matched perfectly
-        if (schema.amount_column && row[schema.amount_column]) {
-           const amt = parseFloat(String(row[schema.amount_column]).replace(/,/g, ''))
-           if (amt < 0) type = 'BUY' // negative money means buy
-           else if (amt > 0) type = 'SELL'
-        }
+      if (schema.type_source === 'quantity_sign' && schema.quantity_column) {
+         const qtyRaw = parseFloat(String(row[schema.quantity_column]).replace(/,/g, ''))
+         if (!isNaN(qtyRaw)) {
+            if (qtyRaw < 0) type = 'SELL'
+            else if (qtyRaw > 0) type = 'BUY'
+         }
+      } else {
+         const tsUpper = typeStr.toUpperCase()
+         if (schema.buy_indicator && tsUpper.includes(schema.buy_indicator.toUpperCase())) type = 'BUY'
+         else if (schema.sell_indicator && tsUpper.includes(schema.sell_indicator.toUpperCase())) type = 'SELL'
+         else if (schema.dividend_indicator && tsUpper.includes(schema.dividend_indicator.toUpperCase())) type = 'DIVIDEND'
+         
+         if (tsUpper === 'ORDER') {
+            const explicitDir = String(row['Buy / Sell'] || '').toUpperCase()
+            if (explicitDir.includes('BUY')) type = 'BUY'
+            if (explicitDir.includes('SELL')) type = 'SELL'
+         }
+
+         if (!type && schema.amount_column && row[schema.amount_column]) {
+            const amt = parseFloat(String(row[schema.amount_column]).replace(/,/g, ''))
+            if (amt < 0) type = 'BUY'
+            else if (amt > 0) type = 'SELL'
+         }
       }
       
       if (!type) continue
 
-      let ticker = schema.ticker_column ? row[schema.ticker_column] : ''
-      if (!ticker && schema.description_column) {
-         // simple extraction: first word of description
-         ticker = String(row[schema.description_column]).split(' ')[0]
+      // 3. Ticker
+      let ticker = schema.ticker_column && row[schema.ticker_column] ? String(row[schema.ticker_column]) : ''
+      if (!ticker && schema.description_column && typeStr) {
+         if (schema.ticker_from_description) {
+            const regexStr = schema.ticker_regex || '^.+\\s+(\\S+)\\s+(Bought|Sold|Dividend|Buy|Sell)$'
+            try {
+               const regex = new RegExp(regexStr, 'i')
+               const match = typeStr.match(regex)
+               if (match && match[1]) {
+                  ticker = match[1]
+               } else {
+                  const parts = typeStr.split(' ')
+                  const typeIdx = parts.findIndex((p: string) => 
+                    p.toUpperCase().includes('BOUGHT') || p.toUpperCase().includes('SOLD') || p.toUpperCase().includes('BUY') || p.toUpperCase().includes('SELL')
+                  )
+                  if (typeIdx > 0) ticker = parts[typeIdx - 1]
+               }
+            } catch {
+               ticker = typeStr.split(' ')[0]
+            }
+         } else {
+            ticker = typeStr.split(' ')[0]
+         }
       }
       if (!ticker) continue
 
+      // 4. Quantities & Costs
       let qty = 0
       if (schema.quantity_column) {
         qty = Math.abs(parseFloat(String(row[schema.quantity_column]).replace(/,/g, '')))
@@ -138,6 +182,9 @@ export async function POST(req: Request) {
       let price = 0
       if (schema.price_column) {
         price = Math.abs(parseFloat(String(row[schema.price_column]).replace(/,/g, '')))
+        if (schema.price_column.toLowerCase().includes('(p)') || schema.price_column.toLowerCase().includes('pence')) {
+           price = price / 100
+        }
       }
 
       let totalGBP = 0
@@ -160,6 +207,34 @@ export async function POST(req: Request) {
 
       if (!date || isNaN(qty) || isNaN(totalGBP) || qty <= 0) continue
 
+      // 5. FX Check
+      let original_currency = 'GBP'
+      if (schema.currency_column && row[schema.currency_column]) {
+        original_currency = String(row[schema.currency_column]).toUpperCase().trim()
+      } else if (schema.default_currency) {
+        original_currency = schema.default_currency.toUpperCase().trim()
+      }
+      
+      if (['GBX', 'GBP', '£', 'PENCE'].includes(original_currency)) {
+        original_currency = 'GBP'
+      }
+
+      let fxRateAttr = null
+
+      if (original_currency !== 'GBP') {
+         const fxKey = `${date}-${original_currency}`
+         // Note: We need to ensure providedFxRates exists in scope. Assuming extracted above.
+         if (providedFxRates[fxKey]) {
+            fxRateAttr = parseFloat(providedFxRates[fxKey])
+            totalGBP = totalGBP * fxRateAttr
+            price = price * fxRateAttr
+            fees = fees * fxRateAttr
+         } else {
+            missingFxRates.push({ date, currency: original_currency })
+            continue // Skip saving this transaction right now, we will abort anyway
+         }
+      }
+
       transactions.push({
         date,
         type,
@@ -168,8 +243,15 @@ export async function POST(req: Request) {
         quantity: qty,
         priceGBP: price,
         totalGBP,
-        feesGBP: fees
+        feesGBP: fees,
+        originalCurrency: original_currency !== 'GBP' ? original_currency : undefined,
+        fxRate: fxRateAttr || undefined
       })
+    }
+    
+    if (missingFxRates.length > 0) {
+       const uniqueMissing = missingFxRates.filter((v,i,a)=>a.findIndex(t=>(t.date === v.date && t.currency===v.currency))===i)
+       return NextResponse.json({ require_fx: true, missing_rates: uniqueMissing }, { status: 400 })
     }
 
     // 3. Deduplicate and Insert Raw Transactions
