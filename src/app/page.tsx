@@ -332,13 +332,13 @@ export default function LandingPage() {
             <div className="bg-white rounded-2xl border border-gray-200 p-6 sm:p-8 shadow-sm">
               <h3 className="text-lg font-bold text-gray-900 mb-3">Is my data secure?</h3>
               <p className="text-gray-600 leading-relaxed">
-                Yes. Raw CSV files are processed completely in memory and never stored permanently on our servers. All finalized transaction data is protected with row-level security — prohibiting anyone but you from accessing it.
+                Yes. Raw CSV files are processed completely in memory and never stored permanently on our servers. All finalised transaction data is protected with row-level security — prohibiting anyone but you from accessing it.
               </p>
             </div>
             <div className="bg-white rounded-2xl border border-gray-200 p-6 sm:p-8 shadow-sm">
               <h3 className="text-lg font-bold text-gray-900 mb-3">Which brokers are supported?</h3>
               <p className="text-gray-600 leading-relaxed">
-                Our smart parser can automatically format unstructured data from virtually any UK broker CSV export, including Trading 212, Freetrade, Hargreaves Lansdown, Interactive Investor, AJ Bell, and more. If your broker exports a CSV with transaction details, our engine will recognize it.
+                Our smart parser can automatically format unstructured data from virtually any UK broker CSV export, including Trading 212, Freetrade, Hargreaves Lansdown, Interactive Investor, AJ Bell, and more. If your broker exports a CSV with transaction details, our engine will recognise it.
               </p>
             </div>
             <div className="bg-white rounded-2xl border border-gray-200 p-6 sm:p-8 shadow-sm">

@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     const prompt = `You are a financial data parser designed to map broker CSV formats. Extract the exact column header names for Date, Ticker, Quantity, Price, Amount, and Fees from the provided sample. 
     
 IMPORTANT RULES:
-1. For the date format, analyze the date strings and explicitly output "DD/MM/YYYY" or "MM/DD/YYYY". If ambiguous, always assume "DD/MM/YYYY" for this UK user. Do not return null for columns that exist in the header.
+1. For the date format, analyse the date strings and explicitly output "DD/MM/YYYY" or "MM/DD/YYYY". If ambiguous, always assume "DD/MM/YYYY" for this UK user. Do not return null for columns that exist in the header.
 2. If the transaction type is embedded in a description field as a word like 'Bought', 'Sold', 'Buy', 'Sell', or a phrase like 'Market buy', 'Market sell' — extract it via substring/word matching, not exact match.
 3. If a price or cost column name contains '(p)' or 'pence' — the values are in pence and must be divided by 100 to convert to pounds.
 4. If there is no explicit BUY/SELL column but there IS a quantity column where negative values represent sells — set type_source to 'quantity_sign'.

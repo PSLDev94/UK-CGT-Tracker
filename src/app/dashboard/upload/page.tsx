@@ -149,7 +149,7 @@ export default function UploadPage() {
                  className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center"
                >
                  {status === 'uploading' && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                 Analyze Format
+                 Analyse Format
                </button>
              </div>
           </div>
