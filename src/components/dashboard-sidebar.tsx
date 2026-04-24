@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Calculator, Upload, LogOut, Settings, FileText, TrendingDown, Menu, X } from 'lucide-react'
+import { Calculator, Upload, LogOut, Settings, FileText, TrendingDown, Menu, X, MessageSquare } from 'lucide-react'
 
 interface DashboardSidebarProps {
   userEmail: string
@@ -24,6 +24,7 @@ export function DashboardSidebar({ userEmail }: DashboardSidebarProps) {
     { name: 'Tax-Loss Harvesting', href: '/dashboard/tax-loss-harvesting', icon: TrendingDown },
     { name: 'Reports', href: '/dashboard/reports', icon: FileText },
     { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+    { name: 'Contact Us', href: '/contact', icon: MessageSquare },
   ]
 
   return (

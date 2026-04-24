@@ -46,6 +46,9 @@ export default function LandingPage() {
               <Link href="/pricing" className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2 hidden sm:inline transition-colors">
                 Pricing
               </Link>
+              <Link href="/contact" className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2 hidden sm:inline transition-colors">
+                Contact
+              </Link>
               <Link href="/login" className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2 transition-colors">
                 Log in
               </Link>
@@ -429,6 +432,7 @@ export default function LandingPage() {
             <Link href="#free-calculator" className="text-gray-500 hover:text-gray-900 transition-colors">Free Calculator</Link>
             <Link href="/guide" className="text-gray-500 hover:text-gray-900 transition-colors">Tax Guide</Link>
             <Link href="/pricing" className="text-gray-500 hover:text-gray-900 transition-colors">Pricing</Link>
+            <Link href="/contact" className="text-gray-500 hover:text-gray-900 transition-colors">Contact</Link>
             <Link href="/login" className="text-gray-500 hover:text-gray-900 transition-colors">Log in</Link>
           </div>
         </div>
