@@ -24,7 +24,7 @@ export function DashboardSidebar({ userEmail }: DashboardSidebarProps) {
     { name: 'Tax-Loss Harvesting', href: '/dashboard/tax-loss-harvesting', icon: TrendingDown },
     { name: 'Reports', href: '/dashboard/reports', icon: FileText },
     { name: 'Settings', href: '/dashboard/settings', icon: Settings },
-    { name: 'Contact Us', href: '/contact', icon: MessageSquare },
+    { name: 'Contact Us', href: '/dashboard/contact', icon: MessageSquare },
   ]
 
   return (
