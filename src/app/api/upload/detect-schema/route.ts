@@ -65,6 +65,7 @@ ${csvSample}`
             has_metadata_rows: { type: Type.BOOLEAN },
             metadata_column: { type: Type.STRING, nullable: true, description: "Column containing metadata line identifiers" },
             metadata_exclusion_value: { type: Type.STRING, nullable: true, description: "Value marking a row to exclude, like 'Header'" },
+            datetime_has_time: { type: Type.BOOLEAN, description: "True if the date column contains time components (e.g. HH:MM:SS), false if date-only" },
             notes: { type: Type.STRING, nullable: true },
           },
           required: ["date_column", "date_format", "ticker_column", "quantity_column", "price_column", "amount_column"]

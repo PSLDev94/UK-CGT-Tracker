@@ -102,24 +102,15 @@ export default function UploadPage() {
     }
   }
 
-  // Formatting helper for the Bug 1 UI
-  const formatSampleDate = (dateStr: string, format: string) => {
-     if (!dateStr || !format) return 'Unknown Format'
+  // Formatting helper for the Bug 1 UI — uses the same parser as the server
+  const formatSampleDate = (dateStr: string) => {
+     if (!dateStr) return 'Unknown Format'
      try {
-       const upperFormat = format.toUpperCase()
-       const parts = dateStr.split(/[\/\-\s]/)
-       if (parts.length >= 3) {
-         let d: Date | null = null
-         if (upperFormat === 'YYYY-MM-DD') d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
-         else if (upperFormat === 'MM/DD/YYYY' || upperFormat === 'MM-DD-YYYY') d = new Date(Number(parts[2]), Number(parts[0]) - 1, Number(parts[1]))
-         else if (upperFormat === 'DD/MM/YYYY' || upperFormat === 'DD-MM-YYYY') d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]))
-         if (d && !isNaN(d.getTime())) {
-           return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-         }
-       }
-       return 'Invalid Data'
+       const { parseBrokerDate } = require('@/lib/parse-broker-date')
+       const d = parseBrokerDate(dateStr)
+       return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
      } catch {
-       return 'Parsing Error'
+       return 'Could not parse date'
      }
   }
 
@@ -185,7 +176,7 @@ export default function UploadPage() {
                 {schema.sampleRawDate && (
                   <li className="col-span-2 sm:col-span-1 border-l pl-3 border-gray-200">
                      <span className="font-medium text-gray-800">Date Interpreted As:</span><br/>
-                     <span className="text-blue-700 font-medium">"{schema.sampleRawDate}" <span className="text-gray-400">→</span> {formatSampleDate(schema.sampleRawDate, schema.date_format)}</span>
+                     <span className="text-blue-700 font-medium">"{schema.sampleRawDate}" <span className="text-gray-400">→</span> {formatSampleDate(schema.sampleRawDate)}</span>
                   </li>
                 )}
                 <li><span className="font-medium text-gray-800">Ticker:</span> {schema.ticker_column ? schema.ticker_column : schema.description_column + ' (parsed)'}</li>

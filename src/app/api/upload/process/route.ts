@@ -1,45 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import Papa from 'papaparse'
-import { parse } from 'date-fns'
 import { runCGTEngineCalculations, RawTransaction } from '@/lib/cgt-engine'
+import { parseBrokerDateToISO } from '@/lib/parse-broker-date'
 
-function parseUKDate(dateStr: string, format: string | null): string | null {
-  if (!dateStr) return null
-  try {
-    if (dateStr.includes('T')) {
-      const d = new Date(dateStr)
-      if (!isNaN(d.getTime())) return d.toISOString().split('T')[0]
-    }
-    
-    const upperFormat = format ? format.toUpperCase() : ''
-    const parts = dateStr.split(/[\/\-\s]/)
-    
-    if (parts.length >= 3) {
-      let d: Date | null = null
-      if (upperFormat === 'YYYY-MM-DD') d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
-      else if (upperFormat === 'MM/DD/YYYY' || upperFormat === 'MM-DD-YYYY') d = new Date(Number(parts[2]), Number(parts[0]) - 1, Number(parts[1]))
-      else if (upperFormat === 'DD/MM/YYYY' || upperFormat === 'DD-MM-YYYY' || upperFormat === 'DD-MMM-YYYY') d = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]))
-      
-      if (d && !isNaN(d.getTime())) {
-        const yyyy = d.getFullYear()
-        const mm = String(d.getMonth() + 1).padStart(2, '0')
-        const dd = String(d.getDate()).padStart(2, '0')
-        return `${yyyy}-${mm}-${dd}`
-      }
-    }
-    const d = new Date(dateStr)
-    if (!isNaN(d.getTime())) {
-        const yyyy = d.getFullYear()
-        const mm = String(d.getMonth() + 1).padStart(2, '0')
-        const dd = String(d.getDate()).padStart(2, '0')
-        return `${yyyy}-${mm}-${dd}`
-    }
-    return null
-  } catch {
-    return null
-  }
-}
 
 export async function POST(req: Request) {
   try {
@@ -50,7 +14,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { csvContent, schema, filename } = await req.json()
+    const { csvContent, schema, filename, fx_rates } = await req.json()
     if (!csvContent || !schema) {
       return NextResponse.json({ error: 'Missing content or schema' }, { status: 400 })
     }
@@ -70,36 +34,9 @@ export async function POST(req: Request) {
     const parsed = Papa.parse(csvContent, { header: true, skipEmptyLines: true })
     const rows = parsed.data as any[]
 
-    // --- BUG 1 FIX: Strict Server-Side Validation for US vs UK Dates ---
-    if (schema.date_format === 'MM/DD/YYYY' || schema.date_format === 'MM-DD-YYYY') {
-       let invalidUSCount = 0
-       for (let i = 0; i < Math.min(rows.length, 20); i++) {
-          const row = rows[i]
-          const dateStr = schema.date_column ? row[schema.date_column] : ''
-          if (dateStr) {
-             const parts = String(dateStr).split(/[\/\-\s]/)
-             if (parts.length >= 3) {
-                // If it claims to be MM/DD/YYYY, parts[0] is month. If > 12, it's statistically impossible.
-                const putativeMonth = parseInt(parts[0], 10)
-                if (putativeMonth > 12) {
-                   invalidUSCount++
-                }
-             }
-          }
-       }
-       if (invalidUSCount > 0) {
-          // Force revert to UK Date Format because US interpretation is mathematically impossible
-          schema.date_format = schema.date_format.includes('-') ? 'DD-MM-YYYY' : 'DD/MM/YYYY'
-       }
-    } else if (!schema.date_format || !schema.date_format.includes('YYYY')) {
-       // Strong default to UK if undetermined
-       schema.date_format = 'DD/MM/YYYY'
-    }
-
     const transactions: RawTransaction[] = []
     const missingFxRates: Array<{ date: string; currency: string }> = []
-    const providedFxRates = (await req.json().catch(() => ({})))?.fx_rates || (req as any)._parsedFxRates || {}
-    // Next.js body streams can only be read once. We need to extract fx_rates carefully at the top where csvContent is extracted.
+    const providedFxRates: Record<string, string> = fx_rates || {}
 
     for (const row of rows) {
       // 1. Check Metadata Skip (IBKR)
@@ -203,7 +140,7 @@ export async function POST(req: Request) {
       if (!price && qty > 0) price = totalGBP / qty
 
       const dateStr = schema.date_column ? row[schema.date_column] : ''
-      const date = parseUKDate(dateStr, schema.date_format)
+      const date = parseBrokerDateToISO(dateStr)
 
       if (!date || isNaN(qty) || isNaN(totalGBP) || qty <= 0) continue
 
