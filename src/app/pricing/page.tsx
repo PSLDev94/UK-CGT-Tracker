@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { CheckCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { PricingButton } from '@/components/pricing-button'
+import { PublicNav } from '@/components/public-nav'
 
 export const metadata: Metadata = {
   title: 'Pricing | Simple £49/year',
@@ -14,10 +15,9 @@ export default async function PricingPage() {
   const { data: { user } } = await supabase.auth.getUser()
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center pt-20 px-4">
-      <Link href="/" className="text-sm text-blue-600 hover:text-blue-500 font-medium mb-8">
-        &larr; Back to home
-      </Link>
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <PublicNav />
+      <div className="flex-1 flex flex-col items-center pt-16 px-4 pb-20">
       <div className="max-w-3xl mx-auto text-center">
         <h2 className="text-4xl font-extrabold text-gray-900 mb-6">Simple, transparent pricing</h2>
         <p className="text-xl text-gray-600 mb-10">Stop paying an accountant £300–£800 a year just to calculate your gains.</p>

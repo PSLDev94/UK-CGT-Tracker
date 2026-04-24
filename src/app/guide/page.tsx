@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { ArrowLeft, BookOpen } from 'lucide-react'
+import { PublicNav } from '@/components/public-nav'
 
 import { Metadata } from 'next'
 
@@ -16,21 +17,7 @@ export default function GuidePage() {
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation */}
-      <nav className="border-b sticky top-0 bg-white/95 backdrop-blur z-10">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            <Link href="/" className="text-xl font-bold text-gray-900">CGT Tracker</Link>
-            <div className="flex gap-4">
-              <Link href="/login" className="text-gray-600 hover:text-gray-900 px-3 py-2">
-                Log in
-              </Link>
-              <Link href="/signup" className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 font-medium">
-                Start free trial
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <PublicNav />
 
       <main className="max-w-4xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
         <Link href="/" className="text-sm text-blue-600 hover:text-blue-500 font-medium mb-6 inline-flex items-center">
