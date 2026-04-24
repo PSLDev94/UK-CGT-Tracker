@@ -48,7 +48,8 @@ export interface RawTransaction {
   totalGBP: number
   feesGBP: number
   matched?: number // internal tracking
-  isBBMatched?: boolean
+  originalCurrency?: string
+  fxRate?: number
 }
 
 export interface DisposalPart {
