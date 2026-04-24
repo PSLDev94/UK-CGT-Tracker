@@ -7,11 +7,11 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
 export const metadata: Metadata = {
   title: {
-    default: 'UK CGT Tracker | Automated Capital Gains Tax Calculator for HMRC',
+    default: 'UK CGT Calculator for Trading 212, Freetrade & HL | CGT Tracker',
     template: '%s | UK CGT Tracker',
   },
-  description: 'Calculate your UK Capital Gains Tax instantly. Upload your broker CSV and our engine strictly applies HMRC Same-Day, 30-Day B&B, and Section 104 Pool rules to generate your SA108 report.',
-  keywords: ['UK CGT calculator', 'capital gains tax', 'HMRC share matching', 'Section 104 pool', 'Bed and Breakfast rule', 'tax loss harvesting UK', 'SA108 form generator', 'Trading 212 taxes', 'Freetrade tax report'],
+  description: 'Calculate your UK Capital Gains Tax instantly from Trading 212, Freetrade, Hargreaves Lansdown & Interactive Investor CSV exports. Automated HMRC share matching with Same-Day, Bed & Breakfast, and Section 104 Pool rules for your SA108 self-assessment.',
+  keywords: ['Trading 212 HMRC tax export', 'Freetrade CGT calculator', 'Hargreaves Lansdown capital gains tax', 'UK CGT calculator', 'capital gains tax UK', 'HMRC share matching rules', 'Section 104 pool calculator', 'Bed and Breakfast rule shares', 'SA108 form generator', 'Interactive Investor tax report', 'tax loss harvesting UK stocks'],
   authors: [{ name: 'UK CGT Tracker' }],
   creator: 'UK CGT Tracker',
   publisher: 'UK CGT Tracker',
@@ -23,14 +23,14 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'en_GB',
     url: '/',
-    title: 'Automated UK Capital Gains Tax Calculator',
-    description: 'Instantly accurately calculate your UK Capital Gains Tax. Upload your CSV and get an HMRC compliant self-assessment SA108 report applying Section 104 pools automatically.',
+    title: 'UK CGT Calculator — Trading 212, Freetrade & Hargreaves Lansdown',
+    description: 'Upload your Trading 212, Freetrade or HL CSV and instantly calculate your UK Capital Gains Tax. Automated HMRC-compliant SA108 report with Same-Day, B&B, and Section 104 Pool matching.',
     siteName: 'UK CGT Tracker',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Calculate your UK Capital Gains Tax in minutes',
-    description: 'Upload your broker CSV and instantly apply HMRC matching rules to prepare your self-assessment.',
+    title: 'Calculate your UK Capital Gains Tax in minutes — Trading 212, Freetrade & more',
+    description: 'Upload your broker CSV and instantly apply HMRC matching rules. Works with Trading 212, Freetrade, Hargreaves Lansdown, Interactive Investor and more.',
   },
 }
 

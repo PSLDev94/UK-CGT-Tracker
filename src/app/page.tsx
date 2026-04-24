@@ -1,5 +1,22 @@
 import Link from 'next/link'
 import { ArrowRight, CheckCircle, Upload, Calculator, FileText, BookOpen, Shield, Zap, TrendingUp, PieChart, BarChart3, AlertCircle } from 'lucide-react'
+import type { Metadata } from 'next'
+import FreeBBCalculator from '@/components/free-bb-calculator'
+
+export const metadata: Metadata = {
+  title: 'UK CGT Calculator for Trading 212, Freetrade & Hargreaves Lansdown | CGT Tracker',
+  description: 'Calculate your UK Capital Gains Tax instantly from Trading 212, Freetrade, Hargreaves Lansdown & Interactive Investor CSV exports. Automated HMRC share matching with Same-Day, Bed & Breakfast, and Section 104 Pool rules. Free 14-day trial.',
+  keywords: ['Trading 212 HMRC tax export', 'Freetrade CGT calculator', 'Hargreaves Lansdown capital gains', 'UK CGT calculator', 'capital gains tax', 'HMRC share matching', 'Section 104 pool', 'Bed and Breakfast rule', 'SA108 form generator', 'Interactive Investor tax report'],
+}
+
+const SUPPORTED_BROKERS = [
+  { name: 'Trading 212', accent: 'from-blue-500 to-cyan-500' },
+  { name: 'Freetrade', accent: 'from-purple-500 to-pink-500' },
+  { name: 'Hargreaves Lansdown', accent: 'from-blue-700 to-blue-500' },
+  { name: 'Interactive Investor', accent: 'from-teal-500 to-emerald-500' },
+  { name: 'Interactive Brokers', accent: 'from-red-500 to-red-400' },
+  { name: 'AJ Bell', accent: 'from-green-600 to-green-400' },
+]
 
 export default function LandingPage() {
   return (
@@ -20,6 +37,9 @@ export default function LandingPage() {
             </div>
 
             <div className="flex gap-1 sm:gap-4 items-center">
+              <Link href="#free-calculator" className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2 hidden sm:inline transition-colors">
+                Free Calculator
+              </Link>
               <Link href="/guide" className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2 hidden sm:inline transition-colors">
                 CGT Guide
               </Link>
@@ -50,7 +70,7 @@ export default function LandingPage() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
             </span>
-            Built strictly for UK self-directed investors
+            Updated for Tax Year 2025-26
           </div>
           
           <h1 className="text-5xl md:text-7xl font-extrabold text-gray-900 tracking-tight mb-8 max-w-4xl mx-auto leading-[1.1]">
@@ -58,7 +78,7 @@ export default function LandingPage() {
           </h1>
           
           <p className="text-xl md:text-2xl text-gray-600 max-w-2xl mx-auto mb-10 leading-relaxed">
-            Stop fighting with spreadsheets. Upload your broker CSV and instantly apply HMRC's strict matching rules to prepare your self-assessment.
+            Stop fighting with spreadsheets. Upload your broker CSV and instantly apply HMRC&apos;s strict matching rules to prepare your self-assessment.
           </p>
           
           <div className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-6 mb-6">
@@ -88,7 +108,7 @@ export default function LandingPage() {
               </div>
               <div className="text-sm font-semibold text-gray-600 flex items-center gap-2">
                 <BarChart3 className="w-4 h-4" />
-                Tax Year 2024-25 Overview
+                Tax Year 2025-26 Overview
               </div>
               <div className="w-10"></div> {/* Spacer for symmetry */}
             </div>
@@ -138,7 +158,7 @@ export default function LandingPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-50 bg-white">
                       <tr className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-4 py-4 text-gray-600">15 Oct 2024</td>
+                        <td className="px-4 py-4 text-gray-600">15 Oct 2025</td>
                         <td className="px-4 py-4 font-semibold text-gray-900">AAPL</td>
                         <td className="px-4 py-4 text-right">£8,500.00</td>
                         <td className="px-4 py-4 text-right text-gray-500">£6,200.00</td>
@@ -146,7 +166,7 @@ export default function LandingPage() {
                         <td className="px-4 py-4"><span className="bg-gray-100 text-gray-600 px-2.5 py-1 rounded-md text-xs font-medium border border-gray-200">Section 104 Pool</span></td>
                       </tr>
                       <tr className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-4 py-4 text-gray-600">02 Nov 2024</td>
+                        <td className="px-4 py-4 text-gray-600">02 Nov 2025</td>
                         <td className="px-4 py-4 font-semibold text-gray-900">TSLA</td>
                         <td className="px-4 py-4 text-right">£4,100.00</td>
                         <td className="px-4 py-4 text-right text-gray-500">£4,600.00</td>
@@ -154,7 +174,7 @@ export default function LandingPage() {
                         <td className="px-4 py-4"><span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md text-xs font-medium border border-blue-100">Bed & Breakfast</span></td>
                       </tr>
                       <tr className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-4 py-4 text-gray-600">10 Mar 2025</td>
+                        <td className="px-4 py-4 text-gray-600">10 Mar 2026</td>
                         <td className="px-4 py-4 font-semibold text-gray-900">LLOY</td>
                         <td className="px-4 py-4 text-right">£1,200.00</td>
                         <td className="px-4 py-4 text-right text-gray-500">£1,150.00</td>
@@ -170,12 +190,35 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Supported Brokers */}
+      <section className="py-16 px-4 bg-gray-50 border-y border-gray-200">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-10">
+            <h2 className="text-2xl font-extrabold text-gray-900 mb-3">Flawlessly processes CSV exports from all major UK brokers</h2>
+            <p className="text-gray-600 max-w-2xl mx-auto">Including Trading 212, Freetrade, Hargreaves Lansdown, Interactive Investor and many others. If your broker exports a CSV, we can read it.</p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            {SUPPORTED_BROKERS.map((broker) => (
+              <div key={broker.name} className="relative group">
+                <div className="bg-white rounded-xl border border-gray-200 p-5 text-center hover:shadow-lg hover:border-gray-300 transition-all duration-300 hover:-translate-y-0.5">
+                  <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${broker.accent} mx-auto mb-3 flex items-center justify-center shadow-sm`}>
+                    <span className="text-white font-bold text-sm">{broker.name.charAt(0)}</span>
+                  </div>
+                  <p className="text-sm font-semibold text-gray-800 leading-tight">{broker.name}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-center text-sm text-gray-500 mt-6">+ any other UK broker that exports transaction data as CSV</p>
+        </div>
+      </section>
+
       {/* Features */}
       <section className="py-24 bg-white px-4 border-t border-gray-100">
         <div className="max-w-7xl mx-auto">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <h2 className="text-3xl font-extrabold text-gray-900 mb-4">Everything you need to report with confidence</h2>
-            <p className="text-lg text-gray-600">We've built all the edge cases and strict HMRC parameters into the software so you never have to think about them.</p>
+            <p className="text-lg text-gray-600">We&apos;ve built all the edge cases and strict HMRC parameters into the software so you never have to think about them.</p>
           </div>
           
           <div className="grid md:grid-cols-3 gap-8 px-2">
@@ -215,6 +258,9 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Free B&B Calculator Widget */}
+      <FreeBBCalculator />
+
       {/* How it works */}
       <section className="py-24 px-4 bg-slate-900 text-white relative overflow-hidden">
          {/* Background flares */}
@@ -245,7 +291,7 @@ export default function LandingPage() {
                 <div className="absolute -top-3 -right-3 w-8 h-8 bg-purple-600 text-white font-bold rounded-full flex items-center justify-center border-4 border-slate-900">2</div>
               </div>
               <h3 className="font-bold text-xl mb-3">System Detection</h3>
-              <p className="text-slate-400 leading-relaxed">Our system automatically parses your broker's CSV format and cross-matches transactions intelligently.</p>
+              <p className="text-slate-400 leading-relaxed">Our system automatically parses your broker&apos;s CSV format and cross-matches transactions intelligently.</p>
             </div>
             
             <div className="text-center relative">
@@ -268,7 +314,7 @@ export default function LandingPage() {
           </div>
           <h2 className="text-2xl font-bold mb-4 text-gray-900">Bank-level data security</h2>
           <p className="text-gray-600 max-w-2xl mx-auto text-lg leading-relaxed">
-            We never store your raw CSV files — they're processed in memory and immediately discarded. All data is securely encrypted in transit and at rest. We never sell your financial data.
+            We never store your raw CSV files — they&apos;re processed in memory and immediately discarded. All data is securely encrypted in transit and at rest. We never sell your financial data.
           </p>
         </div>
       </section>
@@ -338,7 +384,7 @@ export default function LandingPage() {
             <div className="bg-white rounded-2xl border border-gray-200 p-6 sm:p-8 shadow-sm">
               <h3 className="text-lg font-bold text-gray-900 mb-3">Which brokers are supported?</h3>
               <p className="text-gray-600 leading-relaxed">
-                Our smart parser can automatically format unstructured data from virtually any UK broker CSV export, including Trading 212, Freetrade, Hargreaves Lansdown, Interactive Investor, AJ Bell, and more. If your broker exports a CSV with transaction details, our engine will recognise it.
+                Our smart parser flawlessly processes CSV exports from Trading 212, Freetrade, Hargreaves Lansdown, Interactive Investor, Interactive Brokers, AJ Bell, and more. If your broker exports a CSV with transaction details, our engine will recognise it.
               </p>
             </div>
             <div className="bg-white rounded-2xl border border-gray-200 p-6 sm:p-8 shadow-sm">
@@ -380,6 +426,7 @@ export default function LandingPage() {
           </div>
           <p className="text-gray-500 text-sm">&copy; {new Date().getFullYear()} CGT Tracker. Data provided for guidance. Consult a qualified advisor.</p>
           <div className="flex gap-6 text-sm font-medium">
+            <Link href="#free-calculator" className="text-gray-500 hover:text-gray-900 transition-colors">Free Calculator</Link>
             <Link href="/guide" className="text-gray-500 hover:text-gray-900 transition-colors">Tax Guide</Link>
             <Link href="/pricing" className="text-gray-500 hover:text-gray-900 transition-colors">Pricing</Link>
             <Link href="/login" className="text-gray-500 hover:text-gray-900 transition-colors">Log in</Link>
