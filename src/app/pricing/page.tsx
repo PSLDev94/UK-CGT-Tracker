@@ -53,6 +53,7 @@ export default async function PricingPage() {
           <p className="mt-4 text-xs text-gray-500">No credit card required for trial.</p>
         </div>
       </div>
+      </div>
     </div>
   )
 }
