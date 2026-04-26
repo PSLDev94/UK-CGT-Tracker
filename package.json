@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node scripts/ping-search-engines.js",
     "start": "next start",
     "lint": "eslint"
   },
