@@ -3,8 +3,9 @@ import { NextResponse } from 'next/server'
 const SITEMAP_URL = 'https://www.cgttracker.com/sitemap.xml'
 
 export async function POST(req: Request) {
-  // Verify deploy secret to prevent abuse
-  const secret = req.headers.get('x-deploy-secret')
+  // Verify deploy secret via query parameter (Vercel Deploy Hooks cannot send custom headers)
+  const { searchParams } = new URL(req.url)
+  const secret = searchParams.get('secret')
   if (!secret || secret !== process.env.DEPLOY_PING_SECRET) {
     return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
   }
