@@ -62,7 +62,7 @@ export async function proxy(request: NextRequest) {
 
   const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard')
   const isAuthRoute = request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/signup') || request.nextUrl.pathname.startsWith('/forgot-password')
-  const isApiDataRoute = request.nextUrl.pathname.startsWith('/api/') && !request.nextUrl.pathname.startsWith('/api/stripe/') && !request.nextUrl.pathname.startsWith('/api/webhooks/') && !request.nextUrl.pathname.startsWith('/api/auth/') && !request.nextUrl.pathname.startsWith('/api/contact')
+  const isApiDataRoute = request.nextUrl.pathname.startsWith('/api/') && !request.nextUrl.pathname.startsWith('/api/stripe/') && !request.nextUrl.pathname.startsWith('/api/webhooks/') && !request.nextUrl.pathname.startsWith('/api/auth/') && !request.nextUrl.pathname.startsWith('/api/contact') && !request.nextUrl.pathname.startsWith('/api/ping-search-engines')
 
   if ((isProtectedRoute || isApiDataRoute) && !user) {
     if (isApiDataRoute) {

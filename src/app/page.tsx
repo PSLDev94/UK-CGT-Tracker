@@ -1,13 +1,29 @@
 import Link from 'next/link'
 import { ArrowRight, CheckCircle, Upload, Calculator, FileText, BookOpen, Shield, Zap, TrendingUp, PieChart, BarChart3, AlertCircle } from 'lucide-react'
 import type { Metadata } from 'next'
-import FreeBBCalculator from '@/components/free-bb-calculator'
 import { PublicNav } from '@/components/public-nav'
+import { PublicFooter } from '@/components/public-footer'
 
 export const metadata: Metadata = {
-  title: 'UK CGT Calculator for Trading 212, Freetrade & Hargreaves Lansdown | CGT Tracker',
-  description: 'Calculate your UK Capital Gains Tax instantly from Trading 212, Freetrade, Hargreaves Lansdown & Interactive Investor CSV exports. Automated HMRC share matching with Same-Day, Bed & Breakfast, and Section 104 Pool rules. Free 14-day trial.',
-  keywords: ['Trading 212 HMRC tax export', 'Freetrade CGT calculator', 'Hargreaves Lansdown capital gains', 'UK CGT calculator', 'capital gains tax', 'HMRC share matching', 'Section 104 pool', 'Bed and Breakfast rule', 'SA108 form generator', 'Interactive Investor tax report'],
+  title: 'UK CGT Calculator for Shares — Section 104 & SA108 | CGT Tracker',
+  description: 'Calculate your UK capital gains tax on shares in minutes. Upload your broker CSV from Trading 212, Freetrade or Hargreaves Lansdown. Applies HMRC\'s Section 104, same-day and 30-day rules automatically. Free 14-day trial.',
+  alternates: { canonical: 'https://www.cgttracker.com/' },
+}
+
+const JSON_LD = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'CGT Tracker',
+  applicationCategory: 'FinanceApplication',
+  operatingSystem: 'Web',
+  description: 'UK capital gains tax calculator for self-directed investors. Applies HMRC Section 104 pooling, same-day and 30-day bed and breakfast rules automatically.',
+  offers: {
+    '@type': 'Offer',
+    price: '49',
+    priceCurrency: 'GBP',
+    priceValidUntil: '2027-01-31',
+  },
+  url: 'https://www.cgttracker.com',
 }
 
 const SUPPORTED_BROKERS = [
@@ -22,6 +38,12 @@ const SUPPORTED_BROKERS = [
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-white font-sans text-gray-900 selection:bg-blue-100 selection:text-blue-900">
+      {/* JSON-LD Structured Data */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }}
+      />
+
       {/* Navigation */}
       <PublicNav />
 
@@ -198,7 +220,7 @@ export default function LandingPage() {
                 <Calculator className="w-7 h-7 text-blue-600" />
               </div>
               <h3 className="text-xl font-bold mb-3 text-gray-900 relative z-10">Flawless HMRC Accuracy</h3>
-              <p className="text-gray-600 leading-relaxed relative z-10">Automatically applies the complex HMRC share matching algorithm — first Same-Day rule, then 30-Day Bed & Breakfast, and finally Section 104 pools — strictly in order.</p>
+              <p className="text-gray-600 leading-relaxed relative z-10">Automatically applies the complex <Link href="/guide" className="text-blue-600 hover:underline">HMRC share matching algorithm</Link> — first Same-Day rule, then <Link href="/guide/bed-and-breakfast-rule" className="text-blue-600 hover:underline">30-Day Bed &amp; Breakfast rule</Link>, and finally <Link href="/tools/section-104-calculator" className="text-blue-600 hover:underline">Section 104 pools</Link> — strictly in order.</p>
             </div>
             
             <div className="bg-gray-50 p-8 rounded-2xl border border-gray-100 hover:bg-white hover:shadow-xl hover:shadow-green-900/5 transition-all duration-300 relative group overflow-hidden">
@@ -226,8 +248,41 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Free B&B Calculator Widget */}
-      <FreeBBCalculator />
+      {/* Free Tools Teaser */}
+      <section className="py-20 px-4 bg-white border-t border-gray-100">
+        <div className="max-w-5xl mx-auto">
+          <div className="text-center mb-10">
+            <h2 className="text-3xl font-extrabold text-gray-900 mb-3">Free CGT Tools — No Signup Required</h2>
+            <p className="text-gray-600 text-lg max-w-2xl mx-auto">Use our free calculators to check individual transactions before committing to a full portfolio analysis.</p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-6">
+            <Link href="/tools/bed-and-breakfast-calculator" className="group bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-6 hover:shadow-lg hover:-translate-y-0.5 transition-all">
+              <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-amber-200 transition-colors">
+                <Calculator className="w-6 h-6 text-amber-700" />
+              </div>
+              <h3 className="font-bold text-gray-900 mb-2">B&amp;B Rule Calculator</h3>
+              <p className="text-sm text-gray-600 mb-3">Check if HMRC&apos;s 30-day bed &amp; breakfast rule applies to your share sale.</p>
+              <span className="text-sm font-semibold text-amber-700 group-hover:text-amber-800 flex items-center gap-1">Try it free <ArrowRight className="w-4 h-4" /></span>
+            </Link>
+            <Link href="/tools/section-104-calculator" className="group bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6 hover:shadow-lg hover:-translate-y-0.5 transition-all">
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-blue-200 transition-colors">
+                <BarChart3 className="w-6 h-6 text-blue-700" />
+              </div>
+              <h3 className="font-bold text-gray-900 mb-2">Section 104 Pool Calculator</h3>
+              <p className="text-sm text-gray-600 mb-3">Calculate your average cost basis across multiple share purchases.</p>
+              <span className="text-sm font-semibold text-blue-700 group-hover:text-blue-800 flex items-center gap-1">Try it free <ArrowRight className="w-4 h-4" /></span>
+            </Link>
+            <Link href="/tools/cgt-allowance-checker" className="group bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-6 hover:shadow-lg hover:-translate-y-0.5 transition-all">
+              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-4 group-hover:bg-green-200 transition-colors">
+                <CheckCircle className="w-6 h-6 text-green-700" />
+              </div>
+              <h3 className="font-bold text-gray-900 mb-2">CGT Allowance Checker</h3>
+              <p className="text-sm text-gray-600 mb-3">See how much of your £3,000 annual exempt amount you&apos;ve used.</p>
+              <span className="text-sm font-semibold text-green-700 group-hover:text-green-800 flex items-center gap-1">Try it free <ArrowRight className="w-4 h-4" /></span>
+            </Link>
+          </div>
+        </div>
+      </section>
 
       {/* How it works */}
       <section className="py-24 px-4 bg-slate-900 text-white relative overflow-hidden">
@@ -386,22 +441,7 @@ export default function LandingPage() {
       </section>
       
       {/* Footer */}
-      <footer className="border-t py-12 text-center bg-white">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-2">
-            <PieChart className="w-5 h-5 text-blue-600" />
-            <span className="font-bold text-gray-900">CGTTracker</span>
-          </div>
-          <p className="text-gray-500 text-sm">&copy; {new Date().getFullYear()} CGT Tracker. Data provided for guidance. Consult a qualified advisor.</p>
-          <div className="flex gap-6 text-sm font-medium">
-            <Link href="#free-calculator" className="text-gray-500 hover:text-gray-900 transition-colors">Free Calculator</Link>
-            <Link href="/guide" className="text-gray-500 hover:text-gray-900 transition-colors">Tax Guide</Link>
-            <Link href="/pricing" className="text-gray-500 hover:text-gray-900 transition-colors">Pricing</Link>
-            <Link href="/contact" className="text-gray-500 hover:text-gray-900 transition-colors">Contact</Link>
-            <Link href="/login" className="text-gray-500 hover:text-gray-900 transition-colors">Log in</Link>
-          </div>
-        </div>
-      </footer>
+      <PublicFooter />
     </div>
   )
 }

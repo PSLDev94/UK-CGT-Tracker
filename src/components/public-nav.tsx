@@ -17,8 +17,8 @@ export function PublicNav() {
           </Link>
 
           <div className="flex gap-1 sm:gap-4 items-center">
-            <Link href="/#free-calculator" className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2 hidden sm:inline transition-colors">
-              Free Calculator
+            <Link href="/tools/bed-and-breakfast-calculator" className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2 hidden sm:inline transition-colors">
+              Free Tools
             </Link>
             <Link href="/guide" className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2 hidden sm:inline transition-colors">
               CGT Guide

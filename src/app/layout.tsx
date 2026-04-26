@@ -7,15 +7,15 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
 export const metadata: Metadata = {
   title: {
-    default: 'UK CGT Calculator for Trading 212, Freetrade & HL | CGT Tracker',
+    default: 'UK CGT Calculator for Shares — Section 104 & SA108 | CGT Tracker',
     template: '%s | UK CGT Tracker',
   },
-  description: 'Calculate your UK Capital Gains Tax instantly from Trading 212, Freetrade, Hargreaves Lansdown & Interactive Investor CSV exports. Automated HMRC share matching with Same-Day, Bed & Breakfast, and Section 104 Pool rules for your SA108 self-assessment.',
+  description: 'Calculate your UK capital gains tax on shares in minutes. Upload your broker CSV from Trading 212, Freetrade or Hargreaves Lansdown. Applies HMRC\'s Section 104, same-day and 30-day rules automatically. Free 14-day trial.',
   keywords: ['Trading 212 HMRC tax export', 'Freetrade CGT calculator', 'Hargreaves Lansdown capital gains tax', 'UK CGT calculator', 'capital gains tax UK', 'HMRC share matching rules', 'Section 104 pool calculator', 'Bed and Breakfast rule shares', 'SA108 form generator', 'Interactive Investor tax report', 'tax loss harvesting UK stocks'],
-  authors: [{ name: 'UK CGT Tracker' }],
-  creator: 'UK CGT Tracker',
-  publisher: 'UK CGT Tracker',
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://www.cgttracker.co.uk'),
+  authors: [{ name: 'CGT Tracker' }],
+  creator: 'CGT Tracker',
+  publisher: 'CGT Tracker',
+  metadataBase: new URL('https://www.cgttracker.com'),
   alternates: {
     canonical: '/',
   },
@@ -23,14 +23,23 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'en_GB',
     url: '/',
-    title: 'UK CGT Calculator — Trading 212, Freetrade & Hargreaves Lansdown',
+    title: 'UK CGT Calculator for Shares — Section 104 & SA108',
     description: 'Upload your Trading 212, Freetrade or HL CSV and instantly calculate your UK Capital Gains Tax. Automated HMRC-compliant SA108 report with Same-Day, B&B, and Section 104 Pool matching.',
-    siteName: 'UK CGT Tracker',
+    siteName: 'CGT Tracker',
+    images: [
+      {
+        url: '/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'CGT Tracker — UK Capital Gains Tax Calculator',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Calculate your UK Capital Gains Tax in minutes — Trading 212, Freetrade & more',
+    title: 'UK CGT Calculator for Shares — Section 104 & SA108',
     description: 'Upload your broker CSV and instantly apply HMRC matching rules. Works with Trading 212, Freetrade, Hargreaves Lansdown, Interactive Investor and more.',
+    images: ['/og-image.png'],
   },
 }
 
@@ -40,7 +49,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} antialiased`}>
+    <html lang="en-GB" className={`${inter.variable} antialiased`}>
       <head>
         <Script 
           src="https://www.googletagmanager.com/gtag/js?id=G-M5S5LH31T9" 
