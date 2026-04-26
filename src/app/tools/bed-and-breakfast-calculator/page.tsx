@@ -82,10 +82,10 @@ export default function BedAndBreakfastCalculatorPage() {
         {/* Calculator */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-12">
           <div className="h-1.5 bg-gradient-to-r from-amber-400 to-orange-500" />
-          <form onSubmit={calculate} className="p-6 sm:p-8">
+          <form onSubmit={calculate} className="p-6 sm:p-8 overflow-hidden">
             <div className="grid sm:grid-cols-2 gap-8">
               {/* Sell side */}
-              <div>
+              <div className="min-w-0">
                 <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <span className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center text-sm font-bold text-red-700">S</span>
                   Sale Details
@@ -93,7 +93,7 @@ export default function BedAndBreakfastCalculatorPage() {
                 <div className="space-y-4">
                   <div>
                     <label htmlFor="sell-date" className="block text-sm font-medium text-gray-700 mb-1">Date of sale</label>
-                    <input id="sell-date" type="date" required value={sellDate} onChange={(e) => setSellDate(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none" />
+                    <input id="sell-date" type="date" required value={sellDate} onChange={(e) => setSellDate(e.target.value)} className="w-full min-w-0 box-border border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none" />
                   </div>
                   <div>
                     <label htmlFor="sell-qty" className="block text-sm font-medium text-gray-700 mb-1">Shares sold</label>
@@ -107,7 +107,7 @@ export default function BedAndBreakfastCalculatorPage() {
               </div>
 
               {/* Buy side */}
-              <div>
+              <div className="min-w-0">
                 <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <span className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center text-sm font-bold text-green-700">B</span>
                   Repurchase Details
@@ -115,7 +115,7 @@ export default function BedAndBreakfastCalculatorPage() {
                 <div className="space-y-4">
                   <div>
                     <label htmlFor="buy-date" className="block text-sm font-medium text-gray-700 mb-1">Date of repurchase</label>
-                    <input id="buy-date" type="date" required value={buyDate} onChange={(e) => setBuyDate(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none" />
+                    <input id="buy-date" type="date" required value={buyDate} onChange={(e) => setBuyDate(e.target.value)} className="w-full min-w-0 box-border border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none" />
                   </div>
                   <div>
                     <label htmlFor="buy-qty" className="block text-sm font-medium text-gray-700 mb-1">Shares repurchased</label>

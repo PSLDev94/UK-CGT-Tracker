@@ -109,24 +109,24 @@ export default function Section104CalculatorPage() {
 
             <div className="space-y-4">
               {rows.map((row, i) => (
-                <div key={row.id} className="grid grid-cols-12 gap-3 items-end">
-                  <div className="col-span-3">
-                    {i === 0 && <label className="block text-xs font-medium text-gray-500 mb-1">Date</label>}
-                    <input type="date" value={row.date} onChange={(e) => updateRow(row.id, 'date', e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
+                <div key={row.id} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                  <div className="sm:col-span-3">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Date</label>
+                    <input type="date" value={row.date} onChange={(e) => updateRow(row.id, 'date', e.target.value)} className="w-full min-w-0 box-border border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
                   </div>
-                  <div className="col-span-2">
-                    {i === 0 && <label className="block text-xs font-medium text-gray-500 mb-1">Quantity</label>}
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Quantity</label>
                     <input type="number" step="any" min="0.01" placeholder="100" value={row.quantity} onChange={(e) => updateRow(row.id, 'quantity', e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
                   </div>
-                  <div className="col-span-3">
-                    {i === 0 && <label className="block text-xs font-medium text-gray-500 mb-1">Price/share (£)</label>}
+                  <div className="sm:col-span-3">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Price/share (£)</label>
                     <input type="number" step="any" min="0.0001" placeholder="3.50" value={row.pricePerShare} onChange={(e) => updateRow(row.id, 'pricePerShare', e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
                   </div>
-                  <div className="col-span-3">
-                    {i === 0 && <label className="block text-xs font-medium text-gray-500 mb-1">Fees (£)</label>}
+                  <div className="sm:col-span-3">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Fees (£)</label>
                     <input type="number" step="any" min="0" placeholder="0" value={row.fees} onChange={(e) => updateRow(row.id, 'fees', e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" />
                   </div>
-                  <div className="col-span-1 flex justify-center">
+                  <div className="sm:col-span-1 flex sm:justify-center">
                     {rows.length > 1 && (
                       <button type="button" onClick={() => removeRow(row.id)} className="p-2 text-gray-400 hover:text-red-600 transition-colors" aria-label="Remove row">
                         <Trash2 className="w-4 h-4" />

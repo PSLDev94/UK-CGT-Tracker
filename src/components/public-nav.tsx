@@ -120,7 +120,12 @@ export function PublicNav() {
               Log in
             </Link>
 
-            {/* Mobile hamburger button */}
+            {/* Start free trial — always visible */}
+            <Link href="/signup" className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium transition-all shadow-sm hover:shadow active:scale-95">
+              Start free trial
+            </Link>
+
+            {/* Mobile hamburger button — rightmost on mobile */}
             <button
               type="button"
               onClick={() => setMobileOpen((v) => !v)}
@@ -129,11 +134,6 @@ export function PublicNav() {
             >
               {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
-
-            {/* Start free trial — always visible */}
-            <Link href="/signup" className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium transition-all shadow-sm hover:shadow active:scale-95">
-              Start free trial
-            </Link>
           </div>
         </div>
       </div>
