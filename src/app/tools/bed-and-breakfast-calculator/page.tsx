@@ -181,7 +181,7 @@ export default function BedAndBreakfastCalculatorPage() {
         </div>
 
         {/* Explanatory content */}
-        <div className="prose prose-gray max-w-none">
+        <div className="guide-article">
           <h2>How to Interpret the Result</h2>
           <p>
             If the calculator shows <strong>&ldquo;B&amp;B Rule Triggered&rdquo;</strong>, it means the disposal is matched against the repurchase under HMRC&apos;s 30-day rule. The allowable cost used to calculate your gain or loss is the cost of the repurchased shares — not the original cost from your <Link href="/guide/section-104-pool">Section 104 pool</Link>.

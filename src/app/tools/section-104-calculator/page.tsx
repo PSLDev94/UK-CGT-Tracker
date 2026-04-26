@@ -238,7 +238,7 @@ export default function Section104CalculatorPage() {
         </div>
 
         {/* Explanatory content */}
-        <div className="prose prose-gray max-w-none mb-12">
+        <div className="guide-article mb-12">
           <h2>How the Section 104 Pool Calculator Works</h2>
           <p>
             This calculator uses <strong>precise decimal arithmetic</strong> (the same library as our main CGT engine) to avoid floating-point rounding errors that can affect gain calculations. Each purchase you add increases the pool&apos;s total shares and total cost. The average cost per share is recalculated after each addition.

@@ -58,7 +58,7 @@ export function GuideLayout({ title, breadcrumb, lastUpdated = 'April 2026', rel
         <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-3 leading-tight">{title}</h1>
         <p className="text-sm text-gray-500 mb-10">Last updated: {lastUpdated}</p>
 
-        <article className="prose prose-gray max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-p:leading-relaxed prose-li:text-gray-700 prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline prose-strong:text-gray-900 prose-table:text-sm">
+        <article className="guide-article">
           {children}
         </article>
 
