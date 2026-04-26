@@ -26,15 +26,15 @@ export default function CGTAllowanceCheckerPage() {
 
   const hasInput = gains !== '' || losses !== ''
 
-  // Traffic light
-  const pctUsed = netGain / EXEMPT_AMOUNT
+  // Traffic light — thresholds: green <£2,500, amber £2,500–£3,000, red >£3,000
   const light: 'green' | 'amber' | 'red' =
-    pctUsed <= 0.5 ? 'green' : pctUsed <= 1 ? 'amber' : 'red'
+    netGain > EXEMPT_AMOUNT ? 'red' : netGain >= 2500 ? 'amber' : 'green'
+  const pctUsed = netGain / EXEMPT_AMOUNT
 
   const lightConfig = {
-    green: { icon: CheckCircle, bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-700', iconColor: 'text-green-600', label: 'Well within allowance' },
-    amber: { icon: AlertTriangle, bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', iconColor: 'text-amber-600', label: 'Approaching allowance limit' },
-    red: { icon: XCircle, bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', iconColor: 'text-red-600', label: 'Over allowance — tax is due' },
+    green: { icon: CheckCircle, bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-700', iconColor: 'text-green-600', label: 'Well within your allowance', gradient: 'from-green-400 to-emerald-500' },
+    amber: { icon: AlertTriangle, bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', iconColor: 'text-amber-600', label: 'Approaching allowance limit', gradient: 'from-amber-400 to-orange-500' },
+    red: { icon: XCircle, bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', iconColor: 'text-red-600', label: 'Over allowance — tax is due', gradient: 'from-red-400 to-rose-500' },
   }
   const lc = lightConfig[light]
   const Icon = lc.icon
@@ -54,7 +54,7 @@ export default function CGTAllowanceCheckerPage() {
 
         {/* Calculator */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-8">
-          <div className="h-1.5 bg-gradient-to-r from-green-400 to-emerald-500" />
+          <div className={`h-1.5 bg-gradient-to-r ${hasInput ? lc.gradient : 'from-green-400 to-emerald-500'}`} />
           <div className="p-6 sm:p-8 space-y-6">
             <div>
               <label htmlFor="gains" className="block text-sm font-semibold text-gray-700 mb-1">Total gains so far this tax year (£)</label>
@@ -130,9 +130,25 @@ export default function CGTAllowanceCheckerPage() {
           )}
         </div>
 
+        {/* Explanatory content */}
+        <div className="guide-article mb-12">
+          <h2>About the Annual Exempt Amount</h2>
+          <p>
+            Every UK individual receives a Capital Gains Tax annual exempt amount — currently <strong>£3,000 for the 2025-26 tax year</strong> (6 April 2025 to 5 April 2026). This is the amount of net capital gains you can realise each year without paying any CGT. The exemption resets every 6 April and <strong>cannot be carried forward</strong> — if you don&apos;t use it, you lose it.
+          </p>
+          <p>
+            Each person has their own exemption, so a married couple or civil partners have a combined £6,000 between them. Transferring assets between spouses before sale is a legitimate way to utilise both exemptions. Note that even if your gains fall within the exempt amount and no tax is due, you <strong>must still report to HMRC</strong> if your total disposal proceeds for the year exceed £12,000. Failing to report can result in penalties. For the full breakdown of rates and bands, see our <Link href="/guide/cgt-rates-2025-26">full CGT rates guide</Link>.
+          </p>
+
+          <h2>What to Do If You&apos;re Over the Limit</h2>
+          <p>
+            If your net gains exceed £3,000, there are several strategies to consider before 5 April. <strong>Tax-loss harvesting</strong> involves selling positions currently at a loss to offset your gains — the loss reduces your net gain and can bring you back within the exempt amount. You could also consider a <strong>bed-and-ISA</strong> strategy, where you sell shares in your taxable account and repurchase them within your ISA to shelter future growth — see our guide on <Link href="/guide/bed-and-breakfast-rule">bed and breakfast alternatives</Link>. Another option is to <strong>split disposals across tax years</strong> — sell some shares before 5 April and the rest after, giving you two annual exemptions. Use our <Link href="/tools/section-104-calculator">Section 104 pool calculator</Link> to model different disposal scenarios.
+          </p>
+        </div>
+
         {/* CTA */}
         <section className="bg-blue-50 rounded-2xl p-8 text-center">
-          <h2 className="text-xl font-bold text-gray-900 mb-3">Know exactly where you stand with your full transaction history</h2>
+          <h2 className="text-xl font-bold text-gray-900 mb-3">Know your exact position with your full transaction history</h2>
           <p className="text-gray-600 mb-6">Upload your broker CSV and CGT Tracker will calculate your precise gains, losses, and tax position automatically.</p>
           <Link href="/signup" className="inline-flex items-center bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-medium hover:bg-blue-700 transition-colors">
             Upload your CSV free <ArrowRight className="ml-2 w-5 h-5" />
