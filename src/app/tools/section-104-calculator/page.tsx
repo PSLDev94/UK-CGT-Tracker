@@ -166,7 +166,7 @@ export default function Section104CalculatorPage() {
                         <td className="px-3 py-2 text-right">£{ps.cost.toFixed(2)}</td>
                         <td className="px-3 py-2 text-right font-medium">{ps.totalShares.toFixed(2)}</td>
                         <td className="px-3 py-2 text-right font-medium">£{ps.totalCost.toFixed(2)}</td>
-                        <td className="px-3 py-2 text-right">£{ps.avgCost.toFixed(4)}</td>
+                        <td className="px-3 py-2 text-right">£{ps.avgCost.toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -183,7 +183,7 @@ export default function Section104CalculatorPage() {
                 </div>
                 <div className="bg-white rounded-xl p-4 border text-center">
                   <p className="text-xs text-gray-500 uppercase mb-1">Avg Cost/Share</p>
-                  <p className="text-xl font-bold text-gray-900">£{avgCostPerShare.toFixed(4)}</p>
+                  <p className="text-xl font-bold text-gray-900">£{avgCostPerShare.toFixed(2)}</p>
                 </div>
               </div>
             </div>
@@ -192,7 +192,7 @@ export default function Section104CalculatorPage() {
 
         {/* Disposal section */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-12">
-          <div className="h-1.5 bg-gradient-to-r from-red-400 to-rose-500" />
+
           <div className="p-6 sm:p-8">
             <h2 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
               <Calculator className="w-5 h-5 text-red-600" /> Disposal
