@@ -52,8 +52,33 @@ export default async function DashboardPage({
   const daysUntilEnd = Math.ceil((taxYearEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
   const showYearEndAlert = daysUntilEnd > 0 && daysUntilEnd <= 30
 
+  // Check latest upload for warnings
+  const { data: latestUpload } = await supabase
+    .from('uploads')
+    .select('filename, warning_type, transactions_imported, row_count')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  const showUploadWarning = latestUpload?.warning_type === 'zero_imports'
+
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-8">
+      {/* Zero-import warning banner */}
+      {showUploadWarning && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start">
+          <div className="text-amber-600 mr-3 mt-0.5 text-lg">⚠️</div>
+          <div>
+            <p className="font-medium text-amber-900">0 transactions imported from &quot;{latestUpload.filename}&quot;</p>
+            <p className="text-sm text-amber-700 mt-1">
+              This usually means the column format wasn&apos;t recognised correctly. Please try
+              <Link href="/dashboard/upload" className="underline font-medium ml-1">uploading again</Link> — if the problem persists, email{' '}
+              <a href="mailto:support@cgttracker.com" className="underline font-medium">support@cgttracker.com</a> with your CSV attached and we&apos;ll add support for your broker within 24 hours.
+            </p>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Tax Overview</h1>

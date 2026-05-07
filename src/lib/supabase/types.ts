@@ -105,6 +105,8 @@ export interface Database {
           status: string | null
           error_message: string | null
           schema_mapping: Json | null
+          skip_reasons: Json | null
+          warning_type: string | null
           created_at: string | null
         }
         Insert: {
@@ -117,6 +119,8 @@ export interface Database {
           status?: string | null
           error_message?: string | null
           schema_mapping?: Json | null
+          skip_reasons?: Json | null
+          warning_type?: string | null
           created_at?: string | null
         }
         Update: {
@@ -129,6 +133,8 @@ export interface Database {
           status?: string | null
           error_message?: string | null
           schema_mapping?: Json | null
+          skip_reasons?: Json | null
+          warning_type?: string | null
           created_at?: string | null
         }
       }
