@@ -210,7 +210,7 @@ export class Workspace {
   async calculate(identity: Identity, input: { portfolioId: string; taxYear: string; historyThrough: string; confirmedAccountIds: string[] }) {
     if (!Object.hasOwn(TAX_YEARS, input.taxYear)) throw new AppError(400, 'INVALID_YEAR', 'Choose an available tax year.')
     try { calendarDate(input.historyThrough) } catch { throw new AppError(400, 'INVALID_DATE', 'Enter a valid history date in YYYY-MM-DD format.') }
-    if (input.historyThrough > new Date().toISOString().slice(0, 10)) throw new AppError(400, 'FUTURE_HISTORY', 'You cannot confirm transaction history for a future date.')
+    if (input.historyThrough > ukCalendarDate(new Date())) throw new AppError(400, 'FUTURE_HISTORY', 'You cannot confirm transaction history for a future date.')
     if (!Array.isArray(input.confirmedAccountIds) || input.confirmedAccountIds.some(id => typeof id !== 'string')) throw new AppError(400, 'INVALID_COVERAGE', 'Confirm which accounts have complete transaction history.')
     return this.db.run(identity, async tx => {
       const p = await lockPortfolio(tx, input.portfolioId)

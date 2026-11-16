@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { beforeAll, afterAll, describe, it, expect } from 'vitest'
+import { beforeAll, afterAll, describe, it, expect, vi } from 'vitest'
 import { testDatabase } from './helpers/database'
 import { authenticate, type Identity } from '../src/server/identity'
 import { assertRuntimeRole, OwnedDatabase, query } from '../src/server/database'
@@ -131,6 +131,21 @@ describe('authenticated PostgreSQL application workflow', () => {
     const replacement = await prepare(s.user, s.account.id)
     expect(replacement.review.counts.accepted).toBe(2)
     expect((await workspace.commitImport(s.user, replacement.draftId, replacement.revision)).outcome).toBe('committed')
+  })
+
+  it('accepts today in London just after BST midnight but rejects tomorrow', async () => {
+    const s = await setup('london-history-cutoff')
+    const draft = await prepare(s.user, s.account.id)
+    await workspace.commitImport(s.user, draft.draftId, draft.revision)
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2025-05-04T23:30:00Z'))
+    try {
+      const input = { portfolioId: s.portfolio.id, taxYear: '2024-25', historyThrough: '2025-05-05', confirmedAccountIds: [s.account.id] }
+      expect((await workspace.calculate(s.user, input)).result.status).toBe('complete')
+      await expect(workspace.calculate(s.user, { ...input, historyThrough: '2025-05-06' })).rejects.toMatchObject({ code: 'FUTURE_HISTORY' })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('does not assert coverage when an account is missing, and blocks pending previews', async () => {

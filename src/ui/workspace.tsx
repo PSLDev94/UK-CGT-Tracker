@@ -9,7 +9,7 @@ import {
   type FormEvent,
 } from "react";
 import { BROKERS } from "../domain/imports/brokers";
-import { TAX_YEARS, calendarDate } from "../domain/values";
+import { TAX_YEARS, calendarDate, ukCalendarDate } from "../domain/values";
 import { authApi, workspaceApi, ApiError } from "./api";
 import {
   Button,
@@ -270,7 +270,7 @@ export function WorkspaceScreen() {
     const next: Record<string, string> = {};
     try {
       calendarDate(historyThrough);
-      if (historyThrough > new Date().toISOString().slice(0, 10))
+      if (historyThrough > ukCalendarDate(new Date()))
         next.historyThrough = "Choose today or an earlier date.";
     } catch {
       next.historyThrough =
