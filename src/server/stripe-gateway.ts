@@ -155,13 +155,22 @@ export class StripeGateway implements BillingGateway {
           if (!found) paid = false;
         }
       }
+      const paidPeriodEnd = item?.current_period_end ?? 0;
+      // Flexible billing's portal sets cancel_at but leaves the legacy flag false.
+      // Cap access at an earlier cancellation without extending the paid period.
+      const cancellationEndsThisPeriod =
+        subscription.cancel_at != null &&
+        subscription.cancel_at <= paidPeriodEnd;
       subscriptions.push({
         id: subscription.id,
         status: subscription.status,
         eligible: !!eligible,
         paid,
-        periodEnd: item?.current_period_end ?? 0,
-        cancelAtPeriodEnd: subscription.cancel_at_period_end,
+        periodEnd: cancellationEndsThisPeriod
+          ? subscription.cancel_at!
+          : paidPeriodEnd,
+        cancelAtPeriodEnd:
+          subscription.cancel_at_period_end || cancellationEndsThisPeriod,
       });
     }
     return subscriptions;

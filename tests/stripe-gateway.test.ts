@@ -22,6 +22,7 @@ function setup() {
       pause_collection: null,
       latest_invoice: "in_fixture",
       cancel_at_period_end: false,
+      cancel_at: null as number | null,
       items: {
         data: [
           {
@@ -121,6 +122,29 @@ function setup() {
 }
 
 describe("Stripe SDK gateway against versioned HTTP fixtures", () => {
+  it.each([
+    ["flexible portal cancellation", false, 2000000000, 2000000000, true],
+    ["classic portal cancellation", true, 2000000000, 2000000000, true],
+    ["earlier cancellation", false, 1900000000, 1900000000, true],
+    [
+      "cancellation after the paid period",
+      false,
+      2100000000,
+      2000000000,
+      false,
+    ],
+    ["removed cancellation", false, null, 2000000000, false],
+  ] as const)(
+    "reconciles %s without extending paid access",
+    async (_name, legacyFlag, cancelAt, periodEnd, cancelAtPeriodEnd) => {
+      const s = setup();
+      s.state.subscription.cancel_at_period_end = legacyFlag;
+      s.state.subscription.cancel_at = cancelAt;
+      expect(await s.gateway.subscriptions("cus_fixture")).toMatchObject([
+        { paid: true, periodEnd, cancelAtPeriodEnd },
+      ]);
+    },
+  );
   it("checks the actual invoice, payment intent and current charge before granting paid state", async () => {
     const s = setup();
     expect(await s.gateway.subscriptions("cus_fixture")).toMatchObject([
