@@ -17,10 +17,10 @@ The first increment added isolated financial modules to `src/domain`; the second
 | 1 | Access and repository setup | GitHub checkout, service logins verified, private staging project | Management access verified; Resend and sandbox Stripe keys applied to staging |
 | 2 | Calculation core | Reproduced matching defects corrected; deterministic decimal arithmetic; missing history blocks totals | Implemented and tested; independent tax review still required |
 | 3 | Import safety foundation | Every data record classified; conflicts block commit; FX provenance retained | Canonical interchange format implemented; native adapters pending |
-| 4 | Fresh data model | Ownership constraints, immutable calculation runs, separate billing writes, rollback tests | Migrations qualified on PostgreSQL 18 in CI; Railway database online; schema/setup job pending |
-| 5 | New application and authentication | Signup, verification, reset, sessions, account ownership and secure runtime setup verified | Backend, fresh UI and controlled browser tests implemented; hosted verification pending |
+| 4 | Fresh data model | Ownership constraints, immutable calculation runs, separate billing writes, rollback tests | Migrations qualified on PostgreSQL 18 in CI; Railway database online; five migrations and four runtime logins applied |
+| 5 | New application and authentication | Signup, verification, reset, sessions, account ownership and secure runtime setup verified | Backend, fresh UI and controlled browser tests implemented; hosted readiness/auth-boundary checks pass; email lifecycle pending |
 | 6 | Native broker adapters | Every named export variant passes representative anonymised fixtures and reconciliation checks | Pending verified fixtures; all six brokers remain in scope |
-| 7 | Import and review workspace | Preview, repair, retry, correction, reversal, history and report-readiness flows | Transactional API implemented and tested; replacement UI, complete history navigation and correction UI pending |
+| 7 | Import and review workspace | Preview, repair, retry, correction, reversal, history and report-readiness flows | Transactional API and replacement UI implemented with paginated history and reversal; hosted authenticated journey and richer correction tools pending |
 | 8 | Billing and reporting | Sandbox lifecycle tests; year-specific report checks; existing Stripe entitlements reconciled | Pending |
 | 9 | Release qualification | Browser/security/accessibility/load/recovery tests; tax review; user acceptance | Pending |
 | 10 | Production release | Domain, TLS, callbacks, webhooks, email, monitoring, backup restoration and rollback verified | Pending |
@@ -96,13 +96,20 @@ Fresh pages cover account signup/sign-in/recovery/reset, account setup, explicit
 
 Local evidence: 111 financial/auth/API/display tests, seven production-build Chromium journeys, full lint/typecheck, production dependency audit (zero vulnerabilities), and the standalone Next build pass. Browser tests include automated WCAG A/AA scans, 375px layout, keyboard controls, modal focus restoration, interrupted upload recovery, pending-action controls and explicit leave confirmation. They use controlled API responses and synthetic data; they do not prove hosted database/email/payment operation. Docker packaging is prepared but has not been container-built locally because no Docker engine is available. Manual zoom, additional browsers and hosted load/recovery tests remain open.
 
-Next deployment increment: apply the prepared migration/login job to the running private PostgreSQL instance, configure origin/email/trusted-ingress settings, and deploy the tested application to a staging hostname. Then exercise real auth → import → calculation and sandbox billing. Keep www.cgttracker.com unchanged until the production release gates pass.
+The migration/login job and staging web deployment are now applied. Hosted readiness, private-route boundaries and forged-header rate limiting pass. Next exercise real auth → import → calculation and sandbox billing. Keep www.cgttracker.com unchanged until the production release gates pass.
 
 
 ## PostgreSQL deployment qualification
 
 PostgreSQL 18 is now running in Railway staging (Europe West, one replica, 1 GiB volume). The user applied the initial deployment in the dashboard after connector cancellation. Resend and Stripe variable names are confirmed in applied configuration; provider calls remain unverified.
 
-The container now includes database migration, role-provisioning and expiry-cleanup commands. Eight added configuration tests reject wrong destinations, owner logins, weak/shared passwords and unexpected URL options before connecting. A separate PostgreSQL 18 CI suite tests actual migrations, idempotent setup, role restrictions, concurrent writes and verification/session revocation with captured mail. The one-time setup job is prepared separately from the web service; migration-owner credentials are not provided to the web runtime.
+The container now includes database migration, role-provisioning and expiry-cleanup commands. Eight added configuration tests reject wrong destinations, owner logins, weak/shared passwords and unexpected URL options before connecting. A separate PostgreSQL 18 CI suite tests actual migrations, idempotent setup, role restrictions, concurrent writes and verification/session revocation with captured mail. The one-time setup job completed separately from the web service; migration-owner credentials are not provided to the web runtime.
 
 Concurrency review identified a retry edge case: another request can commit and remove a draft between the retry's first receipt query and draft query. Commit now rechecks for the saved receipt before reporting an expired draft. A deterministic PostgreSQL test interleaves the two requests at that exact point. Further qualification checks that mismatched supplied credentials fail without replacing an existing login password.
+
+
+## Hosted preview milestone
+
+The [staging preview](https://web-staging-e003bc3b.up.railway.app) is online at commit `cd660f0`. Readiness checks its actual private database connections. Hourly draft cleanup is deployed; its manual staging execution succeeded with zero expired drafts. No production DNS or live Stripe changes were made.
+
+Verification now includes 119 core/configuration tests, 10 real PostgreSQL 18 qualification tests and seven controlled Chromium journeys in green CI, plus a repeatable hosted smoke probe and rendered-page inspection. The probe validates anonymous access rejection, foreign origins and resistance to forged IP rate-limit headers without creating accounts or sending email. This does not complete hosted authentication/email, native broker certification, billing, reports or recovery qualification. See access/operations for deployment IDs and evidence.

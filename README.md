@@ -6,7 +6,9 @@ A fresh UK share-gains workspace: Next.js 16, React 19, TypeScript, PostgreSQL, 
 
 Use Node 24, then `npm ci --ignore-scripts` and `npm run dev`. Public pages render without provider secrets. The private workspace requires the separate database logins and runtime configuration documented in [Access and operations](docs/relaunch/ACCESS_AND_OPERATIONS.md). Never put credentials in source control.
 
-`npm run build && npm start` runs the standalone production bundle. The Dockerfile packages the same bundle as an unprivileged Node service. Build-time provider credentials are unnecessary. `/api/health` checks process liveness only; it does not prove database or provider readiness.
+`npm run build && npm start` runs the standalone production bundle. The Dockerfile packages the same bundle as an unprivileged Node service. Build-time provider credentials are unnecessary. `/api/health` checks process liveness; `/api/ready` checks runtime configuration and the app/auth database connections. Neither proves email or payment provider readiness.
+
+The [Railway staging preview](https://web-staging-e003bc3b.up.railway.app) is deployed with private PostgreSQL 18 and hourly expired-draft cleanup. Production DNS has not changed.
 
 ## Verify
 
@@ -24,6 +26,8 @@ npm run test:ui
 ```
 
 The main financial/auth suite runs against embedded PostgreSQL with captured email. A separate `npm run test:postgres` suite requires a fresh local PostgreSQL 18 database named `cgt_qualification`, supplied through `POSTGRES_TEST_DATABASE_URL`; CI provisions this disposable database and tests real role logins and concurrent transactions. Browser tests use the real production frontend with controlled API responses and synthetic trades. They do not replace hosted end-to-end testing, native broker certification or live provider qualification.
+
+Run `STAGING_ORIGIN=https://web-staging-e003bc3b.up.railway.app node scripts/smoke-staging.mjs` to check the deployed pages/assets, readiness, anonymous-session boundary, foreign-origin rejection and sign-in rate limiting with forged forwarding headers. It creates no accounts and sends no email. It uses the sign-in rate-limit window for the caller's IP; allow a minute before another sign-in test. This is a limited hosted smoke test, not an authenticated import-to-report journey.
 
 ## Scope and release gates
 
