@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Client, Pool } from 'pg'
-import { Kysely, PostgresDialect } from 'kysely'
+import { Kysely, PostgresDialect, type QueryId } from 'kysely'
 import { authenticate } from '../src/server/identity'
 import { assertRuntimeRole, OwnedDatabase, query } from '../src/server/database'
 import { Workspace } from '../src/server/workspace'
@@ -92,6 +92,29 @@ describe('PostgreSQL 18 deployment qualification',()=> {
     expect(outcomes.map(result=>result.outcome).sort()).toEqual(['committed','review_changed'])
   })
 
+  it('returns the saved receipt when another request commits between the receipt and draft reads', async()=> {
+    const s=await setup('commit-read-race')
+    const draft=await workspace.prepareImport(s.user,{accountId:s.account.id,csv,format:'canonical-v1'})
+    let paused: QueryId | undefined
+    let interleaved=false
+    const interleavedDb=app.withPlugin({
+      transformQuery({node,queryId}) {
+        if (!interleaved && node.kind==='RawNode' && node.sqlFragments.join('').startsWith('SELECT id, status, account_id FROM cgt.imports WHERE id = $1')) paused=queryId
+        return node
+      },
+      async transformResult({result,queryId}) {
+        if (!interleaved && paused===queryId && result.rows.length===0) {
+          interleaved=true
+          expect((await workspace.commitImport(s.user,draft.draftId,draft.revision)).outcome).toBe('committed')
+        }
+        return result
+      },
+    })
+    const competing=new Workspace(new OwnedDatabase(interleavedDb))
+    expect((await competing.commitImport(s.user,draft.draftId,draft.revision)).outcome).toBe('already_committed')
+    expect(interleaved).toBe(true)
+  })
+
   it('does not leak owner context between concurrent pooled requests', async()=> {
     const a=await setup('isolation-a'),b=await setup('isolation-b')
     const db=new OwnedDatabase(app)
@@ -130,6 +153,13 @@ describe('PostgreSQL 18 deployment qualification',()=> {
     await owner.query('GRANT qualification_unexpected TO cgt_runtime_app')
     try { expect(()=>run('scripts/provision-runtime-logins.ts')).toThrow() }
     finally { await owner.query('REVOKE qualification_unexpected FROM cgt_runtime_app') }
+    expect(run('scripts/provision-runtime-logins.ts')).toContain('verified')
+  })
+
+  it('rejects mismatched supplied credentials without rotating an existing login', ()=> {
+    const url=new URL(env.APP_DATABASE_URL!)
+    url.password=randomBytes(32).toString('base64url')
+    expect(()=>run('scripts/provision-runtime-logins.ts',{APP_DATABASE_URL:url.href})).toThrow()
     expect(run('scripts/provision-runtime-logins.ts')).toContain('verified')
   })
 })

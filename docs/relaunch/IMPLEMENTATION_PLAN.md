@@ -14,10 +14,10 @@ The first increment added isolated financial modules to `src/domain`; the second
 
 | Stage | Deliverable | Exit condition | Status |
 | --- | --- | --- | --- |
-| 1 | Access and repository setup | GitHub checkout, service logins verified, private staging project | Management access verified; Resend and sandbox Stripe keys staged in Railway |
+| 1 | Access and repository setup | GitHub checkout, service logins verified, private staging project | Management access verified; Resend and sandbox Stripe keys applied to staging |
 | 2 | Calculation core | Reproduced matching defects corrected; deterministic decimal arithmetic; missing history blocks totals | Implemented and tested; independent tax review still required |
 | 3 | Import safety foundation | Every data record classified; conflicts block commit; FX provenance retained | Canonical interchange format implemented; native adapters pending |
-| 4 | Fresh data model | Ownership constraints, immutable calculation runs, separate billing writes, rollback tests | SQL migration tested in embedded PostgreSQL; Railway PostgreSQL prepared in pending changes, not provisioned |
+| 4 | Fresh data model | Ownership constraints, immutable calculation runs, separate billing writes, rollback tests | Migrations qualified on PostgreSQL 18 in CI; Railway database online; schema/setup job pending |
 | 5 | New application and authentication | Signup, verification, reset, sessions, account ownership and secure runtime setup verified | Backend, fresh UI and controlled browser tests implemented; hosted verification pending |
 | 6 | Native broker adapters | Every named export variant passes representative anonymised fixtures and reconciliation checks | Pending verified fixtures; all six brokers remain in scope |
 | 7 | Import and review workspace | Preview, repair, retry, correction, reversal, history and report-readiness flows | Transactional API implemented and tested; replacement UI, complete history navigation and correction UI pending |
@@ -96,4 +96,13 @@ Fresh pages cover account signup/sign-in/recovery/reset, account setup, explicit
 
 Local evidence: 111 financial/auth/API/display tests, seven production-build Chromium journeys, full lint/typecheck, production dependency audit (zero vulnerabilities), and the standalone Next build pass. Browser tests include automated WCAG A/AA scans, 375px layout, keyboard controls, modal focus restoration, interrupted upload recovery, pending-action controls and explicit leave confirmation. They use controlled API responses and synthetic data; they do not prove hosted database/email/payment operation. Docker packaging is prepared but has not been container-built locally because no Docker engine is available. Manual zoom, additional browsers and hosted load/recovery tests remain open.
 
-Next deployment increment: provision staged private PostgreSQL in Europe West, apply migrations with a separate owner, establish restricted runtime logins, configure session/origin/email/trusted-ingress settings, and deploy the tested application to a staging hostname. Then exercise real auth → import → calculation and sandbox billing. Keep www.cgttracker.com unchanged until the production release gates pass.
+Next deployment increment: apply the prepared migration/login job to the running private PostgreSQL instance, configure origin/email/trusted-ingress settings, and deploy the tested application to a staging hostname. Then exercise real auth → import → calculation and sandbox billing. Keep www.cgttracker.com unchanged until the production release gates pass.
+
+
+## PostgreSQL deployment qualification
+
+PostgreSQL 18 is now running in Railway staging (Europe West, one replica, 1 GiB volume). The user applied the initial deployment in the dashboard after connector cancellation. Resend and Stripe variable names are confirmed in applied configuration; provider calls remain unverified.
+
+The container now includes database migration, role-provisioning and expiry-cleanup commands. Eight added configuration tests reject wrong destinations, owner logins, weak/shared passwords and unexpected URL options before connecting. A separate PostgreSQL 18 CI suite tests actual migrations, idempotent setup, role restrictions, concurrent writes and verification/session revocation with captured mail. The one-time setup job is prepared separately from the web service; migration-owner credentials are not provided to the web runtime.
+
+Concurrency review identified a retry edge case: another request can commit and remove a draft between the retry's first receipt query and draft query. Commit now rechecks for the saved receipt before reporting an expired draft. A deterministic PostgreSQL test interleaves the two requests at that exact point. Further qualification checks that mismatched supplied credentials fail without replacing an existing login password.

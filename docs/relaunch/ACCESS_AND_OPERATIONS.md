@@ -3,14 +3,14 @@
 Verified 16 November 2026:
 
 - GitHub source: https://github.com/PSLDev94/UK-CGT-Tracker
-- Railway: new private [CGT Tracker project](https://railway.com/project/cb6c0af0-18e8-401f-aafd-9edad5956df9), `staging` environment, `web` service with no deployment. PostgreSQL 18 and its 1 GiB Europe West volume are prepared in pending changes; nothing has been provisioned yet.
+- Railway: new private [CGT Tracker project](https://railway.com/project/cb6c0af0-18e8-401f-aafd-9edad5956df9), `staging` environment, `web` service with no deployment. PostgreSQL 18 is online with one healthy Europe West replica and its 1 GiB volume. The user applied the database deployment in the dashboard after the connector cancelled its apply request. The web application is not deployed.
 - Stripe: existing UK CGT Tracker live account and cgt sandbox accessible. Live annual GBP 49 price inspected without changes.
 - Cloudflare: cgttracker.com zone active. The www record still points to the previous Vercel target. Hosting DNS has not been changed during this increment; existing mail records remain intact.
 - Resend: signed-in account already shows cgttracker.com as Verified. No messages sent.
 
 ## Runtime configuration
 
-Connected management tools are not runtime application credentials. The user added `RESEND_API_KEY` and sandbox `STRIPE_SECRET_KEY` directly in Railway. Both names are confirmed in staging pending changes, with redacted values; they have not been applied. Their actual scope and runtime operation remain unverified. Check names/sealed status without printing values. Prefer sending-only/domain-scoped Resend access and a restricted Stripe key with only the operations needed for the implemented checkout/portal flow. Verify permissions with actual sandbox tests before calling access complete.
+Connected management tools are not runtime application credentials. The user added `RESEND_API_KEY` and sandbox `STRIPE_SECRET_KEY` directly in Railway. Both names are confirmed in applied staging web variables, with values withheld. Their actual scope and runtime operation remain unverified. Check names/sealed status without printing values. Prefer sending-only/domain-scoped Resend access and a restricted Stripe key with only the operations needed for the implemented checkout/portal flow. Verify permissions with actual sandbox tests before calling access complete.
 
 Database URL, session secret, application base URL and webhook signing secret will be configured when their corresponding services/endpoints exist. Generate application secrets with a cryptographic random source. Use separate production values and separate webhook endpoints. Never place keys in chat, source control, shell arguments, logs, browser-exposed variables or documentation.
 
@@ -23,9 +23,9 @@ The second increment implements these runtime names (none are browser-public):
 | `AUTH_DATABASE_URL` | Separate login with membership only in `cgt_auth`. |
 | `BETTER_AUTH_SECRET` | Independently generated high-entropy secret, at least 32 characters. |
 | `AUTH_CLIENT_IP_HEADER` | Header demonstrably overwritten by the trusted ingress. Verify against forged headers and direct-origin access before choosing a value. |
-| `RESEND_API_KEY` | Domain-scoped runtime sending key; confirmed in staged changes; not applied or runtime-tested. |
+| `RESEND_API_KEY` | Domain-scoped runtime sending key; applied to staging web; not yet runtime-tested. |
 | `AUTH_EMAIL_FROM` | Verified plain sender address under `@cgttracker.com`, for example `accounts@cgttracker.com`. |
-| `STRIPE_SECRET_KEY` | Sandbox key for the upcoming billing increment; confirmed in staged changes; not applied or runtime-tested. |
+| `STRIPE_SECRET_KEY` | Sandbox key for the upcoming billing increment; applied to staging web; not yet runtime-tested. |
 
 The application creates pools lazily and checks effective roles before use. Do not put a migration-owner URL in either runtime variable. The legacy Supabase connection is not a fallback for the new API.
 
@@ -43,7 +43,14 @@ Run `npm run db:expire-drafts` hourly with `MAINTENANCE_DATABASE_URL` on a separ
 6. Only after release gates pass, connect www.cgttracker.com and redirect the apex domain. Preserve existing mail/DKIM/SPF/MX records. Do not cache authenticated routes or tax data at Cloudflare.
 7. Verify HTTPS, callbacks, billing, reports, monitoring and rollback against the actual production origin.
 
-The Railway project currently contains no running workload. Review projected hosting costs and confirm the intended paid plan before accepting a new financial commitment.
+## Current staging status and setup job
 
+PostgreSQL is running. Existing-plan usage charges apply. The provider keys are applied, but there is no web workload, public staging URL or production DNS change.
 
-The Railway connector requires explicit confirmation before `accept-deploy` applies pending changes. Staging the database does not provision it. The current database proposal is PostgreSQL 18, one Europe West instance and a 1 GiB persistent volume, private networking only. Applying the proposal will also apply the two API keys already staged by the user. Review the full pending patch before accepting; do not apply unrelated changes. No production DNS or live Stripe mutation is included.
+`database-setup` is prepared as a one-time Europe West job, with restart policy NEVER. Its command is `sh -c 'node scripts/migrate.ts && node scripts/provision-runtime-logins.ts'`. It has the migration-owner URL through a private Railway reference and four separate, independently generated runtime URLs. The web service receives only its app/auth references, a separate generated session secret and the verified-domain sender. No credentials were written to Git or displayed in the conversation. The setup job has not been applied; its proposed changes are non-destructive.
+
+The provisioning script creates fixed `cgt_runtime_app`, `cgt_runtime_auth`, `cgt_runtime_billing` and `cgt_runtime_maintenance` logins with distinct 32–128-character base64url passwords. Each has NOINHERIT and can SET ROLE only to its single expected NOLOGIN group. It validates existing memberships/ownership and never silently rotates a password. All four runtime URLs must target the same database and connection settings as the migration URL. Configure them together in the job, then reference each from its corresponding service. Keep the migration-owner reference out of the web/worker services. Do not delete the setup service while other services reference its variables; move credentials deliberately if retiring it.
+
+The container includes migration, provisioning and cleanup scripts. Run them with Node 24 directly; no development tooling is needed in the runtime image. CI qualifies all migrations, login provisioning, permission boundaries, real concurrent imports/reversals and verified auth sessions against a disposable PostgreSQL 18 service. These checks complement, rather than replace, tests of Railway networking, backups, role configuration and provider delivery.
+
+The connector's `accept-deploy` calls were cancelled with “the user did not approve this action,” despite chat approval. The first deployment was completed by the user through Railway. Review the pending setup-job patch before applying it; never apply unrelated changes. The public website remains gated on hosted integration, verified broker formats, billing and reporting qualification.

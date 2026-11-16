@@ -23,7 +23,7 @@ npx playwright install chromium
 npm run test:ui
 ```
 
-Financial, database and auth integration tests run against embedded PostgreSQL with captured email. Browser tests use the real production frontend with controlled API responses and synthetic trades. They do not replace hosted end-to-end testing, native broker certification or live provider qualification.
+The main financial/auth suite runs against embedded PostgreSQL with captured email. A separate `npm run test:postgres` suite requires a fresh local PostgreSQL 18 database named `cgt_qualification`, supplied through `POSTGRES_TEST_DATABASE_URL`; CI provisions this disposable database and tests real role logins and concurrent transactions. Browser tests use the real production frontend with controlled API responses and synthetic trades. They do not replace hosted end-to-end testing, native broker certification or live provider qualification.
 
 ## Scope and release gates
 

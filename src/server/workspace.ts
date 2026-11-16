@@ -143,7 +143,13 @@ export class Workspace {
       const done = (await query<Import>(tx, 'SELECT id, status, account_id FROM cgt.imports WHERE id = $1', [draftId]))[0]
       if (done) return { outcome: 'already_committed' as const, importId: done.id, status: done.status }
       const draft = (await query<Draft>(tx, 'SELECT * FROM cgt.import_drafts WHERE id = $1 AND expires_at > now()', [draftId]))[0]
-      if (!draft) throw new AppError(404, 'PREVIEW_EXPIRED', 'This preview has expired or was discarded. Upload the file again; saved transactions are unaffected.')
+      if (!draft) {
+        // READ COMMITTED takes a new snapshot per statement. Another request may
+        // have saved the import and deleted its draft after our first lookup.
+        const completed = (await query<Import>(tx, 'SELECT id, status, account_id FROM cgt.imports WHERE id = $1', [draftId]))[0]
+        if (completed) return { outcome: 'already_committed' as const, importId: completed.id, status: completed.status }
+        throw new AppError(404, 'PREVIEW_EXPIRED', 'This preview has expired or was discarded. Upload the file again; saved transactions are unaffected.')
+      }
       const a = await account(tx, draft.account_id)
       const p = await lockPortfolio(tx, a.portfolio_id)
       // A concurrent request may have committed this very draft while we waited.
