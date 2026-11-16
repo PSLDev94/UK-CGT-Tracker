@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Client, Pool } from 'pg'
-import { Kysely, PostgresDialect, type QueryId } from 'kysely'
+import { Kysely, PostgresDialect } from 'kysely'
 import { authenticate } from '../src/server/identity'
 import { assertRuntimeRole, OwnedDatabase, query } from '../src/server/database'
 import { Workspace } from '../src/server/workspace'
@@ -95,15 +95,13 @@ describe('PostgreSQL 18 deployment qualification',()=> {
   it('returns the saved receipt when another request commits between the receipt and draft reads', async()=> {
     const s=await setup('commit-read-race')
     const draft=await workspace.prepareImport(s.user,{accountId:s.account.id,csv,format:'canonical-v1'})
-    let paused: QueryId | undefined
     let interleaved=false
     const interleavedDb=app.withPlugin({
-      transformQuery({node,queryId}) {
-        if (!interleaved && node.kind==='RawNode' && node.sqlFragments.join('').startsWith('SELECT id, status, account_id FROM cgt.imports WHERE id = $1')) paused=queryId
-        return node
-      },
-      async transformResult({result,queryId}) {
-        if (!interleaved && paused===queryId && result.rows.length===0) {
+      transformQuery({node}) { return node },
+      async transformResult({result}) {
+        // Compiled raw SQL bypasses transformQuery. The transaction's identity
+        // setup returns one row; its first empty result is the receipt lookup.
+        if (!interleaved && result.rows.length===0) {
           interleaved=true
           expect((await workspace.commitImport(s.user,draft.draftId,draft.revision)).outcome).toBe('committed')
         }

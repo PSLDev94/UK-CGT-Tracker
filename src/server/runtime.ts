@@ -1,7 +1,7 @@
 import { Kysely, PostgresDialect } from 'kysely'
 import { Pool } from 'pg'
 import { createAuth } from './auth'
-import { assertRuntimeRole, OwnedDatabase } from './database'
+import { assertRuntimeRole, OwnedDatabase, query } from './database'
 import { resendAuthMailer } from './mail'
 import { Workspace } from './workspace'
 import { createWorkspaceHandler } from './workspace-api'
@@ -31,7 +31,11 @@ async function initialise() {
     await Promise.all([assertRuntimeRole(appDb, 'cgt_app'), assertRuntimeRole(authDb, 'cgt_auth')])
     const auth = createAuth(authDb, config, sendMail)
     const workspace = new Workspace(new OwnedDatabase(appDb))
-    return { auth, origin, workspaceHandler: createWorkspaceHandler(workspace, headers => auth.api.getSession({ headers }), origin) }
+    return {
+      auth, origin,
+      checkDatabase: () => Promise.all([query(appDb, 'SELECT 1'), query(authDb, 'SELECT 1')]),
+      workspaceHandler: createWorkspaceHandler(workspace, headers => auth.api.getSession({ headers }), origin),
+    }
   } catch (error) {
     await Promise.allSettled([appDb.destroy(), authDb.destroy()])
     throw error
