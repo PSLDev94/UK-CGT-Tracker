@@ -10,15 +10,19 @@ permissions:
 
 jobs:
   core:
-    name: Calculation, import and database contracts
+    name: Financial, authentication and API contracts
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run check:core
-      - run: npx eslint src/domain tests vitest.config.ts
+      - run: npx tsc --noEmit --incremental false
+      - run: npx eslint src/domain src/server tests src/app/api/v2 scripts/generate-auth-schema.ts scripts/migrate.ts scripts/expire-import-drafts.ts vitest.config.mts
+      - run: npm run db:generate-auth
+      - run: git diff --exit-code -- db/migrations/0003_auth.generated.sql
+      - run: npm audit --omit=dev --audit-level=high

@@ -5,7 +5,7 @@ import type { Trade } from '../cgt/types'
 import { BROKERS, type BrokerId } from './brokers'
 
 export const CANONICAL_HEADERS = ['Transaction ID', 'Trade date', 'Type', 'ISIN', 'Quantity', 'Consideration', 'Fees', 'Currency', 'GBP per unit', 'Asset type'] as const
-export const PARSER_VERSION = 'canonical-v1.0.0'
+export const PARSER_VERSION = 'canonical-v1.0.1'
 export const MAX_CSV_BYTES = 10 * 1024 * 1024
 export const MAX_RECORDS = 100_000
 
@@ -14,6 +14,8 @@ export interface ImportOptions {
   accountId: string
   accountType: 'GIA' | 'ISA' | 'SIPP' | 'UNKNOWN'
   format: 'canonical-v1' | 'native'
+  /** Server-supplied date limit; explicit to keep fixture reviews deterministic. */
+  latestTradeDate?: string
   /** Stable source key -> normalised-content digest, loaded server-side. */
   existing?: ReadonlyMap<string, string>
 }
@@ -118,6 +120,8 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
       if (row['Asset type'] !== 'ORDINARY_SHARE') throw new Error('Confirm the instrument is an ordinary share. Funds, ETFs, derivatives and other assets need additional handling.')
       if (!row['Transaction ID'] || row['Transaction ID'].length > 200 || /[\r\n\x00-\x1f]/.test(row['Transaction ID'])) throw new Error('A stable transaction identifier is required.')
       const date = calendarDate(row['Trade date'])
+      if (date < '1982-04-01') throw new Error('Pre-April-1982 transactions require specialist handling and cannot be imported into this calculation.')
+      if (options.latestTradeDate && date > calendarDate(options.latestTradeDate)) throw new Error('A trade date is in the future. Check that this is the execution date, not a settlement date.')
       if (!validISIN(row.ISIN)) throw new Error('A valid ISIN is required. A display ticker alone is not a security identifier.')
       const quantity = decimal(row.Quantity, 'Quantity')
       if (!quantity.gt(0)) throw new Error('Quantity must be positive; use Type to indicate the direction.')
@@ -127,9 +131,17 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
       if (!currencies.has(row.Currency)) throw new Error('Use an ISO currency in major units; convert pence to pounds explicitly.')
       const rate = decimal(row['GBP per unit'], 'GBP per unit')
       if (!rate.gt(0) || (row.Currency === 'GBP' && !rate.eq(1))) throw new Error('Provide GBP per one unit of the source currency; GBP must use 1.')
+      const convertedAmount = amount.times(rate).toDP(12)
+      const convertedFees = fees.times(rate).toDP(12)
+      if ([quantity, convertedAmount, convertedFees].some(value => value.gte('1e26'))) {
+        throw new Error('A value exceeds the supported financial precision. Check the quantity, currency units and exchange rate.')
+      }
+      if ((amount.gt(0) && convertedAmount.isZero()) || (fees.gt(0) && convertedFees.isZero())) {
+        throw new Error('A converted value is too small to preserve at 12 decimal places. Review the currency and exchange rate.')
+      }
       const sourceKey = hash(JSON.stringify([options.broker, options.accountId, row['Transaction ID']]))
       const trade: Trade = { id: sourceKey, securityId: row.ISIN, date, side: row.Type, quantity: quantity.toString(),
-        considerationGBP: amount.times(rate).toDP(12).toFixed(), feesGBP: fees.times(rate).toDP(12).toFixed() }
+        considerationGBP: convertedAmount.toFixed(), feesGBP: convertedFees.toFixed() }
       const provenance = { originalCurrency: row.Currency, consideration: amount.toString(), fees: fees.toString(), gbpPerUnit: rate.toString() }
       const digest = hash(JSON.stringify({ trade, provenance }))
       const existing = seen.get(sourceKey)

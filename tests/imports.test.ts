@@ -105,6 +105,19 @@ describe('import contract', () => {
     expect(reviewCsv('abc\0def', opts).status).toBe('needs_review')
   })
 
+  it('routes values beyond database precision and FX underflow to review', () => {
+    const huge = [...row]; huge[5] = '100000000000000000000000000'
+    expect(reviewCsv(file(huge), opts).issues[0]?.message).toContain('precision')
+    const tiny = [...row]; tiny[5] = '0.000000000001'; tiny[7] = 'USD'; tiny[8] = '0.000000000001'
+    expect(reviewCsv(file(tiny), opts).issues[0]?.message).toContain('too small')
+  })
+
+  it('blocks specialist pre-1982 history and dates after the server cutoff', () => {
+    const historic = [...row]; historic[1] = '1981-01-01'
+    expect(reviewCsv(file(historic), opts).issues[0]?.message).toContain('specialist')
+    expect(reviewCsv(file(row), { ...opts, latestTradeDate: '2024-05-31' }).issues[0]?.message).toContain('future')
+  })
+
   it('validates ISIN check digits', () => {
     expect(validISIN('US0378331005')).toBe(true)
     expect(validISIN('GB0008706128')).toBe(true)

@@ -2,6 +2,9 @@ import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function proxy(request: NextRequest) {
+  // Fresh API verifies Better Auth sessions and ownership inside each handler.
+  // It must never depend on a legacy Supabase session or billing gate.
+  if (request.nextUrl.pathname.startsWith('/api/v2/')) return NextResponse.next()
   let supabaseResponse = NextResponse.next({
     request: {
       headers: request.headers,
