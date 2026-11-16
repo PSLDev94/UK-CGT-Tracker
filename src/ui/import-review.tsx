@@ -4,12 +4,14 @@ import type { Preview } from "./workspace-types";
 
 export function ImportReviewPanel({
   preview,
+  accountLabel,
   busy,
   onPage,
   onCommit,
   onDiscard,
 }: {
   preview: Preview;
+  accountLabel: string;
   busy: boolean;
   onPage: (page: number) => void;
   onCommit: () => void;
@@ -22,9 +24,13 @@ export function ImportReviewPanel({
       <div className="panel-heading">
         <h2 id="review-title">Review before saving</h2>
         <span className="tag">
-          {review.counts.total.toLocaleString("en-GB")} source records
+          {review.counts.total.toLocaleString("en-GB")} source{" "}
+          {review.counts.total === 1 ? "record" : "records"}
         </span>
       </div>
+      <p>
+        Saving to: <strong>{accountLabel}</strong>
+      </p>
       <p>
         Every record must be accounted for. No transactions from this preview
         have been saved.

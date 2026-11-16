@@ -637,6 +637,7 @@ export function WorkspaceScreen() {
               {preview && (
                 <ImportReviewPanel
                   preview={preview}
+                  accountLabel={accountName(preview.accountId)}
                   busy={busy}
                   onPage={(page) =>
                     void perform(async () =>

@@ -31,6 +31,7 @@ export interface Overview {
 }
 export interface Preview {
   draftId: string;
+  accountId: string;
   revision: number;
   review: ImportReview & { page: number; pageSize: number; issueCount: number };
 }

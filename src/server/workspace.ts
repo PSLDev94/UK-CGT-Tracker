@@ -110,7 +110,7 @@ export class Workspace {
       const review = await preview(tx, a, input.csv, input.format, input.ordinarySharesConfirmed)
       const rows = await query<{ id: string }>(tx, `INSERT INTO cgt.import_drafts(owner_id,account_id,csv,format,reviewed_revision,ordinary_shares_confirmed)
         VALUES($1,$2,$3,$4,$5,$6) RETURNING id`, [identity.ownerId, a.id, input.csv, input.format, p.revision, input.ordinarySharesConfirmed === true])
-      return { draftId: rows[0]!.id, revision: p.revision, review }
+      return { draftId: rows[0]!.id, accountId: a.id, revision: p.revision, review }
     })
   }
 
@@ -132,7 +132,7 @@ export class Workspace {
       const p = await lockPortfolio(tx, a.portfolio_id)
       const review = await preview(tx, a, draft.csv, draft.format, draft.ordinary_shares_confirmed)
       await query(tx, 'UPDATE cgt.import_drafts SET reviewed_revision = $2 WHERE id = $1', [draftId, p.revision])
-      return { draftId, revision: p.revision, review }
+      return { draftId, accountId: a.id, revision: p.revision, review }
     })
   }
 
@@ -161,9 +161,9 @@ export class Workspace {
       const review = await preview(tx, a, draft.csv, draft.format, draft.ordinary_shares_confirmed)
       if (p.revision !== expectedRevision || p.revision !== draft.reviewed_revision) {
         await query(tx, 'UPDATE cgt.import_drafts SET reviewed_revision = $2 WHERE id = $1', [draftId, p.revision])
-        return { outcome: 'review_changed' as const, revision: p.revision, review }
+        return { outcome: 'review_changed' as const, accountId: a.id, revision: p.revision, review }
       }
-      if (review.status !== 'ready') return { outcome: 'needs_review' as const, revision: p.revision, review }
+      if (review.status !== 'ready') return { outcome: 'needs_review' as const, accountId: a.id, revision: p.revision, review }
       const c = review.counts
       await query(tx, `INSERT INTO cgt.imports(id,account_id,owner_id,file_digest,parser_version,status,
         record_count,accepted_count,excluded_count,duplicate_count,review_count,record_receipts)

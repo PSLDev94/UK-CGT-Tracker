@@ -56,6 +56,8 @@ describe('authenticated PostgreSQL application workflow', () => {
     const s = await setup('commit-once')
     const draft = await prepare(s.user, s.account.id)
     expect(draft.review.counts).toEqual({ total: 3, accepted: 2, excluded: 1, duplicate: 0, needsReview: 0 })
+    expect(draft.accountId).toBe(s.account.id)
+    expect((await workspace.reviewImport(s.user, draft.draftId)).accountId).toBe(s.account.id)
     const result = await workspace.commitImport(s.user, draft.draftId, draft.revision)
     expect(result.outcome).toBe('committed')
     expect((await workspace.commitImport(s.user, draft.draftId, draft.revision)).outcome).toBe('already_committed')

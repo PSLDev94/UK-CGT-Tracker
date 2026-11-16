@@ -195,6 +195,7 @@ async function mockWorkspace(
         });
         currentPreview = {
           draftId,
+          accountId,
           revision: state.portfolio.revision,
           review: {
             ...review,
@@ -668,6 +669,13 @@ test("native import requires classification and shows incomplete-history guidanc
   await expect(
     page.getByRole("checkbox", { name: /For a native broker export/ }),
   ).not.toBeChecked();
+  // The upload form can point elsewhere while an existing draft is resumed.
+  // The confirmation must retain the account bound by the server to that draft.
+  await page.getByLabel("Broker account", { exact: true }).selectOption("");
+  await page.getByRole("button", { name: "Open preview", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "Review before saving", exact: true }),
+  ).toContainText("Saving to: My Invest");
   await page.screenshot({
     path: ".private/screenshots/native-import-preview.png",
     fullPage: true,
