@@ -1,0 +1,4 @@
+Transaction ID,Trade date,Type,ISIN,Quantity,Consideration,Fees,Currency,GBP per unit,Asset type
+synthetic-buy,2024-06-01,BUY,US0378331005,100,1000,10,USD,0.8,ORDINARY_SHARE
+synthetic-sell,2024-09-01,SELL,US0378331005,50,800,5,GBP,1,ORDINARY_SHARE
+synthetic-dividend,2024-08-01,CASH_DIVIDEND,US0378331005,0,10,0,GBP,1,ORDINARY_SHARE
