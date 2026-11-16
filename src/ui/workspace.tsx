@@ -41,7 +41,10 @@ function useModal(
     const dialog = ref.current;
     if (!dialog) return;
     const previous = document.activeElement as HTMLElement | null;
-    if (open && !dialog.open) dialog.showModal();
+    if (open && !dialog.open) {
+      dialog.showModal();
+      dialog.querySelector<HTMLButtonElement>("[data-modal-cancel]")?.focus();
+    }
     if (!open && dialog.open) dialog.close();
     return () => {
       if (dialog.open) dialog.close();
@@ -342,6 +345,7 @@ export function WorkspaceScreen() {
         )}
         <div className="nav-end">
           <p className="caption">{userName || "Private workspace"}</p>
+          {data && !authRequired && <Link href="/billing">Billing test</Link>}
           <button
             disabled={busy || authRequired || !data}
             onClick={() => (dirty ? setLeaveAction(() => signOut) : signOut())}
@@ -915,6 +919,7 @@ export function WorkspaceScreen() {
             <Button
               variant="secondary"
               autoFocus
+              data-modal-cancel
               disabled={busy}
               onClick={() => setReverse(null)}
             >
@@ -940,6 +945,7 @@ export function WorkspaceScreen() {
           <Button
             variant="secondary"
             autoFocus
+            data-modal-cancel
             onClick={() => setLeaveAction(null)}
           >
             Stay here

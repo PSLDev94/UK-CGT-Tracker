@@ -5,6 +5,112 @@ import { reviewCsv, tradesFromReview } from "../src/domain/imports/review";
 import { calculateGains } from "../src/domain/cgt/calculate";
 import type { Overview, Preview } from "../src/ui/workspace-types";
 
+test("billing keeps test status explicit and recovers from interrupted requests", async ({
+  page,
+}) => {
+  let fail = true;
+  await page.route("**/api/v2/billing", async (route) => {
+    if (fail) {
+      fail = false;
+      return route.abort();
+    }
+    return route.fulfill({
+      json: {
+        status: "none",
+        entitled: false,
+        periodEnd: null,
+        cancelAtPeriodEnd: false,
+        needsReview: false,
+        canManage: false,
+        testMode: true,
+      },
+    });
+  });
+  await page.goto("/billing?checkout=returned");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText(
+    "Billing could not be confirmed",
+  );
+  await expect(
+    page.getByText("Test payment confirmed.", { exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Refresh billing status" }).click();
+  await expect(
+    page.getByRole("heading", { name: "No subscription", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Open test checkout" }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 375, height: 812 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  expect(
+    (
+      await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+        .analyze()
+    ).violations,
+  ).toEqual([]);
+});
+
+test("billing shows cancellation and prevents duplicate checkout while a request is pending", async ({
+  page,
+}) => {
+  let calls = 0;
+  let release: (() => void) | undefined;
+  await page.route("**/api/v2/billing", async (route) => {
+    const { action } = route.request().postDataJSON();
+    if (action === "checkout") {
+      calls++;
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return route.fulfill({
+        status: 409,
+        json: {
+          error: {
+            message:
+              "Manage your existing subscription instead of starting another one.",
+          },
+        },
+      });
+    }
+    return route.fulfill({
+      json: {
+        status: calls ? "active" : "none",
+        entitled: !!calls,
+        periodEnd: calls ? "2027-11-16T12:00:00Z" : null,
+        cancelAtPeriodEnd: !!calls,
+        needsReview: false,
+        canManage: !!calls,
+        testMode: true,
+      },
+    });
+  });
+  await page.goto("/billing");
+  await page.getByRole("button", { name: "Open test checkout" }).click();
+  await expect(
+    page.getByRole("button", { name: "Open test checkout" }),
+  ).toBeDisabled();
+  release?.();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText(
+    "Manage your existing subscription",
+  );
+  await page.getByRole("button", { name: "Refresh billing status" }).click();
+  await expect(
+    page.getByText("Scheduled to end 16 November 2027."),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Open test checkout" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Manage subscription" }),
+  ).toBeEnabled();
+  expect(calls).toBe(1);
+});
+
 const csv = readFileSync("tests/fixtures/canonical-trades.csv", "utf8");
 const accountId = "10000000-0000-4000-8000-000000000001";
 const draftId = "20000000-0000-4000-8000-000000000001";
@@ -478,7 +584,9 @@ test("interrupted upload retains the file; pending retry prevents duplicate subm
   await page.getByLabel("File format").selectOption("canonical-v1");
   await page.getByLabel("CSV file", { exact: true }).setInputFiles(file);
   await page.getByRole("button", { name: "Review file", exact: true }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "connection was interrupted" })).toBeVisible();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "connection was interrupted" }),
+  ).toBeVisible();
   await expect(
     page.getByText("Selected: sample-trades.csv", { exact: false }),
   ).toBeVisible();

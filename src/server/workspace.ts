@@ -44,7 +44,7 @@ async function preview(tx: Connection, a: Account, csv: string, format: Draft['f
 export class Workspace {
   constructor(private readonly db: OwnedDatabase) {}
 
-  async consumeRequest(identity: Identity, bucket: 'general' | 'upload' | 'calculate') {
+  async consumeRequest(identity: Identity, bucket: 'general' | 'upload' | 'calculate' | 'billing') {
     const maximum = bucket === 'general' ? 60 : 10
     const allowed = await this.db.run(identity, tx => query(tx, `INSERT INTO cgt.request_limits(owner_id,bucket) VALUES($1,$2)
       ON CONFLICT(owner_id,bucket) DO UPDATE SET

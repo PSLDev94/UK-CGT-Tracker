@@ -8,11 +8,13 @@ import { authenticate } from '../src/server/identity'
 import { assertRuntimeRole, OwnedDatabase, query } from '../src/server/database'
 import { Workspace } from '../src/server/workspace'
 import { createAuth, type AuthMail } from '../src/server/auth'
+import { Billing, type BillingGateway } from '../src/server/billing'
 
 const csv = readFileSync('tests/fixtures/canonical-trades.csv', 'utf8')
 let owner: Client
 let app: Kysely<Record<string, never>>
 let authDb: Kysely<Record<string, never>>
+let billingDb: Kysely<Record<string, never>>
 let workspace: Workspace
 let env: NodeJS.ProcessEnv
 const run = (script: string, overrides: Partial<NodeJS.ProcessEnv> = {}) => execFileSync(process.execPath, [script], { env: { ...env, ...overrides }, stdio: 'pipe' }).toString()
@@ -46,23 +48,47 @@ beforeAll(async () => {
   const database=(connectionString: string, role: string) => new Kysely<Record<string,never>>({dialect:new PostgresDialect({pool:new Pool({connectionString,max:12,options:`-c role=${role} -c statement_timeout=15000`})})})
   app=database(env.APP_DATABASE_URL!, 'cgt_app')
   authDb=database(env.AUTH_DATABASE_URL!, 'cgt_auth')
+  billingDb=database(env.BILLING_DATABASE_URL!, 'cgt_billing')
   workspace=new Workspace(new OwnedDatabase(app))
 })
-afterAll(async()=> { await Promise.allSettled([app?.destroy(),authDb?.destroy(),owner?.end()]) })
+afterAll(async()=> { await Promise.allSettled([app?.destroy(),authDb?.destroy(),billingDb?.destroy(),owner?.end()]) })
 
 describe('PostgreSQL 18 deployment qualification',()=> {
   it('applies migrations once and verifies existing logins without rotating passwords', async()=> {
     expect(run('scripts/migrate.ts')).toBe('')
     expect(run('scripts/provision-runtime-logins.ts')).toContain('Four separate runtime logins verified')
-    expect((await owner.query('SELECT count(*)::int AS count FROM cgt_migrations.applied')).rows[0].count).toBe(5)
+    expect((await owner.query('SELECT count(*)::int AS count FROM cgt_migrations.applied')).rows[0].count).toBe(6)
     await expect(assertRuntimeRole(app,'cgt_app')).resolves.toBeUndefined()
     await expect(assertRuntimeRole(authDb,'cgt_auth')).resolves.toBeUndefined()
+    await expect(assertRuntimeRole(billingDb,'cgt_billing')).resolves.toBeUndefined()
   })
 
   it('keeps auth and financial tables inaccessible to the opposite login', async()=> {
     await expect(query(app,'SELECT * FROM auth."session"')).rejects.toMatchObject({code:'42501'})
     await expect(query(authDb,'SELECT * FROM cgt.transactions')).rejects.toMatchObject({code:'42501'})
     await expect(query(app,'SET ROLE cgt_auth')).rejects.toMatchObject({code:'42501'})
+    await expect(query(billingDb,'SELECT * FROM auth."user"')).rejects.toMatchObject({code:'42501'})
+    await expect(query(billingDb,'SELECT * FROM cgt.transactions')).rejects.toMatchObject({code:'42501'})
+  })
+
+  it('serialises competing checkout requests and webhook retries with the billing-only login', async()=> {
+    const s=await setup('parallel-billing')
+    let customers=0
+    let sessions=0
+    const session={id:'cs_parallel',status:'open' as const,url:'https://checkout.stripe.com/c/pay/fixture'}
+    const gateway:BillingGateway={
+      createCustomer:async()=>{ customers++; return 'cus_parallel' },
+      createCheckout:async()=>{ sessions++; return session },
+      checkout:async()=>session, subscriptions:async()=>[], portal:async()=> 'https://billing.stripe.com/p/session/fixture',
+    }
+    const billing=new Billing(billingDb,gateway,{origin:'https://cgt.example',accountId:'acct_parallel',priceId:'price_parallel',livemode:false})
+    await Promise.all(Array.from({length:10},()=>billing.checkout(s.user)))
+    expect(customers).toBe(1)
+    expect(sessions).toBe(1)
+    const results=await Promise.all(Array.from({length:10},()=>billing.event({id:'evt_parallel',type:'invoice.paid',customerId:'cus_parallel'})))
+    expect(results.filter(r=>r.outcome==='reconciled')).toHaveLength(1)
+    expect(results.filter(r=>r.outcome==='duplicate')).toHaveLength(9)
+    expect((await owner.query("SELECT count(*)::int AS count FROM cgt.stripe_events WHERE event_id='evt_parallel'")).rows[0].count).toBe(1)
   })
 
   it('creates one portfolio under simultaneous first visits', async()=> {

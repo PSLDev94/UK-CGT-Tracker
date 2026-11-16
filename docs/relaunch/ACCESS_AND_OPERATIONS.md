@@ -67,3 +67,13 @@ Browser inspection confirmed the rendered home page and the workspace sign-in/ve
 CI at this deployed commit passed 119 core/configuration tests, 10 real PostgreSQL 18 qualification tests and seven controlled Chromium journeys, plus types, lint, schema drift, design tokens, dependency audit, build and container startup. See [run 43923822197](https://github.com/PSLDev94/UK-CGT-Tracker/actions/runs/43923822197).
 
 Still unverified on the hosted service: real email delivery and recovery, authenticated import-to-calculation journeys, native broker formats, Stripe lifecycle and reports, monitoring alerts, backup restoration and deployment rollback. The preview is not ready to accept paying customers.
+
+## Hosted authentication and import qualification — 16 November 2026, 18:20–18:23 UTC
+
+The owner explicitly authorised a test mailbox. Signup returned 200; Resend recorded delivery of the verification email from accounts@cgttracker.com. Following the real link verified the user and the browser signed in. No mail credentials, passwords, cookies or tokens were logged or committed.
+
+In the actual hosted browser: created a labelled synthetic taxable account; uploaded `tests/fixtures/canonical-trades.csv`; reconciled 3 records as 2 accepted trades and 1 excluded dividend; saved the trades and calculated 2024–25 gains. Independent arithmetic: purchase cost `(1000 + 10) × 0.8 = £808`; half the pool costs £404; sale proceeds `800 − 5 = £795`; gain £391. The displayed pool match and totals agreed. A second upload classified both trades as duplicates and offered no Save action. Reversal retained the import/reason in history and invalidated the published calculation.
+
+Password-reset mail was delivered. The real reset link worked; API checks confirmed that the old session returned null, the old password returned 401, reusing the reset token returned 400 and the new password signed in successfully. Test credentials are local-only in an ignored, mode-0600 file pending further staging tests. The synthetic duplicate draft will expire under the existing cleanup schedule.
+
+Email delivery/verification/reset and the canonical hosted import-to-calculation/reversal journey now have runtime evidence. Native broker certification, sandbox billing lifecycle, reports and operational recovery remain open. A modal focus issue observed in the hosted browser was corrected in the following development increment by explicitly focusing Cancel when opening a modal.

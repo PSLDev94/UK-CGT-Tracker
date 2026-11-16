@@ -21,7 +21,7 @@ export class OwnedDatabase {
 }
 
 /** Reject migration-owner, superuser and bypass-RLS credentials at startup. */
-export async function assertRuntimeRole(db: Database, role: 'cgt_app' | 'cgt_auth'): Promise<void> {
+export async function assertRuntimeRole(db: Database, role: 'cgt_app' | 'cgt_auth' | 'cgt_billing'): Promise<void> {
   const rows = await query<{ safe: boolean }>(db, `SELECT
     current_user = $1 AND NOT r.rolsuper AND NOT r.rolbypassrls
     AND NOT r.rolcreaterole AND NOT r.rolcreatedb

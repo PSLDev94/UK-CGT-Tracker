@@ -32,7 +32,7 @@ async function initialise() {
     const auth = createAuth(authDb, config, sendMail)
     const workspace = new Workspace(new OwnedDatabase(appDb))
     return {
-      auth, origin,
+      auth, origin, workspace,
       checkDatabase: () => Promise.all([query(appDb, 'SELECT 1'), query(authDb, 'SELECT 1')]),
       workspaceHandler: createWorkspaceHandler(workspace, headers => auth.api.getSession({ headers }), origin),
     }
