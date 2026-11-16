@@ -1,0 +1,4 @@
+Action,Time,ISIN,Ticker,Name,No. of shares,Price / share,Currency (Price / share),Exchange rate,Result,Currency (Result),Total,Currency (Total),Withholding tax,Currency (Withholding tax),Transaction fee,Notes,ID,Currency conversion fee,Currency (Currency conversion fee),Currency (Transaction fee)
+Market buy,2024-06-01 12:00:00.000,GB0008706128,LLOY,Synthetic ordinary share,10.5,1,GBP,1,,,10.50,GBP,,,,,SYNTHETIC-T-001,,,
+Limit sell,2024-08-01 12:00:00.000,GB0008706128,LLOY,Synthetic ordinary share,5.25,2,GBP,1,,,10.50,GBP,,,,,SYNTHETIC-T-002,,,
+Interest on cash,2024-08-02 12:00:00.000,,,,,,,,,,0.01,GBP,,,,,SYNTHETIC-T-CASH,,,

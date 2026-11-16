@@ -57,7 +57,7 @@ describe('PostgreSQL 18 deployment qualification',()=> {
   it('applies migrations once and verifies existing logins without rotating passwords', async()=> {
     expect(run('scripts/migrate.ts')).toBe('')
     expect(run('scripts/provision-runtime-logins.ts')).toContain('Four separate runtime logins verified')
-    expect((await owner.query('SELECT count(*)::int AS count FROM cgt_migrations.applied')).rows[0].count).toBe(6)
+    expect((await owner.query('SELECT count(*)::int AS count FROM cgt_migrations.applied')).rows[0].count).toBe(7)
     await expect(assertRuntimeRole(app,'cgt_app')).resolves.toBeUndefined()
     await expect(assertRuntimeRole(authDb,'cgt_auth')).resolves.toBeUndefined()
     await expect(assertRuntimeRole(billingDb,'cgt_billing')).resolves.toBeUndefined()
@@ -89,6 +89,18 @@ describe('PostgreSQL 18 deployment qualification',()=> {
     expect(results.filter(r=>r.outcome==='reconciled')).toHaveLength(1)
     expect(results.filter(r=>r.outcome==='duplicate')).toHaveLength(9)
     expect((await owner.query("SELECT count(*)::int AS count FROM cgt.stripe_events WHERE event_id='evt_parallel'")).rows[0].count).toBe(1)
+  })
+
+  it('persists native confirmation and reconciles overlapping files under real role isolation', async()=> {
+    const s=await setup('native-postgres')
+    const native=readFileSync('tests/fixtures/brokers/trading212-gbp.csv','utf8')
+    const draft=await workspace.prepareImport(s.user,{accountId:s.account.id,csv:native,format:'native',ordinarySharesConfirmed:true})
+    expect((await workspace.reviewImport(s.user,draft.draftId)).review.status).toBe('ready')
+    expect((await workspace.commitImport(s.user,draft.draftId,draft.revision)).outcome).toBe('committed')
+    const retry=await workspace.prepareImport(s.user,{accountId:s.account.id,csv:native,format:'native',ordinarySharesConfirmed:true})
+    expect(retry.review.counts).toMatchObject({accepted:0,duplicate:2,excluded:1})
+    const rows=await owner.query('SELECT provenance FROM cgt.transactions WHERE import_id=$1',[draft.draftId])
+    expect(rows.rows.every(row=>row.provenance.native.ordinarySharesConfirmed===true)).toBe(true)
   })
 
   it('creates one portfolio under simultaneous first visits', async()=> {

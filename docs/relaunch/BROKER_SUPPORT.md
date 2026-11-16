@@ -1,23 +1,31 @@
 # Broker support and certification
 
-All six brokers named on the previous website remain in the relaunch scope. No native adapter is enabled in this increment. The old generic AI mapper and marketing claims do not establish reliable export compatibility.
+All six brokers named on the previous website remain in the relaunch scope. Two narrowly defined GBP native readers are now available for preview testing. They are not general broker certification. Public schema evidence and newly constructed fixtures are recorded in [the synthetic corpus](../../tests/fixtures/brokers/README.md).
 
-| Broker | Export variants to verify | Current evidence |
+| Broker | Current implementation | Remaining evidence or handling |
 | --- | --- | --- |
-| Trading 212 | Invest history CSV; historical schema variants | Official CSV availability confirmed; representative fixtures needed |
-| Freetrade | Activity CSV; historical schema variants | Fixtures needed |
-| Hargreaves Lansdown | Fund and Share Account transactions | Fixtures needed; verify pence, fees and gross/net semantics |
-| Interactive Investor | Trading account transactions | Fixtures needed |
-| Interactive Brokers | Activity Statement CSV and Activity Flex Query CSV | Official formats confirmed; sectioned/custom layouts require separate adapters |
-| AJ Bell | Dealing account transactions | Fixtures needed |
+| Trading 212 | 21-column Invest history layout; GBP price and total; positive buy/sell trades with zero fees; explicit cash/income exclusions | Other schemas, GBX, foreign currencies, non-zero fees, reused execution IDs and corporate actions stay in review |
+| Freetrade | 29-column Activity layout; GBP account and instrument; gross/cash/stamp-duty reconciliation; explicit cash/income exclusions | Other schemas, foreign currency, free shares, pending orders and corporate actions stay in review; export can omit transfers/events |
+| Hargreaves Lansdown | Specific recovery guidance and a synthetic Transaction Summary fixture | Need ISIN and fee/contract-note reconciliation; no native import enabled |
+| Interactive Investor | Specific wallet/security guidance and an illustrative candidate fixture | Public third-party schema remains experimental; currency and SEDOL/ISIN resolution needed |
+| Interactive Brokers | Specific guidance and a sectioned Transaction History fixture | Activity Statements, Flex Queries and Transaction History are distinct; no native importer enabled |
+| AJ Bell | Specific security/units/fee guidance and a clearly unverified illustration | Reliable representative schema and contract-note reconciliation still required |
 
-Primary export documentation: [Trading 212 documents](https://helpcentre.trading212.com/hc/en-us/articles/11700508002845-What-documents-can-I-get-from-Trading-212), [Interactive Brokers statements](https://ibkrguides.com/ipad/statements.htm). These establish export availability, not a complete field mapping.
+### Native preview contract
+
+Both readers require an explicit ordinary-share confirmation, saved with the draft and checked again at commit. A valid ISIN alone does not establish tax classification. The accepted trade retains the original native fields and adapter version in provenance. Exact known headers may be reordered; unknown, duplicate, missing or added columns do not get silently dropped.
+
+Freetrade's supported trade mapping reconciles quantity × GBP unit price to gross, then gross plus purchase stamp duty to cash total. Sale stamp duty, non-zero FX costs and inconsistent prices block import. Trading 212's initial mapping accepts only GBP/GBP, exchange rate 1, positive consideration and no non-zero fee/tax fields; it reconciles quantity × price to the penny. Broker-reported `Result` is not used as UK taxable gain. Non-zero fees are blocked until their semantics are qualified. [HMRC documents allowable share dealing costs and purchase SDRT](https://www.gov.uk/tax-sell-shares/work-out-your-gain).
+
+These observed layouts timestamp executions in UTC; the adapters convert to Europe/London before selecting the trade date. Order/execution IDs are account-scoped. A repeated trade ID inside one native file requires review, even if the two rows look identical. Across imports, an identical normalized source row is a duplicate; changed fields under that ID are a conflict. Never use an amount-only fingerprint to collapse fills.
+
+A file with any unresolved record cannot be partially saved. Free shares, zero-value trades, splits, transfers and unknown event types are not reclassified as ordinary purchases or ignored. [Freetrade explicitly warns that provider transfers and some corporate actions are absent from its Activity Feed](https://help.freetrade.io/en/articles/6627909-what-information-is-included-in-the-csv-download-of-my-activity-feed); successful parsing is not evidence of complete acquisition history. Check account records and do not delete unsupported rows to force acceptance.
 
 ## What verified support means
 
 Each enabled adapter has a version, exact recognised headers/section structure, transaction-code mapping, date convention, currency and amount semantics, supported account/asset scope and reviewed fixtures. Cover buys/sells, fees/taxes, GBP/foreign currency, fractions, multiple executions, duplicates/overlaps, zero values, multi-year history and unsupported activity. Verify parser totals against the original export and calculation totals independently.
 
-Collect current and historical anonymised samples with permission. Prefer official or openly licensed samples when suitable. Preserve schema and financial relationships during anonymisation. Never commit unredacted customer data. An adapter is enabled only when evidence and tests are in place; otherwise return a clear review requirement without importing partial data.
+Collect current and historical anonymised samples with permission. Prefer official or openly licensed samples when suitable. Preserve schema and financial relationships during anonymisation. Never commit unredacted customer data. Limited preview adapters require documented schema evidence and tests. General certification additionally requires representative exports, reconciliation and independent review; otherwise state the exact supported subset and return clear review requirements.
 
 Local intake directory: `.private/broker-samples/` (Git-ignored). Keep original customer exports there until anonymisation and permission review are complete. Only approved synthetic/anonymised fixtures belong in `tests/fixtures`.
 

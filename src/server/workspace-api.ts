@@ -30,7 +30,8 @@ export function createWorkspaceHandler(workspace: Workspace, readSession: Sessio
         case 'prepare-import': {
           const format = text('format')
           if (format !== 'native' && format !== 'canonical-v1') throw new AppError(400, 'INVALID_FORMAT', 'Choose the file format.')
-          const result = await workspace.prepareImport(identity, { accountId: text('accountId'), csv: text('csv'), format })
+          if (input.ordinarySharesConfirmed !== undefined && typeof input.ordinarySharesConfirmed !== 'boolean') throw new AppError(400, 'INVALID_CONFIRMATION', 'Use the ordinary-share confirmation checkbox.')
+          const result = await workspace.prepareImport(identity, { accountId: text('accountId'), csv: text('csv'), format, ordinarySharesConfirmed: input.ordinarySharesConfirmed as boolean | undefined })
           return privateResponse({ ...result, review: reviewPage(result.review, 1) }, 201)
         }
         case 'review-import': {

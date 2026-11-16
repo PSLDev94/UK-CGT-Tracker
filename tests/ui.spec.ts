@@ -191,6 +191,7 @@ async function mockWorkspace(
           accountId,
           accountType: "GIA",
           format: body.format,
+          ordinarySharesConfirmed: body.ordinarySharesConfirmed,
         });
         currentPreview = {
           draftId,
@@ -330,7 +331,7 @@ test("home and broker support are honest, responsive and accessible", async ({
   await page.goto("/supported-brokers");
   await expect(
     page.getByText("Native CSV verification pending", { exact: true }),
-  ).toHaveCount(6);
+  ).toHaveCount(4);
   const download = page.waitForEvent("download");
   await page.getByRole("link", { name: "Download CSV template" }).click();
   expect((await download).suggestedFilename()).toBe("cgt-trades.csv");
@@ -624,4 +625,64 @@ test("session expiry and setup failures leave recoverable pages", async ({
     page.getByRole("heading", { name: "The workspace is not available yet." }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Try again" })).toBeEnabled();
+});
+
+test("native import requires classification and shows incomplete-history guidance", async ({
+  page,
+}) => {
+  await mockWorkspace(page, { account: true });
+  await page.goto("/workspace");
+  await page
+    .getByRole("button", { name: "Import & review", exact: true })
+    .click();
+  await page
+    .getByLabel("Broker account", { exact: true })
+    .selectOption(accountId);
+  await page
+    .getByLabel("CSV file", { exact: true })
+    .setInputFiles("tests/fixtures/brokers/trading212-gbp.csv");
+  await expect(page.getByText(/Freetrade exports can omit them/)).toBeVisible();
+  await page.getByRole("button", { name: "Review file", exact: true }).click();
+  await expect(
+    page.getByText(/Confirm that every traded instrument/).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Save 2 transactions" }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("checkbox", { name: /For a native broker export/ })
+    .check();
+  await page
+    .getByLabel("CSV file", { exact: true })
+    .setInputFiles("tests/fixtures/brokers/trading212-gbp.csv");
+  await expect(
+    page.getByRole("checkbox", { name: /For a native broker export/ }),
+  ).not.toBeChecked();
+  await page
+    .getByRole("checkbox", { name: /For a native broker export/ })
+    .check();
+  await page.getByRole("button", { name: "Review file", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Save 2 transactions" }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("checkbox", { name: /For a native broker export/ }),
+  ).not.toBeChecked();
+  await page.screenshot({
+    path: ".private/screenshots/native-import-preview.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 375, height: 812 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  expect(
+    (
+      await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+        .analyze()
+    ).violations,
+  ).toEqual([]);
 });

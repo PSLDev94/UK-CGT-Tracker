@@ -23,7 +23,8 @@ describe('import contract', () => {
 
   it('does not invent broker certification from synthetic fixtures', () => {
     expect(BROKERS).toHaveLength(6)
-    expect(BROKER_COVERAGE.every(b => b.enabled === false)).toBe(true)
+    expect(BROKER_COVERAGE.filter(b => b.enabled).map(b => b.brokerId)).toEqual(['trading212', 'freetrade'])
+    expect(BROKER_COVERAGE.every(b => b.status !== ('certified' as string))).toBe(true)
   })
 
   it.each(BROKERS)('routes unverified $name files to review with every record accounted for', broker => {

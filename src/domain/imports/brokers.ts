@@ -10,10 +10,9 @@ export const BROKERS = [
 
 export type BrokerId = typeof BROKERS[number]['id']
 
-// No representative real exports were present in the original repository.
-// Native adapters must be certified with anonymised fixtures before being enabled.
+// Preview coverage is deliberately narrower than general broker certification.
 export const BROKER_COVERAGE = BROKERS.flatMap(broker => broker.variants.map(variant => ({
   brokerId: broker.id, brokerName: broker.name, variant,
-  status: 'awaiting_verified_fixtures' as const,
-  enabled: false,
+  status: broker.id === 'trading212' || broker.id === 'freetrade' ? 'limited_gbp_preview' as const : 'awaiting_verified_fixtures' as const,
+  enabled: broker.id === 'trading212' || broker.id === 'freetrade',
 })))

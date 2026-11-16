@@ -68,6 +68,7 @@ export function WorkspaceScreen() {
   const [authRequired, setAuthRequired] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [ordinarySharesConfirmed, setOrdinarySharesConfirmed] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [taxYear, setTaxYear] = useState("2025-26");
   const [dirty, setDirty] = useState(false);
@@ -246,9 +247,11 @@ export function WorkspaceScreen() {
         action: "prepare-import",
         accountId,
         format,
+        ordinarySharesConfirmed: values.get("ordinarySharesConfirmed") === "on",
         csv,
       });
       setPreview(result);
+      setOrdinarySharesConfirmed(false);
       setFile(null);
       if (fileInput.current) fileInput.current.value = "";
       setDirty(false);
@@ -502,9 +505,10 @@ export function WorkspaceScreen() {
             </section>
             <section hidden={view !== "imports"}>
               <Notice tone="warning">
-                Native broker CSVs are awaiting verification. Use the explicit
-                template for testing, or review a native file to see its
-                unsupported-format outcome.{" "}
+                Selected Trading 212 and Freetrade GBP layouts are available for
+                preview testing. Other layouts, foreign currencies and corporate
+                actions remain in review. A readable CSV does not prove complete
+                history.{" "}
                 <Link href="/supported-brokers">
                   Check support and template guidance
                 </Link>
@@ -527,7 +531,15 @@ export function WorkspaceScreen() {
                   <form
                     noValidate
                     onSubmit={upload}
-                    onChange={() => setDirty(true)}
+                    onChange={(event) => {
+                      setDirty(true);
+                      const target = event.target;
+                      if (
+                        target instanceof HTMLSelectElement &&
+                        (target.name === "accountId" || target.name === "format")
+                      )
+                        setOrdinarySharesConfirmed(false);
+                    }}
                     className="form-stack"
                   >
                     <div className="form-columns">
@@ -552,7 +564,7 @@ export function WorkspaceScreen() {
                         defaultValue="native"
                       >
                         <option value="native">
-                          Broker export — not yet verified
+                          Broker export — limited preview support
                         </option>
                         <option value="canonical-v1">
                           CGT Tracker CSV template
@@ -568,7 +580,10 @@ export function WorkspaceScreen() {
                           name="csv"
                           type="file"
                           accept=".csv,text/csv"
-                          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                          onChange={(e) => {
+                            setFile(e.target.files?.[0] ?? null);
+                            setOrdinarySharesConfirmed(false);
+                          }}
                           aria-invalid={!!errors.csv}
                           aria-describedby={`csv-help${errors.csv ? " csv-error" : ""}`}
                         />
@@ -589,6 +604,28 @@ export function WorkspaceScreen() {
                         </p>
                       )}
                     </div>
+                    <label className="checkbox-label">
+                      <input
+                        name="ordinarySharesConfirmed"
+                        type="checkbox"
+                        checked={ordinarySharesConfirmed}
+                        onChange={(e) =>
+                          setOrdinarySharesConfirmed(e.target.checked)
+                        }
+                      />
+                      <span>
+                        For a native broker export, I have checked that every
+                        traded instrument is an ordinary share, not a fund, ETF,
+                        bond or derivative. Leave unchecked if unsure; the file
+                        will stay in review.
+                      </span>
+                    </label>
+                    <p className="caption">
+                      Check transfers and corporate actions against your account
+                      records. Freetrade exports can omit them. Do not remove
+                      unsupported rows to force an import; missing history can
+                      change your gains.
+                    </p>
                     <div>
                       <Button type="submit" busy={busy}>
                         {busy ? "Reviewing…" : "Review file"}

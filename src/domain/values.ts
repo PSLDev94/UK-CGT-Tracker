@@ -19,6 +19,13 @@ export function calendarDate(value: string): string {
   return value
 }
 
+/** UK calendar day for an instant; distinct from date-only UTC arithmetic. */
+export function ukCalendarDate(instant: Date): string {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(instant)
+  const part = (type: string) => parts.find(p => p.type === type)!.value
+  return `${part('year')}-${part('month')}-${part('day')}`
+}
+
 export function plusDays(value: string, days: number): string {
   const date = new Date(`${calendarDate(value)}T00:00:00.000Z`)
   date.setUTCDate(date.getUTCDate() + days)

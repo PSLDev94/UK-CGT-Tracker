@@ -19,9 +19,9 @@ The first increment added isolated financial modules to `src/domain`; the second
 | 3 | Import safety foundation | Every data record classified; conflicts block commit; FX provenance retained | Canonical interchange format implemented; native adapters pending |
 | 4 | Fresh data model | Ownership constraints, immutable calculation runs, separate billing writes, rollback tests | Migrations qualified on PostgreSQL 18 in CI; Railway database online; five migrations and four runtime logins applied |
 | 5 | New application and authentication | Signup, verification, reset, sessions, account ownership and secure runtime setup verified | Backend, fresh UI and controlled browser tests implemented; hosted readiness/auth-boundary checks pass; email lifecycle pending |
-| 6 | Native broker adapters | Every named export variant passes representative anonymised fixtures and reconciliation checks | Pending verified fixtures; all six brokers remain in scope |
-| 7 | Import and review workspace | Preview, repair, retry, correction, reversal, history and report-readiness flows | Transactional API and replacement UI implemented with paginated history and reversal; hosted authenticated journey and richer correction tools pending |
-| 8 | Billing and reporting | Sandbox lifecycle tests; year-specific report checks; existing Stripe entitlements reconciled | Pending |
+| 6 | Native broker adapters | Every named export variant passes representative anonymised fixtures and reconciliation checks | Limited GBP native preview readers for two observed schemas; source-documented synthetic corpus for all six; broader certification pending |
+| 7 | Import and review workspace | Preview, repair, retry, correction, reversal, history and report-readiness flows | Transactional API and replacement UI implemented with paginated history and reversal; hosted template journey verified through reversal; richer correction tools pending |
+| 8 | Billing and reporting | Sandbox lifecycle tests; year-specific report checks; existing Stripe entitlements reconciled | Sandbox integration implemented and CI-qualified; staged deployment and hosted lifecycle checks pending. Reports remain pending |
 | 9 | Release qualification | Browser/security/accessibility/load/recovery tests; tax review; user acceptance | Pending |
 | 10 | Production release | Domain, TLS, callbacks, webhooks, email, monitoring, backup restoration and rollback verified | Pending |
 

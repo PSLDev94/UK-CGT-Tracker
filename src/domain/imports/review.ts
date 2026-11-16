@@ -3,6 +3,7 @@ import Papa from 'papaparse'
 import { calendarDate, decimal } from '../values'
 import type { Trade } from '../cgt/types'
 import { BROKERS, type BrokerId } from './brokers'
+import { nativeAdapter, NATIVE_GUIDANCE } from './native'
 
 export const CANONICAL_HEADERS = ['Transaction ID', 'Trade date', 'Type', 'ISIN', 'Quantity', 'Consideration', 'Fees', 'Currency', 'GBP per unit', 'Asset type'] as const
 export const PARSER_VERSION = 'canonical-v1.0.1'
@@ -16,6 +17,8 @@ export interface ImportOptions {
   format: 'canonical-v1' | 'native'
   /** Server-supplied date limit; explicit to keep fixture reviews deterministic. */
   latestTradeDate?: string
+  /** User attestation, persisted with the draft and rechecked at commit. */
+  ordinarySharesConfirmed?: boolean
   /** Stable source key -> normalised-content digest, loaded server-side. */
   existing?: ReadonlyMap<string, string>
 }
@@ -33,7 +36,7 @@ export interface ImportRecord {
   sourceKey?: string
   digest?: string
   trade?: Trade
-  provenance?: { originalCurrency: string; consideration: string; fees: string; gbpPerUnit: string }
+  provenance?: { originalCurrency: string; consideration: string; fees: string; gbpPerUnit: string; native?: { format: string; fields: Record<string, string>; ordinarySharesConfirmed: true } }
 }
 
 export interface ImportReview {
@@ -68,6 +71,7 @@ export function validISIN(value: string): boolean {
  * any broker's native export is certified. Re-run this on the server at commit.
  */
 export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
+  let parserVersion = PARSER_VERSION
   const records: ImportRecord[] = []
   const issues: ImportIssue[] = []
   const fileDigest = hash(csv)
@@ -77,7 +81,7 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
       if (record.status === 'needs_review') counts.needsReview++
       else counts[record.status]++
     }
-    return { fileDigest, parserVersion: PARSER_VERSION, headers, records, issues, counts,
+    return { fileDigest, parserVersion, headers, records, issues, counts,
       status: unsupported ? 'unsupported' : issues.length || counts.needsReview || !counts.accepted ? 'needs_review' : 'ready' }
   }
   if (!BROKERS.some(b => b.id === options.broker) || !options.accountId.trim()) {
@@ -95,27 +99,41 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
   const parsed = Papa.parse<string[]>(csv.replace(/^\uFEFF/, ''), { header: false, delimiter: ',', skipEmptyLines: 'greedy', dynamicTyping: false })
   const headers = (parsed.data[0] ?? []).map(value => value.trim())
   const data = parsed.data.slice(1)
-  if (parsed.errors.length || !data.length || data.length > MAX_RECORDS || new Set(headers).size !== headers.length) {
+  if (parsed.errors.length || !data.length || data.length > MAX_RECORDS || (options.format !== 'native' && new Set(headers).size !== headers.length)) {
     issues.push({ code: 'INVALID_FILE', message: 'The CSV is malformed, has duplicate headers, has no data, or exceeds 100,000 records. Correct the file before importing.' })
     return finish(headers)
   }
   const canonical = options.format === 'canonical-v1' && headers.length === CANONICAL_HEADERS.length && CANONICAL_HEADERS.every(h => headers.includes(h))
-  if (!canonical) {
-    issues.push({ code: 'UNSUPPORTED_FORMAT', message: 'This native export or column layout has not been verified. No records have been imported. Use the documented template or request a format review.' })
+  const adapter = options.format === 'native' ? nativeAdapter(options.broker, headers) : undefined
+  if (!canonical && !adapter) {
+    issues.push({ code: 'UNSUPPORTED_FORMAT', message: `This export or column layout has not been verified. No records have been imported. ${NATIVE_GUIDANCE[options.broker]}` })
     data.forEach((_, index) => records.push({ record: index + 2, status: 'needs_review', reason: 'Unverified CSV format; values have not been inferred.' }))
     return finish(headers, true)
   }
 
+  if (adapter) parserVersion = adapter.version
+  const repeatedIds = new Set<string>()
+  const nativeIds = new Set<string>()
+  if (adapter) for (const values of data) {
+    const r = Object.fromEntries(headers.map((h, i) => [h, values[i]?.trim() ?? '']))
+    if (adapter.isTrade(r) && r[adapter.idColumn]) {
+      if (nativeIds.has(r[adapter.idColumn]!)) repeatedIds.add(r[adapter.idColumn]!)
+      nativeIds.add(r[adapter.idColumn]!)
+    }
+  }
   const seen = new Map(options.existing)
   data.forEach((values, index) => {
     const record = index + 2 // CSV record number; quoted multi-line fields are one record.
     try {
       if (values.length !== headers.length) throw new Error('The record has a different number of fields from the header.')
-      const row = Object.fromEntries(headers.map((header, i) => [header, values[i]!.trim()])) as Record<typeof CANONICAL_HEADERS[number], string>
+      const source = Object.fromEntries(headers.map((header, i) => [header, values[i]!.trim()]))
+      if (adapter && adapter.isTrade(source) && repeatedIds.has(source[adapter.idColumn]!)) throw new Error('This native file repeats a trade ID. It may contain several executions or duplicate rows; review it before importing.')
+      const row = (adapter ? adapter.normalize(source) : source) as Record<typeof CANONICAL_HEADERS[number], string>
       if (['CASH_DEPOSIT', 'CASH_WITHDRAWAL', 'CASH_DIVIDEND', 'CASH_INTEREST'].includes(row.Type)) {
         records.push({ record, status: 'excluded', reason: `${row.Type}: excluded from share gains; income tax is outside this calculation.` })
         return
       }
+      if (adapter && options.ordinarySharesConfirmed !== true) throw new Error('Confirm that every traded instrument in this file is an ordinary share. The export does not establish asset classification.')
       if (row.Type !== 'BUY' && row.Type !== 'SELL') throw new Error('Unrecognised activity. Transfers, corporate actions, reinvestments and other events need explicit handling.')
       if (row['Asset type'] !== 'ORDINARY_SHARE') throw new Error('Confirm the instrument is an ordinary share. Funds, ETFs, derivatives and other assets need additional handling.')
       if (!row['Transaction ID'] || row['Transaction ID'].length > 200 || /[\r\n\x00-\x1f]/.test(row['Transaction ID'])) throw new Error('A stable transaction identifier is required.')
@@ -142,7 +160,7 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
       const sourceKey = hash(JSON.stringify([options.broker, options.accountId, row['Transaction ID']]))
       const trade: Trade = { id: sourceKey, securityId: row.ISIN, date, side: row.Type, quantity: quantity.toString(),
         considerationGBP: convertedAmount.toFixed(), feesGBP: convertedFees.toFixed() }
-      const provenance = { originalCurrency: row.Currency, consideration: amount.toString(), fees: fees.toString(), gbpPerUnit: rate.toString() }
+      const provenance = { originalCurrency: row.Currency, consideration: amount.toString(), fees: fees.toString(), gbpPerUnit: rate.toString(), ...(adapter ? { native: { format: adapter.version, fields: Object.fromEntries(Object.keys(source).sort().map(key => [key, source[key]!])), ordinarySharesConfirmed: true as const } } : {}) }
       const digest = hash(JSON.stringify({ trade, provenance }))
       const existing = seen.get(sourceKey)
       if (existing && existing !== digest) {
@@ -152,7 +170,7 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
         records.push({ record, status: 'duplicate', sourceKey, digest, reason: 'This exact transaction has already been included.' })
       } else {
         seen.set(sourceKey, digest)
-        records.push({ record, status: 'accepted', sourceKey, digest, trade, provenance, reason: 'Validated against the canonical template.' })
+        records.push({ record, status: 'accepted', sourceKey, digest, trade, provenance, reason: adapter ? 'GBP trade amounts reconcile; ordinary-share classification confirmed by you.' : 'Validated against the canonical template.' })
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Invalid record.'

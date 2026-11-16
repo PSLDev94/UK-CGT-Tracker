@@ -1,0 +1,4 @@
+Title,Type,Timestamp,Account Currency,Total Amount,Buy / Sell,Ticker,ISIN,Price per Share in Account Currency,Stamp Duty,Quantity,Venue,Order ID,Order Type,Instrument Currency,Total Shares Amount,Price per Share,FX Rate,Base FX Rate,FX Fee (BPS),FX Fee Amount,Dividend Ex Date,Dividend Pay Date,Dividend Eligible Quantity,Dividend Amount Per Share,Dividend Gross Distribution Amount,Dividend Net Distribution Amount,Dividend Withheld Tax Percentage,Dividend Withheld Tax Amount
+Synthetic ordinary share,ORDER,2024-06-01T12:00:00.000Z,GBP,502.50,BUY,LLOY,GB0008706128,0.5,2.50,1000,London Stock Exchange,SYNTHETIC-F-001,BASIC,GBP,500.00,0.5,,,,,,,,,,,,
+Synthetic ordinary share,ORDER,2024-08-01T12:00:00.000Z,GBP,200,SELL,LLOY,GB0008706128,0.8,0,250,London Stock Exchange,SYNTHETIC-F-002,BASIC,GBP,200,0.8,,,,,,,,,,,,
+Synthetic cash dividend,DIVIDEND,2024-08-02T12:00:00.000Z,GBP,1.25,,,,,,,,,,,,,,,,,,,,,,,,

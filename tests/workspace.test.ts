@@ -202,3 +202,57 @@ describe('authenticated PostgreSQL application workflow', () => {
     expect((await workspace.reviewImport(s.user, fresh.draftId)).review.status).toBe('ready')
   })
 })
+
+it("persists native classification confirmation through resume and server-side commit", async () => {
+  const s = await setup("native-confirmation");
+  const native = readFileSync(
+    new URL("./fixtures/brokers/trading212-gbp.csv", import.meta.url),
+    "utf8",
+  );
+  const unconfirmed = await workspace.prepareImport(s.user, {
+    accountId: s.account.id,
+    csv: native,
+    format: "native",
+  });
+  expect(unconfirmed.review.status).toBe("needs_review");
+  expect(
+    (
+      await workspace.commitImport(
+        s.user,
+        unconfirmed.draftId,
+        unconfirmed.revision,
+      )
+    ).outcome,
+  ).toBe("needs_review");
+  const confirmed = await workspace.prepareImport(s.user, {
+    accountId: s.account.id,
+    csv: native,
+    format: "native",
+    ordinarySharesConfirmed: true,
+  });
+  expect(
+    (await workspace.reviewImport(s.user, confirmed.draftId)).review.status,
+  ).toBe("ready");
+  expect(
+    (
+      await workspace.commitImport(
+        s.user,
+        confirmed.draftId,
+        confirmed.revision,
+      )
+    ).outcome,
+  ).toBe("committed");
+  await new OwnedDatabase(database.db).run(s.user, async (tx) => {
+    const rows = await query<{
+      provenance: {
+        native: {
+          ordinarySharesConfirmed: boolean;
+          fields: Record<string, string>;
+        };
+      };
+    }>(tx, "SELECT provenance FROM cgt.transactions");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.provenance.native.ordinarySharesConfirmed).toBe(true);
+    expect(rows[0]!.provenance.native.fields.ID).toContain("SYNTHETIC-T-");
+  });
+});

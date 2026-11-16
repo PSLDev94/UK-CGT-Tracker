@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Header } from "@/ui/header";
 import { BROKERS } from "@/domain/imports/brokers";
+import { NATIVE_GUIDANCE } from "@/domain/imports/native";
 
 export default function BrokerSupport() {
   return (
@@ -11,19 +12,20 @@ export default function BrokerSupport() {
           <span className="eyebrow">Support you can verify</span>
           <h1>Know what your file can tell us.</h1>
           <p className="lead">
-            These six brokers are in the relaunch scope. Native CSV formats are
-            still being checked against representative exports. They are not
-            certified for import yet.
+            These six brokers are in the relaunch scope. Selected Trading 212
+            and Freetrade GBP layouts are available for preview testing. General
+            broker certification is still pending; unknown records block saving.
           </p>
           <div className="broker-grid">
             {BROKERS.map((b) => (
               <article className="panel" key={b.id}>
                 <h2>{b.name}</h2>
-                <span className="tag">Native CSV verification pending</span>
-                <p className="muted">
-                  Unverified files stay in review. No transactions are silently
-                  inferred or saved.
-                </p>
+                <span className="tag">
+                  {b.id === "freetrade" || b.id === "trading212"
+                    ? "Limited GBP preview"
+                    : "Native CSV verification pending"}
+                </span>
+                <p className="muted">{NATIVE_GUIDANCE[b.id]}</p>
               </article>
             ))}
           </div>

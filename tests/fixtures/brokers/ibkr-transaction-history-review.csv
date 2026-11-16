@@ -1,0 +1,6 @@
+Statement,Header,Field Name,Field Value
+Statement,Data,Title,Transaction History
+Summary,Header,Field Name,Field Value
+Summary,Data,Base Currency,GBP
+Transaction History,Header,Date,Account,Description,Transaction Type,Symbol,Quantity,Price,Gross Amount ,Commission,Net Amount
+Transaction History,Data,2024-06-01,SYNTHETIC,Synthetic ordinary share,Buy,LLOY,1000,0.5,-500,-3,-503

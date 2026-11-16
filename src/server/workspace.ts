@@ -3,14 +3,14 @@ import { BROKERS, type BrokerId } from '../domain/imports/brokers'
 import { MAX_CSV_BYTES, reviewCsv, type ImportReview } from '../domain/imports/review'
 import { calculateGains, ENGINE_VERSION } from '../domain/cgt/calculate'
 import type { Trade } from '../domain/cgt/types'
-import { calendarDate, TAX_YEARS } from '../domain/values'
+import { calendarDate, TAX_YEARS, ukCalendarDate } from '../domain/values'
 import { type Connection, OwnedDatabase, query } from './database'
 import { AppError, requireLabel, requireUuid } from './errors'
 import type { Identity } from './identity'
 
 interface Portfolio { id: string; revision: number; name: string }
 interface Account { id: string; portfolio_id: string; broker: BrokerId; label: string; account_type: 'GIA' }
-interface Draft { id: string; account_id: string; csv: string; format: 'native' | 'canonical-v1'; reviewed_revision: number }
+interface Draft { id: string; account_id: string; csv: string; format: 'native' | 'canonical-v1'; reviewed_revision: number; ordinary_shares_confirmed: boolean }
 interface Import { id: string; status: 'committed' | 'reversed'; account_id: string }
 
 const missing = () => new AppError(404, 'NOT_FOUND', 'This item is unavailable. Return to your workspace and try again.')
@@ -33,12 +33,12 @@ async function invalidate(tx: Connection, portfolioId: string): Promise<void> {
   await query(tx, 'DELETE FROM cgt.published_calculations WHERE portfolio_id = $1', [portfolioId])
 }
 
-async function preview(tx: Connection, a: Account, csv: string, format: Draft['format']): Promise<ImportReview> {
+async function preview(tx: Connection, a: Account, csv: string, format: Draft['format'], ordinarySharesConfirmed = false): Promise<ImportReview> {
   // No provider-imposed page limit: this returns the full account's active keys.
   const existing = await query<{ source_key: string; content_digest: string }>(tx,
     'SELECT source_key, content_digest FROM cgt.transactions WHERE account_id = $1 AND active', [a.id])
   return reviewCsv(csv, { broker: a.broker, accountId: a.id, accountType: a.account_type,
-    format, latestTradeDate: new Date().toISOString().slice(0, 10), existing: new Map(existing.map(row => [row.source_key, row.content_digest])) })
+    format, ordinarySharesConfirmed, latestTradeDate: ukCalendarDate(new Date()), existing: new Map(existing.map(row => [row.source_key, row.content_digest])) })
 }
 
 export class Workspace {
@@ -95,20 +95,21 @@ export class Workspace {
     })
   }
 
-  async prepareImport(identity: Identity, input: { accountId: string; csv: string; format: Draft['format'] }) {
+  async prepareImport(identity: Identity, input: { accountId: string; csv: string; format: Draft['format']; ordinarySharesConfirmed?: boolean }) {
     if (typeof input.csv !== 'string' || !input.csv.trim() || Buffer.byteLength(input.csv, 'utf8') > MAX_CSV_BYTES) {
       throw new AppError(400, 'INVALID_FILE', 'Choose a non-empty UTF-8 CSV no larger than 10 MiB.')
     }
     if (!['native', 'canonical-v1'].includes(input.format)) throw new AppError(400, 'INVALID_FORMAT', 'Choose the file format.')
+    if (input.ordinarySharesConfirmed !== undefined && typeof input.ordinarySharesConfirmed !== 'boolean') throw new AppError(400, 'INVALID_CONFIRMATION', 'Use the ordinary-share confirmation checkbox.')
     return this.db.run(identity, async tx => {
       const a = await account(tx, input.accountId)
       const p = await lockPortfolio(tx, a.portfolio_id)
       await query(tx, 'DELETE FROM cgt.import_drafts WHERE expires_at <= now()')
       const drafts = await query<{ count: number }>(tx, 'SELECT count(*)::int AS count FROM cgt.import_drafts')
       if (drafts[0]!.count >= 5) throw new AppError(409, 'DRAFT_LIMIT', 'Discard an earlier preview before uploading another file. You can keep five previews for 24 hours.')
-      const review = await preview(tx, a, input.csv, input.format)
-      const rows = await query<{ id: string }>(tx, `INSERT INTO cgt.import_drafts(owner_id,account_id,csv,format,reviewed_revision)
-        VALUES($1,$2,$3,$4,$5) RETURNING id`, [identity.ownerId, a.id, input.csv, input.format, p.revision])
+      const review = await preview(tx, a, input.csv, input.format, input.ordinarySharesConfirmed)
+      const rows = await query<{ id: string }>(tx, `INSERT INTO cgt.import_drafts(owner_id,account_id,csv,format,reviewed_revision,ordinary_shares_confirmed)
+        VALUES($1,$2,$3,$4,$5,$6) RETURNING id`, [identity.ownerId, a.id, input.csv, input.format, p.revision, input.ordinarySharesConfirmed === true])
       return { draftId: rows[0]!.id, revision: p.revision, review }
     })
   }
@@ -129,7 +130,7 @@ export class Workspace {
       if (!draft) throw new AppError(404, 'PREVIEW_EXPIRED', 'This preview has expired or was discarded. Upload the file again to continue.')
       const a = await account(tx, draft.account_id)
       const p = await lockPortfolio(tx, a.portfolio_id)
-      const review = await preview(tx, a, draft.csv, draft.format)
+      const review = await preview(tx, a, draft.csv, draft.format, draft.ordinary_shares_confirmed)
       await query(tx, 'UPDATE cgt.import_drafts SET reviewed_revision = $2 WHERE id = $1', [draftId, p.revision])
       return { draftId, revision: p.revision, review }
     })
@@ -157,7 +158,7 @@ export class Workspace {
       if (retry) return { outcome: 'already_committed' as const, importId: retry.id, status: retry.status }
       const stillAvailable = await query(tx, 'SELECT id FROM cgt.import_drafts WHERE id = $1 AND expires_at > now()', [draftId])
       if (!stillAvailable.length) throw new AppError(404, 'PREVIEW_EXPIRED', 'This preview was discarded or expired. Upload the file again to continue.')
-      const review = await preview(tx, a, draft.csv, draft.format)
+      const review = await preview(tx, a, draft.csv, draft.format, draft.ordinary_shares_confirmed)
       if (p.revision !== expectedRevision || p.revision !== draft.reviewed_revision) {
         await query(tx, 'UPDATE cgt.import_drafts SET reviewed_revision = $2 WHERE id = $1', [draftId, p.revision])
         return { outcome: 'review_changed' as const, revision: p.revision, review }
