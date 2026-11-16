@@ -30,3 +30,20 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:ui
+
+  container:
+    name: Portable container smoke check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --tag cgt-tracker:test .
+      - name: Run as an unprivileged service without build-time secrets
+        run: |
+          test "$(docker run --rm --entrypoint id cgt-tracker:test -u)" = "1000"
+          docker run --detach --name cgt-smoke --publish 127.0.0.1:3300:3000 cgt-tracker:test
+          trap 'docker rm --force cgt-smoke >/dev/null' EXIT
+          curl --fail --retry 20 --retry-connrefused --retry-delay 1 http://127.0.0.1:3300/api/health
+          curl --fail http://127.0.0.1:3300/ --output /tmp/cgt-home.html
+          node -e 'if (!require("node:fs").readFileSync("/tmp/cgt-home.html", "utf8").includes("Know how your")) process.exit(1)'
+          test "$(curl --silent --output /tmp/cgt-setup.json --write-out '%{http_code}' http://127.0.0.1:3300/api/v2/auth/get-session)" = "503"
