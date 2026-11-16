@@ -8,17 +8,17 @@ Build fresh application, database and authentication. Preserve the existing Stri
 
 Selected architecture: Next.js and TypeScript, PostgreSQL, Better Auth, Stripe Checkout and Customer Portal, Resend transactional email, Railway application hosting. Deployment must be portable through a container. PostgreSQL is private; the browser never receives database credentials. Authentication and billing use separate permissions.
 
-The first increment added isolated financial modules to `src/domain`. The second adds fresh authentication and transaction services in `src/server`, with versioned `/api/v2` routes. The old screens still call the old engine and Supabase routes. The replacement screens must use the new API; the old application is not the relaunch deployment target.
+The first increment added isolated financial modules to `src/domain`; the second added authentication and transaction services in `src/server`, with versioned `/api/v2` routes. The third replaces the active frontend with the new API-driven workspace and removes legacy Supabase routes and dependencies. The previous application remains recoverable at commit `9ded8c0`. This preview is not yet a qualified customer release.
 
 ## Delivery sequence and acceptance criteria
 
 | Stage | Deliverable | Exit condition | Status |
 | --- | --- | --- | --- |
-| 1 | Access and repository setup | GitHub checkout, service logins verified, private staging project | Done; runtime API keys requested |
+| 1 | Access and repository setup | GitHub checkout, service logins verified, private staging project | Management access verified; Resend and sandbox Stripe keys staged in Railway |
 | 2 | Calculation core | Reproduced matching defects corrected; deterministic decimal arithmetic; missing history blocks totals | Implemented and tested; independent tax review still required |
 | 3 | Import safety foundation | Every data record classified; conflicts block commit; FX provenance retained | Canonical interchange format implemented; native adapters pending |
-| 4 | Fresh data model | Ownership constraints, immutable calculation runs, separate billing writes, rollback tests | SQL migration tested in embedded PostgreSQL; not applied to Railway |
-| 5 | New application and authentication | Signup, verification, reset, sessions, account ownership and secure runtime setup verified | Backend and auth handler tests implemented; replacement UI and hosted runtime verification pending |
+| 4 | Fresh data model | Ownership constraints, immutable calculation runs, separate billing writes, rollback tests | SQL migration tested in embedded PostgreSQL; Railway PostgreSQL prepared in pending changes, not provisioned |
+| 5 | New application and authentication | Signup, verification, reset, sessions, account ownership and secure runtime setup verified | Backend, fresh UI and controlled browser tests implemented; hosted verification pending |
 | 6 | Native broker adapters | Every named export variant passes representative anonymised fixtures and reconciliation checks | Pending verified fixtures; all six brokers remain in scope |
 | 7 | Import and review workspace | Preview, repair, retry, correction, reversal, history and report-readiness flows | Transactional API implemented and tested; replacement UI, complete history navigation and correction UI pending |
 | 8 | Billing and reporting | Sandbox lifecycle tests; year-specific report checks; existing Stripe entitlements reconciled | Pending |
@@ -48,7 +48,7 @@ Sources reviewed on 16 November 2026:
 
 `src/domain/cgt` is independent of Next.js, authentication, AI, payment providers and the database. `src/domain/imports` runs on the server and returns a preview, not writes. Always regenerate the preview server-side on commit against current database state; never trust a posted preview or accepted-row count.
 
-Import commits and reversals now run in database transactions. A portfolio row lock and revision checks serialise writes, and partial unique indexes guard active source IDs. Commit re-parses the saved server-side CSV against current records. A changed portfolio requires another confirmation. The draft UUID is the import UUID, making commit retries idempotent. Reversal retains transactions and receipts as history, deactivates their financial effect, and invalidates published results without altering old calculation snapshots. A replacement import and recalculation then produce a new snapshot. The service loads the full active history; the UI still needs complete navigation for older receipts.
+Import commits and reversals now run in database transactions. A portfolio row lock and revision checks serialise writes, and partial unique indexes guard active source IDs. Commit re-parses the saved server-side CSV against current records. A changed portfolio requires another confirmation. The draft UUID is the import UUID, making commit retries idempotent. Reversal retains transactions and receipts as history, deactivates their financial effect, and invalidates published results without altering old calculation snapshots. A replacement import and recalculation then produce a new snapshot. The service loads the full active history; the UI provides paginated navigation for the full receipt history.
 
 The fresh database roles are `cgt_app`, `cgt_auth`, `cgt_billing` and `cgt_maintenance`. Use distinct login credentials and a separate migration owner. Runtime startup rejects owner/superuser/bypass-RLS credentials and mixed role memberships. Set `cgt.owner_id` transaction-locally only after verifying a server-side session and email verification. RLS is defence in depth: never expose SQL or let requests choose owner IDs. Financial owners now reference auth users; deletion is restricted until the account-retention workflow is implemented. Raw CSV drafts expire after 24 hours, with hourly cleanup required in staging/production; committed drafts are removed immediately. The maintenance role cannot read CSV contents or delete unexpired drafts.
 
@@ -66,7 +66,7 @@ The current live price has unspecified tax behaviour. Confirm the business's VAT
 - No open incorrect-calculation, data-loss, cross-user-access or payment-entitlement defects.
 - An independent UK tax reviewer validates representative matches, limitations, rounding and report mappings.
 - Authentication, email, billing and import-to-report journeys pass in staging and production smoke tests.
-- Dependency audit and production build pass for the fresh application. Updated production dependencies currently report zero npm advisories; the complete inherited app build still fails because the old contact route constructs Resend during module loading without a key. Replacement UI/build qualification remains open.
+- Dependency audit and production build pass for the fresh application. The new standalone production build and dependency audit pass. Controlled browser tests pass; hosted integration qualification remains open.
 - Database migration, backup restoration and deployment rollback are rehearsed.
 - Privacy, supported-scope, retention, pricing and cancellation information match actual behaviour.
 - Domain, TLS, canonical redirects, callbacks, webhooks, cache bypass for private routes and monitoring are verified.
@@ -77,7 +77,7 @@ Commands: `npm run check:core`, `npx eslint src/domain tests vitest.config.mts`,
 
 The tests cover matching regressions, repeatability, order invariance, 300 generated invariant examples, date boundaries, incomplete histories, CSV safety, FX evidence, duplicate/conflicting source IDs, account wrappers, PostgreSQL row isolation, billing permissions, immutable snapshots and transactional rollback. PGlite executes real embedded PostgreSQL; it does not replace verification against the hosted PostgreSQL configuration.
 
-The GitHub workflow checks this core increment only. It is not yet the application's end-to-end release workflow. Browser QA, deployed authentication, native broker certification, Stripe lifecycle integration and report generation remain pending.
+The GitHub workflow now checks the application build, financial and auth integration suite, schema drift, types, lint, dependency audit, design-token consistency and controlled browser journeys. Deployed authentication, native broker certification, Stripe lifecycle integration and report generation remain release gates.
 
 ## Verification of the second increment
 
@@ -87,4 +87,13 @@ The suite now tests actual Better Auth HTTP handlers against embedded PostgreSQL
 
 Full TypeScript and targeted lint pass. The new API also returns a controlled setup-unavailable response when required runtime configuration is absent. The full inherited Next build compiles and typechecks, but fails during page-data collection at the legacy Resend contact route. No substitute credentials were supplied to make that build appear deployment-ready.
 
-Next: replace the frontend and remove legacy routes/dependencies; provision and verify hosted PostgreSQL, configure provider secrets and trusted ingress IP handling, then run signup → verified session → import → calculation through the browser. All six native broker families remain in scope and require representative exports before certification.
+The third increment below resolves the inherited frontend/build blocker. Hosted PostgreSQL, provider delivery, trusted ingress IP handling and live browser integration still require qualification. All six native broker families remain in scope and require representative exports before certification.
+
+
+## Verification of the third increment
+
+Fresh pages cover account signup/sign-in/recovery/reset, account setup, explicit-format CSV upload, row reconciliation, stale-review confirmation, calculation evidence and import reversal/history. Public pages state the current scope and native-verification status. Financial display uses decimal strings even for values beyond JavaScript's safe integer range. All active Supabase, AI parsing and old payment/report routes are retired; their behaviour is not advertised in the preview. Existing Stripe account, products, prices and customer records remain unchanged. Checkout, portal, signed webhook handling and entitlement reconciliation must be rebuilt before accepting payments.
+
+Local evidence: 111 financial/auth/API/display tests, seven production-build Chromium journeys, full lint/typecheck, production dependency audit (zero vulnerabilities), and the standalone Next build pass. Browser tests include automated WCAG A/AA scans, 375px layout, keyboard controls, modal focus restoration, interrupted upload recovery, pending-action controls and explicit leave confirmation. They use controlled API responses and synthetic data; they do not prove hosted database/email/payment operation. Docker packaging is prepared but has not been container-built locally because no Docker engine is available. Manual zoom, additional browsers and hosted load/recovery tests remain open.
+
+Next deployment increment: provision staged private PostgreSQL in Europe West, apply migrations with a separate owner, establish restricted runtime logins, configure session/origin/email/trusted-ingress settings, and deploy the tested application to a staging hostname. Then exercise real auth → import → calculation and sandbox billing. Keep www.cgttracker.com unchanged until the production release gates pass.

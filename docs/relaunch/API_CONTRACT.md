@@ -16,7 +16,8 @@ Self-service email changes and account deletion are disabled pending verified bi
 
 | `action` | Other fields | Result |
 | --- | --- | --- |
-| `overview` | None | One shared personal portfolio, accounts, latest 100 imports, current calculations and active previews. First visit creates the portfolio. Full receipt-history navigation is still pending. |
+| `overview` | None | One shared personal portfolio, accounts, latest 100 imports, current calculations and active previews. First visit creates the portfolio. Use `import-history` for full receipt navigation. |
+| `import-history` | `page` (1-based) | All owned import receipts, 25 per page, with total count and stable created-time/ID order. |
 | `add-account` | `portfolioId`, `broker`, `accountType: GIA`, `label` | Adds a taxable account, advances revision and invalidates calculations. Maximum 50 accounts. |
 | `prepare-import` | `accountId`, `format: native or canonical-v1`, `csv` | Stores a 24-hour preview and returns `draftId`, `revision`, counts, issues and first 100 records. Maximum five active drafts per user. |
 | `review-import` | `draftId`, `page` (1-based) | Re-parses server evidence against current records and returns 100-record pages. Total counts are always supplied; issues are bounded to 100 with `issueCount`. |
@@ -33,4 +34,4 @@ Unverified, expired or missing sessions fail before financial work. Cross-owner 
 
 `coverageConfirmed` requires explicit confirmation of every account currently in the portfolio. It is a customer attestation, not proof of correct account coverage. Engine `complete` means the declared history covers the tax-year look-ahead and the engine found no missing acquisitions; it is not tax advice, a tax-liability calculation, or permission to market a filing-ready report. No report-download or billing entitlement endpoint is exposed by this increment.
 
-Changed source IDs never overwrite trades. Correct a committed file by reversing it with a reason, preparing the corrected file, reviewing it and recalculating. Active-record uniqueness permits reimport after reversal while preserving historical evidence. Browser flows still need to make this process explicit and prevent accidental reversal.
+Changed source IDs never overwrite trades. Correct a committed file by reversing it with a reason, preparing the corrected file, reviewing it and recalculating. Active-record uniqueness permits reimport after reversal while preserving historical evidence. The new browser flow presents a reason field and explicit reversal confirmation, initially focusing Cancel.

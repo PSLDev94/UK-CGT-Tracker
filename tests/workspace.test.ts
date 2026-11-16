@@ -148,6 +148,21 @@ describe('authenticated PostgreSQL application workflow', () => {
     await expect(query(database.db, 'SELECT * FROM auth."account"')).rejects.toThrow(/permission denied/)
   })
 
+  it('paginates the complete import history without losing or repeating receipts', async () => {
+    const s = await setup('history-pages')
+    for (let index=0; index<26; index++) {
+      const draft = await prepare(s.user, s.account.id, csv.replace('synthetic-buy', `buy-${index}`).replace('synthetic-sell', `sell-${index}`))
+      await workspace.commitImport(s.user, draft.draftId, draft.revision)
+    }
+    const first = await workspace.importHistory(s.user, 1)
+    const second = await workspace.importHistory(s.user, 2)
+    expect(first.total).toBe(26)
+    expect(first.imports).toHaveLength(25)
+    expect(second.imports).toHaveLength(1)
+    expect(new Set([...first.imports,...second.imports].map(row => (row as {id:string}).id)).size).toBe(26)
+    await expect(workspace.importHistory(s.user,0)).rejects.toMatchObject({code:'INVALID_PAGE'})
+  })
+
   it('rejects privileged runtime credentials and accepts a dedicated least-privilege login', async () => {
     await expect(assertRuntimeRole(database.db, 'cgt_app')).rejects.toThrow(/Unsafe/)
     // Separate sessions: changing SESSION AUTHORIZATION must not contaminate later tests.

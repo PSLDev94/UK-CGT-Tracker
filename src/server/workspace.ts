@@ -55,6 +55,16 @@ export class Workspace {
     if (!allowed.length) throw new AppError(429, 'TOO_MANY_REQUESTS', 'Too many requests. Wait one minute, then try again.')
   }
 
+  async importHistory(identity: Identity, page: number) {
+    if (!Number.isSafeInteger(page) || page < 1 || page > 100000) throw new AppError(400, 'INVALID_PAGE', 'Choose a valid history page.')
+    return this.db.run(identity, async tx => {
+      const total = (await query<{ count: number }>(tx, 'SELECT count(*)::int AS count FROM cgt.imports'))[0]!.count
+      const imports = await query(tx, `SELECT id,account_id,status,record_count,accepted_count,excluded_count,duplicate_count,
+        created_at,reversed_at,reversal_reason FROM cgt.imports ORDER BY created_at DESC,id DESC LIMIT 25 OFFSET $1`, [(page-1)*25])
+      return { imports, total, page, pageSize: 25 }
+    })
+  }
+
   async overview(identity: Identity) {
     return this.db.run(identity, async tx => {
       // Unique owner index serialises concurrent first visits; no advisory key collisions.

@@ -22,6 +22,7 @@ export function createWorkspaceHandler(workspace: Workspace, readSession: Sessio
       if (input.action === 'calculate') await workspace.consumeRequest(identity, 'calculate')
       const text = (name: string) => stringField(input, name)
       switch (input.action) {
+        case 'import-history': return privateResponse(await workspace.importHistory(identity, Number(input.page ?? 1)))
         case 'overview': return privateResponse(await workspace.overview(identity))
         case 'add-account': return privateResponse(await workspace.addAccount(identity, {
           portfolioId: text('portfolioId'), broker: text('broker'), label: text('label'), accountType: text('accountType'),

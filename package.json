@@ -1,5 +1,5 @@
 {
-  "name": "temp-app",
+  "name": "cgt-tracker",
   "version": "0.1.0",
   "private": true,
   "engines": {
@@ -7,9 +7,8 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "postbuild": "node scripts/ping-search-engines.js",
-    "start": "next start",
+    "build": "next build && node scripts/prepare-standalone.mjs",
+    "start": "node .next/standalone/server.js",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -17,15 +16,12 @@
     "check:core": "npm run typecheck:core && npm test",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:generate-auth": "tsx scripts/generate-auth-schema.ts",
-    "db:expire-drafts": "tsx scripts/expire-import-drafts.ts"
+    "db:expire-drafts": "tsx scripts/expire-import-drafts.ts",
+    "test:ui": "playwright test",
+    "check:design": "node scripts/check-design.mjs"
   },
   "dependencies": {
-    "@google/genai": "^1.48.0",
-    "@react-pdf/renderer": "^4.3.3",
-    "@supabase/ssr": "^0.10.0",
-    "@supabase/supabase-js": "^2.101.1",
     "better-auth": "1.7.25",
-    "date-fns": "^4.1.0",
     "decimal.js": "^10.6.0",
     "kysely": "0.29.9",
     "lucide-react": "^1.7.0",
@@ -38,8 +34,9 @@
     "stripe": "22.0.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
     "@electric-sql/pglite": "0.5.16",
-    "@tailwindcss/postcss": "^4",
+    "@playwright/test": "1.65.1",
     "@types/node": "^24",
     "@types/papaparse": "^5.5.2",
     "@types/pg": "8.23.1",
@@ -48,7 +45,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "fast-check": "4.3.0",
-    "tailwindcss": "^4",
+    "prettier": "3.10.1",
     "tsx": "4.23.15",
     "typescript": "^5",
     "vitest": "5.1.0"
