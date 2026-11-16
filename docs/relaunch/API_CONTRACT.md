@@ -19,10 +19,10 @@ Self-service email changes and account deletion are disabled pending verified bi
 | `overview` | None | One shared personal portfolio, accounts, latest 100 imports, current calculations and active previews. First visit creates the portfolio. Use `import-history` for full receipt navigation. |
 | `import-history` | `page` (1-based) | All owned import receipts, 25 per page, with total count and stable created-time/ID order. |
 | `add-account` | `portfolioId`, `broker`, `accountType: GIA`, `label` | Adds a taxable account, advances revision and invalidates calculations. Maximum 50 accounts. |
-| `prepare-import` | `accountId`, `format: native or canonical-v1`, `csv`, optional boolean `ordinarySharesConfirmed` | Stores a 24-hour preview and returns `draftId`, `revision`, counts, issues and first 100 records. Maximum five active drafts per user. |
-| `review-import` | `draftId`, `page` (1-based) | Re-parses server evidence against current records and returns 100-record pages. Total counts are always supplied; issues are bounded to 100 with `issueCount`. |
+| `prepare-import` | `accountId`, `format: native or canonical-v1`, `csv`, optional boolean `ordinarySharesConfirmed` | Stores a 24-hour preview and returns `draftId`, server-bound `accountId`, `revision`, counts, issues and first 100 records. Maximum five active drafts per user. |
+| `review-import` | `draftId`, `page` (1-based) | Re-parses server evidence against current records and returns the draft’s server-bound `accountId` and 100-record pages. Total counts are always supplied; issues are bounded to 100 with `issueCount`. |
 | `discard-draft` | `draftId` | Removes an uncommitted preview. Saved transactions are untouched. |
-| `commit-import` | `draftId`, `revision` | Revalidates under a portfolio lock. Returns `committed`, `already_committed`, `review_changed` or `needs_review`. The latter two use HTTP 409; show the new preview and require another confirmation. |
+| `commit-import` | `draftId`, `revision` | Revalidates under a portfolio lock. Returns `committed`, `already_committed`, `review_changed` or `needs_review`. The latter two use HTTP 409; show the new preview (including its server-bound `accountId`) and require another confirmation. Never label the preview using the current upload form selection. |
 | `reverse-import` | `importId`, `reason` | Deactivates that import's transactions, retains its receipt/history and invalidates calculations. Idempotent. |
 | `calculate` | `portfolioId`, `taxYear`, `historyThrough`, `confirmedAccountIds` | Reads all active trades through the date, creates an immutable calculation run and atomically updates the current pointer. Existing pending previews block calculation. |
 

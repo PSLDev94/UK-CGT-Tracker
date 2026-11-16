@@ -51,3 +51,8 @@ The currently implemented format is an internal template, not a native broker CS
 Decimal points are `.` with no currency symbols, grouping separators or exponent notation. CSV quoting and UTF-8 BOMs are supported. The limit is 10 MiB and 100,000 data records. Original monetary values, currency and exchange rate are retained in provenance. Converted GBP values use up to 12 decimal places; reporting rounds only at the documented output boundary.
 
 The preview classifies all parsed data records as accepted, excluded, duplicate or needs review. A single unresolved record blocks committing the entire file. Duplicate IDs with conflicting contents are flagged, not overwritten. An all-duplicate file is a no-op requiring an explanatory result, never a successful new import.
+
+
+## Hosted qualification
+
+On 16 November 2026, the Freetrade and Trading 212 GBP synthetic fixtures passed the deployed browser upload → review → save → calculation journey with independently expected £74.37 and £5.25 gains. Reversal retained audit history. Foreign currency was visibly blocked, while direct commit attempts for corporate actions, mixed valid/unsupported records and duplicate-only uploads returned 409 without creating imports. See [operations](ACCESS_AND_OPERATIONS.md#native-csv-qualification--16-november-2026). This evidence is limited to the named synthetic formats; HL, ii, IBKR and AJ Bell remain unverified and disabled for native import.

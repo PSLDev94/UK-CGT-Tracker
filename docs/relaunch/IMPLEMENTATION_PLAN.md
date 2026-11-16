@@ -16,12 +16,12 @@ The first increment added isolated financial modules to `src/domain`; the second
 | --- | --- | --- | --- |
 | 1 | Access and repository setup | GitHub checkout, service logins verified, private staging project | Management access verified; Resend and sandbox Stripe keys applied to staging |
 | 2 | Calculation core | Reproduced matching defects corrected; deterministic decimal arithmetic; missing history blocks totals | Implemented and tested; independent tax review still required |
-| 3 | Import safety foundation | Every data record classified; conflicts block commit; FX provenance retained | Canonical interchange format implemented; native adapters pending |
-| 4 | Fresh data model | Ownership constraints, immutable calculation runs, separate billing writes, rollback tests | Migrations qualified on PostgreSQL 18 in CI; Railway database online; five migrations and four runtime logins applied |
-| 5 | New application and authentication | Signup, verification, reset, sessions, account ownership and secure runtime setup verified | Backend, fresh UI and controlled browser tests implemented; hosted readiness/auth-boundary checks pass; email lifecycle pending |
-| 6 | Native broker adapters | Every named export variant passes representative anonymised fixtures and reconciliation checks | Limited GBP native preview readers for two observed schemas; source-documented synthetic corpus for all six; broader certification pending |
+| 3 | Import safety foundation | Every data record classified; conflicts block commit; FX provenance retained | Canonical interchange implemented; strict GBP native previews for two observed schemas deployed and qualified against the named synthetic fixtures |
+| 4 | Fresh data model | Ownership constraints, immutable calculation runs, separate billing writes, rollback tests | Migrations qualified on PostgreSQL 18 in CI; Railway database online; seven migrations and four runtime logins applied |
+| 5 | New application and authentication | Signup, verification, reset, sessions, account ownership and secure runtime setup verified | Backend, fresh UI and controlled browser tests implemented; hosted readiness/auth boundaries, verification delivery, password reset and session revocation verified |
+| 6 | Native broker adapters | Every named export variant passes representative anonymised fixtures and reconciliation checks | Two GBP native fixture journeys verified on staging; source-documented corpus for all six; broader certification pending |
 | 7 | Import and review workspace | Preview, repair, retry, correction, reversal, history and report-readiness flows | Transactional API and replacement UI implemented with paginated history and reversal; hosted template journey verified through reversal; richer correction tools pending |
-| 8 | Billing and reporting | Sandbox lifecycle tests; year-specific report checks; existing Stripe entitlements reconciled | Sandbox integration implemented and CI-qualified; staged deployment and hosted lifecycle checks pending. Reports remain pending |
+| 8 | Billing and reporting | Sandbox lifecycle tests; year-specific report checks; existing Stripe entitlements reconciled | Sandbox deployed; hosted checkout, paid access, portal and signed webhook delivery verified; cancellation, duplicate prevention and refund review hold verified. Renewal/3DS/dispute and recovery journeys remain. Reports remain pending |
 | 9 | Release qualification | Browser/security/accessibility/load/recovery tests; tax review; user acceptance | Pending |
 | 10 | Production release | Domain, TLS, callbacks, webhooks, email, monitoring, backup restoration and rollback verified | Pending |
 
@@ -96,12 +96,12 @@ Fresh pages cover account signup/sign-in/recovery/reset, account setup, explicit
 
 Local evidence: 111 financial/auth/API/display tests, seven production-build Chromium journeys, full lint/typecheck, production dependency audit (zero vulnerabilities), and the standalone Next build pass. Browser tests include automated WCAG A/AA scans, 375px layout, keyboard controls, modal focus restoration, interrupted upload recovery, pending-action controls and explicit leave confirmation. They use controlled API responses and synthetic data; they do not prove hosted database/email/payment operation. Docker packaging is prepared but has not been container-built locally because no Docker engine is available. Manual zoom, additional browsers and hosted load/recovery tests remain open.
 
-The migration/login job and staging web deployment are now applied. Hosted readiness, private-route boundaries and forged-header rate limiting pass. Next exercise real auth → import → calculation and sandbox billing. Keep www.cgttracker.com unchanged until the production release gates pass.
+The migration/login job and staging web deployment are now applied. Hosted readiness, private-route boundaries and forged-header rate limiting pass. Hosted auth → import → calculation/reversal is verified. Complete sandbox lifecycle, reports and recovery qualification next. Keep www.cgttracker.com unchanged until the production release gates pass.
 
 
 ## PostgreSQL deployment qualification
 
-PostgreSQL 18 is now running in Railway staging (Europe West, one replica, 1 GiB volume). The user applied the initial deployment in the dashboard after connector cancellation. Resend and Stripe variable names are confirmed in applied configuration; provider calls remain unverified.
+PostgreSQL 18 is now running in Railway staging (Europe West, one replica, 1 GiB volume). The user applied the initial deployment in the dashboard after connector cancellation. Resend delivery and Stripe hosted Checkout/Portal operations have runtime evidence in ACCESS_AND_OPERATIONS.md.
 
 The container now includes database migration, role-provisioning and expiry-cleanup commands. Eight added configuration tests reject wrong destinations, owner logins, weak/shared passwords and unexpected URL options before connecting. A separate PostgreSQL 18 CI suite tests actual migrations, idempotent setup, role restrictions, concurrent writes and verification/session revocation with captured mail. The one-time setup job completed separately from the web service; migration-owner credentials are not provided to the web runtime.
 
@@ -110,6 +110,15 @@ Concurrency review identified a retry edge case: another request can commit and 
 
 ## Hosted preview milestone
 
-The [staging preview](https://web-staging-e003bc3b.up.railway.app) is online at commit `cd660f0`. Readiness checks its actual private database connections. Hourly draft cleanup is deployed; its manual staging execution succeeded with zero expired drafts. No production DNS or live Stripe changes were made.
+The initial [staging preview](https://web-staging-e003bc3b.up.railway.app) launched at commit `cd660f0`; see ACCESS_AND_OPERATIONS.md for subsequent billing deployments and actual source revisions. Readiness checks its actual private database connections. Hourly draft cleanup is deployed; its manual staging execution succeeded with zero expired drafts. No production DNS or live Stripe changes were made.
 
 Verification now includes 119 core/configuration tests, 10 real PostgreSQL 18 qualification tests and seven controlled Chromium journeys in green CI, plus a repeatable hosted smoke probe and rendered-page inspection. The probe validates anonymous access rejection, foreign origins and resistance to forged IP rate-limit headers without creating accounts or sending email. This does not complete hosted authentication/email, native broker certification, billing, reports or recovery qualification. See access/operations for deployment IDs and evidence.
+
+
+## Next release work
+
+1. Expand representative broker evidence and implement qualified fee/FX/report variants; keep unsupported formats blocked. Add clearer assisted recovery without encouraging deletion or invented data.
+2. Build auditable year-specific reports and server-side paid-report entitlement enforcement, then commission independent UK tax review.
+3. Qualify renewal failure/recovery, 3DS, delayed webhook replay and disputes; implement periodic billing reconciliation, alerts and audited review/recovery tools.
+4. Exercise PostgreSQL backup restoration, load/security checks and immutable artifact rollback. Finish privacy/retention/account deletion and operator runbooks.
+5. Resolve VAT/Stripe Tax and existing-customer ownership policy, then obtain production launch approval for Cloudflare DNS and live billing.
