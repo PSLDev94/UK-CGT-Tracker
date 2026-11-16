@@ -14,9 +14,11 @@
     "test:watch": "vitest",
     "typecheck:core": "tsc -p tsconfig.core.json",
     "check:core": "npm run typecheck:core && npm test",
-    "db:migrate": "tsx scripts/migrate.ts",
+    "db:migrate": "node scripts/migrate.ts",
+    "db:provision-logins": "node scripts/provision-runtime-logins.ts",
     "db:generate-auth": "tsx scripts/generate-auth-schema.ts",
-    "db:expire-drafts": "tsx scripts/expire-import-drafts.ts",
+    "db:expire-drafts": "node scripts/expire-import-drafts.ts",
+    "test:postgres": "vitest run --config vitest.postgres.config.mts",
     "test:ui": "playwright test",
     "check:design": "node scripts/check-design.mjs"
   },

@@ -47,3 +47,29 @@ jobs:
           curl --fail http://127.0.0.1:3300/ --output /tmp/cgt-home.html
           node -e 'if (!require("node:fs").readFileSync("/tmp/cgt-home.html", "utf8").includes("Know how your")) process.exit(1)'
           test "$(curl --silent --output /tmp/cgt-setup.json --write-out '%{http_code}' http://127.0.0.1:3300/api/v2/auth/get-session)" = "503"
+
+  postgres:
+    name: PostgreSQL 18 migrations, roles and concurrency
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: disposable-ci-owner-password
+          POSTGRES_DB: cgt_qualification
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d cgt_qualification"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run test:postgres
+        env:
+          POSTGRES_TEST_DATABASE_URL: postgresql://postgres:disposable-ci-owner-password@localhost:5432/cgt_qualification
