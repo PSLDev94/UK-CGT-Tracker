@@ -160,4 +160,60 @@ describe("auditable report exports", () => {
     expect((await handler(request("summary"))).status).toBe(404);
     expect((await handler(request("arbitrary"))).status).toBe(400);
   });
+  it("keeps CSV working during a billing outage without granting PDF access or leaking provider errors", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const entitled = vi.fn(async () => {
+        throw new Error("private provider response and credentials");
+      });
+      const handler = createReportHandler({
+        readSession: session,
+        origin: "https://cgt.test",
+        snapshot: async () => snapshot,
+        entitled,
+        consume: async () => {},
+      });
+      expect((await handler(request("csv"))).status).toBe(200);
+      expect(entitled).not.toHaveBeenCalled();
+      const response = await handler(request("summary"));
+      expect(response.status).toBe(500);
+      expect(await response.text()).not.toContain("private provider");
+      expect(JSON.stringify(errorLog.mock.calls)).not.toContain("credentials");
+    } finally {
+      errorLog.mockRestore();
+    }
+  });
+  it("limits large evidence PDFs while leaving the complete CSV and summary available", async () => {
+    for (const disposals of [
+      Array.from({ length: 5001 }, () => snapshot.result.disposals[0]!),
+      [
+        {
+          ...snapshot.result.disposals[0]!,
+          sourceIds: Array.from({ length: 50001 }, (_, i) => `source-${i}`),
+        },
+      ],
+    ]) {
+      const handler = createReportHandler({
+        readSession: session,
+        origin: "https://cgt.test",
+        snapshot: async () => ({
+          ...snapshot,
+          result: { ...snapshot.result, disposals },
+        }),
+        entitled: async () => true,
+        consume: async () => {},
+      });
+      const blocked = await handler(request("evidence"));
+      expect(blocked.status).toBe(400);
+      expect((await blocked.json()).error.code).toBe("REPORT_TOO_LARGE");
+      const csv = await handler(request("csv"));
+      expect(csv.status).toBe(200);
+      expect(await csv.text()).toContain(disposals.at(-1)!.sourceIds.at(-1)!);
+      const summary = await handler(request("summary"));
+      expect(summary.status).toBe(200);
+      expect(
+        (await PDFDocument.load(await summary.arrayBuffer())).getPageCount(),
+      ).toBeGreaterThan(0);
+    }
+  });
 });

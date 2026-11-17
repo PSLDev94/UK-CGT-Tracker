@@ -29,6 +29,7 @@ Supporting details are stored with the draft, reviewed again at commit and retai
 - Current ownership, published revision and absence of pending previews are checked before export.
 - Incomplete results remain downloadable as explicitly marked drafts; unresolved values are never replaced with zero.
 - Over 5,000 disposal groups: use the full CSV and summary PDF instead of an unbounded evidence PDF.
+- All nine supported broker-format fixtures now exercise persisted CSV and both PDF export paths, including blocked/stale/reversed states. These use synthetic provider entitlements; hosted paid-account qualification remains pending.
 - These are calculation reports, not completed SA108 forms or a personal tax-liability calculation. Independent UK tax review remains required.
 
 ## Business decisions supplied by the owner

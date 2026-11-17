@@ -8,6 +8,9 @@ import {
   query,
 } from "../src/server/database";
 import { Workspace } from "../src/server/workspace";
+import { createReportHandler } from "../src/server/reports-api";
+import { PDFDocument } from "pdf-lib";
+import Papa from "papaparse";
 
 const csv = readFileSync(
   new URL("./fixtures/canonical-trades.csv", import.meta.url),
@@ -646,12 +649,57 @@ it.each(brokerCases)(
     expect((await workspace.reportSnapshot(user, run.runId)).result).toEqual(
       run.result,
     );
+    // Exercise real exports from the persisted native-broker result, with only
+    // the session/provider entitlement stubbed. These are not hosted Stripe tests.
+    const entitled = vi.fn(async () => true);
+    const reports = createReportHandler({
+      origin: "https://cgt.test",
+      readSession: async () => ({
+        user: { id: user.ownerId, emailVerified: true },
+        session: { expiresAt: new Date(Date.now() + 3600000) },
+      }),
+      snapshot: (identity, id) => workspace.reportSnapshot(identity, id),
+      consume: (identity) => workspace.consumeRequest(identity, "calculate"),
+      entitled,
+    });
+    const download = (kind: string) =>
+      reports(
+        new Request("https://cgt.test/api/v2/reports", {
+          method: "POST",
+          headers: {
+            origin: "https://cgt.test",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ kind, runId: run.runId }),
+        }),
+      );
+    const csvResponse = await download("csv");
+    expect(csvResponse.status).toBe(200);
+    const rows = Papa.parse<string[]>(await csvResponse.text()).data;
+    expect(rows).toContainEqual(["netGainGBP", c.gain]);
+    expect(rows).toContainEqual(["Calculation reference", run.runId]);
+    expect(entitled).not.toHaveBeenCalled();
+    for (const kind of ["summary", "evidence"]) {
+      const response = await download(kind);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-disposition")).toBe(
+        `attachment; filename="CGT-${kind}-2024-25.pdf"`,
+      );
+      expect(response.headers.get("cache-control")).toBe("private, no-store");
+      const document = await PDFDocument.load(await response.arrayBuffer());
+      expect(document.getTitle()).toContain("2024-25");
+      expect(document.getPageCount()).toBeGreaterThan(0);
+    }
+    entitled.mockResolvedValue(false);
+    expect((await download("summary")).status).toBe(402);
+    entitled.mockResolvedValue(true);
     const duplicate = await workspace.prepareImport(user, {
       accountId: account.id,
       csv: fixture(c),
       format: "native",
       ordinarySharesConfirmed: true,
     });
+    expect((await download("csv")).status).toBe(409);
     let reviewed = duplicate;
     for (const [record, details] of Object.entries(fixtureDetails(c)))
       reviewed = await workspace.supplyImportDetails(
@@ -682,6 +730,8 @@ it.each(brokerCases)(
     await expect(
       workspace.reportSnapshot(user, run.runId),
     ).rejects.toMatchObject({ status: 404 });
+    for (const kind of ["csv", "summary", "evidence"])
+      expect((await download(kind)).status).toBe(404);
     await expect(
       workspace.calculate(user, {
         portfolioId: portfolio.id,
