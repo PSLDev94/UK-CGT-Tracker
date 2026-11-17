@@ -122,3 +122,12 @@ Verification now includes 119 core/configuration tests, 10 real PostgreSQL 18 qu
 3. Qualify renewal failure/recovery, 3DS, delayed webhook replay and disputes; implement periodic billing reconciliation, alerts and audited review/recovery tools.
 4. Exercise PostgreSQL backup restoration, load/security checks and immutable artifact rollback. Finish privacy/retention/account deletion and operator runbooks.
 5. Resolve VAT/Stripe Tax and existing-customer ownership policy, then obtain production launch approval for Cloudflare DNS and live billing.
+
+
+## November 2026 interface redesign
+
+At the user's request, replaced the rejected initial visual system using inspected Mobbin examples (Stripe balance summaries and Monarch account/CSV import) and the Frontend Design Premium workflow. The app now has a compact branded rail without the duplicate marketing header, real account/import/preview counts, side-by-side account setup and account records, and a prominent net gain beside calculation settings. Public pages, authentication and billing share self-hosted Manrope/DM Sans and the new slate/indigo tokens. The home example explicitly labels its synthetic £795 − £404 = £391 calculation.
+
+Code revision: `5e6324994b1e65c8bf027614ef14630055412f24`. Local checks pass: 203 core tests, 10 Chromium journeys, WCAG A/AA scans in the exercised journeys, full TypeScript, lint, production build and all 15 design-token matches. Strict premium audit returns zero findings. The design.md CLI reports zero errors and five documentation-only orphan-token warnings; runtime CSS and the project's token contract verify those colours are consumed. Production dependency audit reports zero vulnerabilities. CI run [44054838414](https://github.com/PSLDev94/UK-CGT-Tracker/actions/runs/44054838414) also passes the real PostgreSQL 18 and portable-container jobs.
+
+Visual inspection covered the public home, account overview, import review, calculation evidence and the 375px mobile import form. A mobile-only broker-support navigation regression was found and fixed before release. The earlier side-tab accent finding is absent from the final stylesheet; no suppressions were added and no side accent border was retained. Before/after captures and an embedded comparison board are kept in `.private/redesign/` outside Git. Business rules, supported broker formats and production launch gates remain as documented above.
