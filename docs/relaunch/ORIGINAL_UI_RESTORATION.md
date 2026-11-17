@@ -36,3 +36,7 @@ Sources checked 17 November 2026:
 Core suite: 203 passing tests. Browser suite expands the existing import/billing/auth coverage to restored public routes, mobile accessibility, calculator boundaries, saved-evidence download, settings failure recovery and keyboard focus. Build, TypeScript, lint, design-token parity, DESIGN.md schema and strict premium audit are required before deployment. Browser mocks verify UI behaviour, not live account delivery or independent tax certification.
 
 Original guide accent borders and gradients are preserved as specifically requested original design. No blanket hook suppression is introduced. Production DNS, live payments, final filing exports and the broader relaunch gates remain outside this staging UI release.
+
+## Released staging evidence
+
+Deployed code `0a33bd30761414dabb2e7aa153a37391692b16e4`, Railway deployment `3e2a90fa-93a9-44d9-bf19-9e7ee1d1ef42`, verified SUCCESS. [CI 44060862069](https://github.com/PSLDev94/UK-CGT-Tracker/actions/runs/44060862069) is green across all three jobs. All 30 browser tests pass. Hosted saved-result display, CSV download, profile saving, import-screen loading and security/readiness smoke checks passed. Original source assets are byte-identical and all 24 original page paths exist. Staging remains at https://web-staging-e003bc3b.up.railway.app/.
