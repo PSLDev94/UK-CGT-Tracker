@@ -29,7 +29,7 @@ export default function BedAndBreakfastRulePage() {
         name: "Does the bed and breakfast rule apply to ISA shares?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "No. Shares held within an ISA are completely exempt from Capital Gains Tax, so the B&B rule is irrelevant. However, if you sell shares in a taxable account and repurchase within an ISA within 30 days, the B&B rule would still apply to the disposal in the taxable account.",
+          text: "ISA holdings are outside taxable share matching. Selling shares in a taxable account remains a disposal, but a purchase inside an ISA is not matched to it under the 30-day rule. ISA eligibility and subscription limits still apply.",
         },
       },
       {
@@ -223,12 +223,11 @@ export default function BedAndBreakfastRulePage() {
 
       <h3>Bed and Spouse</h3>
       <p>
-        Transfer shares to your spouse or civil partner (this is a no-gain,
-        no-loss transfer and is not a taxable event). Your spouse then sells and
-        repurchases in their own name. Each spouse has their own annual exempt
-        amount (£3,000 for 2025-26), so this can effectively double the
-        household&apos;s tax-free allowance. The 30-day rule does not apply
-        because the repurchase is by a different person.
+        A sale by one person and a genuine purchase by their spouse is different
+        from the same person selling and buying back. Simply transferring shares
+        to a spouse who then sells and repurchases does not avoid their own
+        30-day matching. Ownership, transfer and connected-person rules matter;
+        get advice before arranging a transaction.
       </p>
 
       <div className="bg-blue-50 border-l-4 border-blue-600 p-4 rounded-r-lg my-6 not-prose">
