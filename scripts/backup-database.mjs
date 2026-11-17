@@ -33,7 +33,7 @@ async function main() {
   const endpoint = new URL(process.env.BACKUP_S3_ENDPOINT || "");
   if (
     endpoint.protocol !== "https:" ||
-    !/^[a-f0-9]{32}\.r2\.cloudflarestorage\.com$/.test(endpoint.hostname) ||
+    !/^[a-f0-9]{32}(?:\.eu)?\.r2\.cloudflarestorage\.com$/.test(endpoint.hostname) ||
     endpoint.username ||
     endpoint.password ||
     endpoint.search ||

@@ -11,7 +11,7 @@ ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/db/migrations ./db/migrations
-COPY --from=builder --chown=node:node /app/scripts/migrate.ts /app/scripts/provision-runtime-logins.ts /app/scripts/expire-import-drafts.ts ./scripts/
+COPY --from=builder --chown=node:node /app/scripts/migrate.ts /app/scripts/provision-runtime-logins.ts /app/scripts/expire-import-drafts.ts /app/scripts/provision-backup-login.ts ./scripts/
 USER node
 EXPOSE 3000
 CMD ["node", "server.js"]
