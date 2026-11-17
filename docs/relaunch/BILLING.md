@@ -56,3 +56,10 @@ PDF reports call `Billing.status` server-side and reconcile current provider sta
 The portable image includes `jobs/reconcile-billing.cjs`. Run it hourly with only BILLING_DATABASE_URL, STRIPE_SECRET_KEY, STRIPE_ACCOUNT_ID, STRIPE_PRICE_ID, STRIPE_PORTAL_CONFIGURATION_ID and APP_ORIGIN. It validates the billing-only role and sandbox account, processes stale accounts in bounded batches, retains risk holds, reports counts without customer details, and exits non-zero on failure/incomplete traversal. No public route exposes this operator action.
 
 Owner confirmed PSL Digital is not VAT-registered, 17 November 2026. Retain £49/year with no VAT added; automatic tax remains off. Live keys stay locked pending production qualification and legacy-customer ownership reconciliation.
+
+
+### 17 November provider inventory and additional test setup
+
+Read-only inspection of live account `acct_1TKoVLJO9SvFmbaJ` returned no subscriptions and no payment intents, with `has_more=false` on both lists. No existing live subscription mapping is currently identified for migration; check again immediately before launch and do not infer ownership from email if records appear.
+
+A separate, unmapped sandbox customer without an email was created for provider-only renewal simulation: customer `cus_Ve3laT9O1ZrkuJ`, clock `clock_1UcldiJWYPaAvM6RveQ7Qhvf`, subscription `sub_1UcleOJWYPaAvM6ROj4bVKCt`. Initial invoice `in_1UcleOJWYPaAvM6RT6Qa7zxx` is paid £49 and the subscription is active. This is **not** a hosted-user entitlement or renewal pass; clock advancement still needs qualification. The mapped user retains the previous intentional refund hold.
