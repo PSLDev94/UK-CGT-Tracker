@@ -6,7 +6,15 @@ export function AuthPage({ mode, token }: { mode: AuthMode; token?: string }) {
       id="main"
       className={mode === "sign-up" ? "classic-signup" : "classic-auth"}
     >
-      <AuthForm mode={mode} token={token} />
+      <div
+        className={
+          mode === "sign-up"
+            ? "flex-1 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-20 xl:px-24"
+            : "contents"
+        }
+      >
+        <AuthForm mode={mode} token={token} />
+      </div>
       {mode === "sign-up" && (
         <aside className="hidden lg:block relative w-0 flex-1 bg-slate-900 overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-900" />
