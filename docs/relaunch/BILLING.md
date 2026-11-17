@@ -20,7 +20,7 @@ Webhook receipts and state changes commit together. Failure leaves the event ret
 
 For sandbox qualification, entitlement requires exactly one current subscription for the configured price/quantity, `active` status, a future period end, a paid current invoice belonging to that customer/subscription and current successful, non-refunded, undisputed payment evidence. Pending, overdue, unpaid, paused, trial and ambiguous subscriptions do not grant paid access. Scheduled cancellation keeps access through the paid period, capped at an earlier explicit cancellation date. Flexible billing portal cancellations use `cancel_at` even when `cancel_at_period_end` is false; the gateway normalizes both representations. See [Stripe billing-mode differences](https://docs.stripe.com/billing/subscriptions/billing-mode/compare#cancellations-in-the-customer-portal). Refund/dispute/fraud events place a persistent review hold, including after a later paid event; no automatic refund or cancellation is performed. Partial refunds also require review. These conservative rules must be reviewed with the business policy before live release.
 
-The synchronous webhook reconciler uses bounded provider timeouts and returns failure for retry. Durable queue processing, periodic background reconciliation and alerting are still required for production scale/recovery. Paid report enforcement will consume the reconciled entitlement when reports are implemented; billing does not lock customers out of their investment records.
+The synchronous webhook reconciler uses bounded provider timeouts and returns failure for retry. The hourly operator job described below reconciles stale accounts independently of browser visits. Durable queue processing and alerting remain production scale/recovery work. PDF downloads reconcile entitlement on the server; billing does not lock customers out of their investment records or CSV evidence.
 
 ## Runtime configuration
 
@@ -38,7 +38,7 @@ Add to staging web only after migration `0006_billing_checkout.sql`:
 
 The key needs account, product/price, portal configuration, subscriptions, invoices, invoice payments, payment intents and charges read permissions; Customer, Checkout Session and Portal Session creation permissions. Use the narrowest available permissions. Startup validates account identity, price currency/amount/interval/mode and portal cancellation. The ordinary readiness endpoint remains independent of optional billing.
 
-VAT/tax registration and price tax behaviour remain unconfirmed. Automatic tax is not enabled and no live price is changed. Complete that business decision before production checkout.
+The owner confirmed PSL Digital is not VAT-registered on 17 November 2026. Retain £49/year with no VAT added. Automatic tax is not enabled and no live price is changed.
 
 ## Verification
 
