@@ -96,3 +96,10 @@ Upload-size qualification subsequently accepted exactly 100,000 distinct executi
 Final application release `9e488d099f2590f3aad262a1a072238925ecd612` passed [CI 44099863569](https://github.com/PSLDev94/UK-CGT-Tracker/actions/runs/44099863569), all three jobs: 339 core tests, 33 browser checks, production build, dependency audit, portable container and PostgreSQL 18 qualification including encrypted isolated restore. Its immutable branch is `codex/staging-brokers-9e488d0`.
 
 The staging web source is now prepared at that exact commit in existing patch `5254377e-df8e-4691-b60b-cee04f66075c` (24 changes). Database-setup and backup worker remain at their previously approved `d7f992f` sources; their code and permissions did not change. The patch has not been applied, so the hosted web still runs the older build. Missing R2 credentials prevent a working backup run. A fresh signup/verification at the accessible support inbox has been requested to qualify paid PDF access without clearing the existing Gmail refund-review hold. No verification email has been sent to that address for this new purpose yet.
+
+
+## Backup verification and full restore audit — 17 November 2026
+
+Prepared a durable receipt written only after an encrypted archive's full readback succeeds, plus a bounded, read-only freshness command. Unverified uploads cannot make that command pass. A separate read-only token and monitored scheduler/alert delivery still need configuration; no new service or notifications have been enabled.
+
+Expanded the PostgreSQL restore comparison from four selected tables to every application/authentication/billing/migration table, with schema, grants and tenant-isolation checks. The qualification now deliberately corrupts restored billing data and disables restored RLS to demonstrate that each is detected. The two R2 credential variables are still absent in the latest Railway read, so the approved hosted backup deployment and recovery rehearsal remain pending. See `BACKUP_RECOVERY.md` for commands and limits.
