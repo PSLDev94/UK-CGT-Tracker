@@ -343,6 +343,15 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
       const row = (
         adapter ? adapter.normalize(source, supportingDetails) : source
       ) as Record<(typeof CANONICAL_HEADERS)[number], string>;
+      if (adapter && row.Type === "NON_TRANSACTION_DOCUMENT") {
+        records.push({
+          record,
+          status: "excluded",
+          reason:
+            "Statement notification only: no trade, quantity or cash values. Excluded from share gains.",
+        });
+        return;
+      }
       if (
         [
           "CASH_DEPOSIT",

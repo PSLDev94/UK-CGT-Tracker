@@ -75,3 +75,16 @@ Provider-only Stripe test-clock qualification completed an annual £49 renewal, 
 A second synthetic no-email customer completed a provider-only 3DS rejection/retry test. Failed authentication left the subscription incomplete and invoice unpaid; the next completed bank challenge produced paid £49 and active status, verified through API and hosted invoice UI. Private screenshots: `stripe-renewal-recovery.jpg`, `stripe-3ds-paid.jpg`, and `r2-retention-enabled.jpg`. No live Stripe writes or production deployment occurred.
 
 CI [065d8ba](https://github.com/PSLDev94/UK-CGT-Tracker/actions/runs/44086281752) passed all three jobs, including 255 core tests after the three HMRC-reference additions. This is source/CI evidence; it does not mean the staged backup worker has run.
+
+
+## Extended broker and calculation qualification — 17 November
+
+Release `8946a5f232c3b701e8f0e1f86967453d352f4e85` passed [all three CI jobs](https://github.com/PSLDev94/UK-CGT-Tracker/actions/runs/44098777352): application/browser checks, portable container, and PostgreSQL 18 roles/concurrency/encrypted restore. It adds the documented assisted AJ Bell GBP-history layout, Freetrade renamed amount columns and verified foreign FX fees. Nine corpus paths across all six brokers pass persisted import → supporting evidence → commit → calculation → snapshot → duplicate retry → audited reversal, both under the local PostgreSQL-compatible test engine and actual PostgreSQL 18.
+
+The expanded persisted tests exposed an order-dependent supporting-detail fingerprint: freshly edited JS objects and PostgreSQL JSONB could order the same fields differently. The correction preserves existing committed fingerprints and makes equivalent evidence independent of property order. Real PostgreSQL tests compare the fixed field order against its JSONB output and the historical hash construction. Changed financial values or provenance still conflict rather than overwrite records.
+
+The suite includes 675 seeded fractional-acquisition cases across nine source layouts using integer-pence expectations, and 500 generated histories compared with an independent exact-rational quarter-share model. Native normalization also passes same-day, 30-day and Section 104 matching together, plus cash mismatch, malformed columns, unknown activity, duplicates and corrected reexports. Existing 33 browser checks passed locally, including report download/gating, interrupted uploads, stale previews, account isolation, original routes and responsive accessibility. TypeScript, lint, production build and the design-token contract passed.
+
+A subsequent small change distinguishes Freetrade MONTHLY_STATEMENT/TAX_CERTIFICATE notifications from transactions: only metadata-only rows may be excluded, and every row remains counted. Any financial value on a notification blocks the file. This takes the local core suite to 331 tests; the final commit's CI must pass before updating the prepared release source.
+
+These additions are not deployed yet. The approved staging backup patch still lacks its two R2 credential variables and owner confirmation of recovery-key escrow. No production DNS, live payments or UI redesign was applied. Representative broker-export validation, tax review, monitoring, hosted backup/restore and mapped-user billing/report qualification remain open gates.

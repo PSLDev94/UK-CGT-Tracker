@@ -162,3 +162,48 @@ describe("Freetrade verified foreign fees and explicit renamed columns", () => {
     }
   });
 });
+
+it.each(["MONTHLY_STATEMENT", "TAX_CERTIFICATE"])(
+  "accounts for %s document notifications without dropping financial activity",
+  (type) => {
+    const r = rows();
+    const document = Object.fromEntries(
+      Object.keys(r[0]!).map((key) => [key, ""]),
+    );
+    Object.assign(document, {
+      Title: "Synthetic statement notification",
+      Type: type,
+      Timestamp: "2024-09-01T12:00:00.000Z",
+      "Account Currency": "GBP",
+    });
+    const review = reviewCsv(Papa.unparse([...r, document]), options);
+    expect(review.status).toBe("ready");
+    expect(review.counts).toMatchObject({
+      total: 4,
+      accepted: 2,
+      excluded: 2,
+      needsReview: 0,
+    });
+    expect(review.records[3]?.reason).toContain("Statement notification");
+    for (const field of [
+      "Quantity",
+      "Total Amount",
+      "Order ID",
+      "FX Fee Amount",
+      "Dividend Net Distribution Amount",
+    ]) {
+      const suspicious = reviewCsv(
+        Papa.unparse([...r, { ...document, [field]: "1" }]),
+        options,
+      );
+      expect(suspicious.status).toBe("needs_review");
+      expect(() => tradesFromReview(suspicious)).toThrow();
+    }
+    expect(
+      reviewCsv(
+        Papa.unparse([...r, { ...document, Type: "UNRECOGNISED_STATEMENT" }]),
+        options,
+      ).status,
+    ).toBe("needs_review");
+  },
+);

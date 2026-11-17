@@ -100,6 +100,24 @@ const freetrade: NativeAdapter = {
   idColumn: "Order ID",
   isTrade: (r) => r.Type === "ORDER",
   normalize(r, supplied) {
+    if (["MONTHLY_STATEMENT", "TAX_CERTIFICATE"].includes(r.Type ?? "")) {
+      const metadata = new Set([
+        "Title",
+        "Type",
+        "Timestamp",
+        "Account Currency",
+      ]);
+      if (
+        Object.entries(r).some(
+          ([key, value]) => !metadata.has(key) && value !== "",
+        )
+      )
+        throw new Error(
+          "A statement notification contains financial fields. Review it rather than excluding a possible transaction.",
+        );
+      if (r.Timestamp) ukTradeDate(r.Timestamp);
+      return { Type: "NON_TRANSACTION_DOCUMENT" };
+    }
     const exclusions: Row = {
       TOP_UP: "CASH_DEPOSIT",
       WITHDRAWAL: "CASH_WITHDRAWAL",
