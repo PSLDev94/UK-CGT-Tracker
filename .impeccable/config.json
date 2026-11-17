@@ -1,0 +1,35 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "gradient-text",
+        "value": "*",
+        "files": [
+          "src/app/page.tsx"
+        ],
+        "createdAt": "2026-11-17T10:07:10.636Z",
+        "reason": "User confirmed restoration of the original UI and branding; the blue-to-indigo minutes heading is preserved from revision 9ded8c0 and documented in DESIGN.md."
+      },
+      {
+        "rule": "gray-on-color",
+        "value": "*",
+        "files": [
+          "src/app/page.tsx"
+        ],
+        "createdAt": "2026-11-17T10:07:10.658Z",
+        "reason": "Agent: selector false positive at the page wrapper. Normal text is text-gray-900 on bg-white; selection:bg-blue-100 is paired with selection:text-blue-900. Restored page passes browser contrast checks."
+      },
+      {
+        "rule": "ai-color-palette",
+        "value": "*",
+        "files": [
+          "src/app/page.tsx"
+        ],
+        "createdAt": "2026-11-17T10:07:10.677Z",
+        "reason": "User confirmed restoration of original colours and logos; the Freetrade purple-to-pink broker tile and original hero accents are preserved from revision 9ded8c0, as recorded in DESIGN.md."
+      }
+    ]
+  }
+}
