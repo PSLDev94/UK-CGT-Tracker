@@ -1,4 +1,15 @@
 import { calendarDate, decimal, ukCalendarDate } from "../values";
+import {
+  hl,
+  ii,
+  ajbell,
+  ibkr,
+  HL_HEADERS,
+  II_HEADERS,
+  AJ_HEADERS,
+  IBKR_HEADERS,
+} from "./additional-brokers";
+import type { SupportingDetails } from "./supporting-details";
 import type { BrokerId } from "./brokers";
 
 // Exact, versioned layouts observed in public sample exports. Unknown columns
@@ -17,7 +28,7 @@ export interface NativeAdapter {
   version: string;
   idColumn: string;
   isTrade: (row: Row) => boolean;
-  normalize: (row: Row) => Row;
+  normalize: (row: Row, details?: SupportingDetails) => Row;
 }
 const sameHeaders = (actual: string[], expected: string[]) =>
   actual.length === expected.length &&
@@ -77,7 +88,7 @@ const freetrade: NativeAdapter = {
   version: "freetrade-activity-29-gbp-v1",
   idColumn: "Order ID",
   isTrade: (r) => r.Type === "ORDER",
-  normalize(r) {
+  normalize(r, supplied) {
     const exclusions: Row = {
       TOP_UP: "CASH_DEPOSIT",
       WITHDRAWAL: "CASH_WITHDRAWAL",
@@ -91,15 +102,31 @@ const freetrade: NativeAdapter = {
       );
     if (r["Buy / Sell"] !== "BUY" && r["Buy / Sell"] !== "SELL")
       throw new Error("Freetrade order direction must be BUY or SELL.");
-    if (r["Account Currency"] !== "GBP" || r["Instrument Currency"] !== "GBP")
+    if (r["Account Currency"] !== "GBP")
       throw new Error(
-        "This Freetrade variant currently supports GBP-priced trades in GBP accounts. Foreign-currency trades need a verified FX mapping.",
+        "This Freetrade export must have a GBP account currency.",
       );
+    const foreign = r["Instrument Currency"] !== "GBP";
+    if (
+      foreign &&
+      (!supplied?.netAmountConfirmed ||
+        supplied.currency !== r["Instrument Currency"] ||
+        supplied.isin !== r.ISIN)
+    )
+      throw new Error(
+        "Verify the foreign-currency execution and supply the ISIN and trade-date GBP conversion in supporting details.",
+      );
+    const rate = foreign
+      ? decimal(supplied!.gbpPerUnit, "GBP per unit")
+      : decimal("1", "GBP per unit");
+    if (!rate.gt(0)) throw new Error("GBP conversion must be positive.");
     for (const key of ["FX Fee Amount", "FX Fee (BPS)"])
       zeroOrBlank(r[key]!, key);
     for (const key of ["FX Rate", "Base FX Rate"])
-      if (r[key] && !decimal(r[key]!, key).eq(1))
-        throw new Error(`${key} must be blank or 1 for a GBP trade.`);
+      if (r[key] && !decimal(r[key]!, key).times(rate).toDP(6).eq(1))
+        throw new Error(
+          `${key} does not reconcile with the verified GBP conversion.`,
+        );
     for (const key of FREETRADE_HEADERS.filter((h) =>
       h.startsWith("Dividend "),
     ))
@@ -110,20 +137,31 @@ const freetrade: NativeAdapter = {
       throw new Error(
         "Zero-price orders can represent corporate actions and need review.",
       );
-    const gross = money(r["Total Shares Amount"]!, "Total Shares Amount"),
+    const sourceGross = money(r["Total Shares Amount"]!, "Total Shares Amount"),
+      gross = sourceGross.times(rate).toDP(2),
       stamp = money(r["Stamp Duty"] || "0", "Stamp Duty"),
       total = money(r["Total Amount"]!, "Total Amount");
     if (
-      !price.eq(
-        decimal(
-          r["Price per Share in Account Currency"]!,
-          "Price per Share in Account Currency",
-        ),
-      ) ||
-      !quantity.times(price).toDP(2).eq(gross)
+      !price
+        .times(rate)
+        .toDP(8)
+        .eq(
+          decimal(
+            r["Price per Share in Account Currency"]!,
+            "Price per Share in Account Currency",
+          ).toDP(8),
+        ) ||
+      !quantity.times(price).toDP(2).eq(sourceGross)
     )
       throw new Error(
         "Freetrade quantity, prices and gross amount do not reconcile to the penny.",
+      );
+    if (
+      foreign &&
+      !decimal(supplied!.fees, "Fees").times(rate).toDP(2).eq(stamp)
+    )
+      throw new Error(
+        "Verified fees do not match the GBP stamp duty; non-zero FX fees need a separately qualified mapping.",
       );
     if (r["Buy / Sell"] === "SELL" && !stamp.isZero())
       throw new Error("Stamp duty on a sale needs review.");
@@ -146,7 +184,7 @@ const trading212: NativeAdapter = {
   version: "trading212-invest-21-gbp-v1",
   idColumn: "ID",
   isTrade: (r) => /^(Market|Limit|Stop|Stop limit) (buy|sell)$/.test(r.Action!),
-  normalize(r) {
+  normalize(r, supplied) {
     const exclusions: Row = {
       Deposit: "CASH_DEPOSIT",
       Withdrawal: "CASH_WITHDRAWAL",
@@ -158,32 +196,64 @@ const trading212: NativeAdapter = {
       throw new Error(
         `Trading 212 activity “${r.Action}” needs review. Corporate actions, distributions and adjustments must not be silently excluded.`,
       );
+    const currency = r["Currency (Price / share)"]!;
+    if (r["Currency (Total)"] !== "GBP")
+      throw new Error("This Trading 212 reader requires GBP cash totals.");
+    const foreign = !["GBP", "GBX"].includes(currency);
     if (
-      r["Currency (Price / share)"] !== "GBP" ||
-      r["Currency (Total)"] !== "GBP"
+      foreign &&
+      (!supplied?.netAmountConfirmed ||
+        supplied.currency !== currency ||
+        supplied.isin !== r.ISIN)
     )
       throw new Error(
-        "This Trading 212 variant currently supports GBP-priced trades with GBP totals. Foreign currency and GBX/pence need a verified mapping.",
+        "Supply the verified foreign-currency ISIN, trade-date GBP conversion and fees from the execution statement.",
       );
-    if (!decimal(r["Exchange rate"]!, "Exchange rate").eq(1))
-      throw new Error("A GBP trade must have an exchange rate of 1.");
-    for (const key of [
-      "Transaction fee",
-      "Currency conversion fee",
-      "Withholding tax",
-    ])
-      zeroOrBlank(r[key]!, key);
-    // Non-zero costs are intentionally blocked until their separate currencies and net/gross semantics are qualified.
+    const rate = foreign
+      ? decimal(supplied!.gbpPerUnit, "GBP per unit")
+      : decimal("1", "Rate");
+    if (
+      !rate.gt(0) ||
+      !decimal(r["Exchange rate"]!, "Exchange rate").times(rate).toDP(6).eq(1)
+    )
+      throw new Error(
+        "Export exchange rate and verified GBP conversion do not reconcile.",
+      );
+    zeroOrBlank(r["Withholding tax"]!, "Withholding tax");
     const quantity = decimal(r["No. of shares"]!, "No. of shares"),
-      price = decimal(r["Price / share"]!, "Price / share"),
-      total = money(r.Total!, "Total");
+      price = decimal(r["Price / share"]!, "Price / share").div(
+        currency === "GBX" ? 100 : 1,
+      ),
+      total = money(r.Total!, "Total"),
+      gross = quantity.times(price).times(rate).toDP(2);
+    let fees = decimal("0", "Fees");
+    for (const name of ["Transaction fee", "Currency conversion fee"]) {
+      const fee = decimal(r[name] || "0", name),
+        feeCurrency = r[`Currency (${name})`];
+      if (!fee.isZero()) {
+        if (feeCurrency !== "GBP")
+          throw new Error(
+            "This layout requires separately identified GBP dealing and conversion fees.",
+          );
+        fees = fees.plus(fee);
+      }
+    }
+    if (
+      foreign &&
+      !decimal(supplied!.fees, "Verified fees").times(rate).toDP(2).eq(fees)
+    )
+      throw new Error("Supporting fees do not match the exported GBP fees.");
     if (!quantity.gt(0) || !price.gt(0) || !total.gt(0))
       throw new Error(
-        "Zero-value trades can represent takeovers or other corporate actions and need review.",
+        "Zero-value trades can represent corporate actions and need review.",
       );
-    if (!quantity.times(price).toDP(2).eq(total))
+    if (
+      !(r.Action!.endsWith("buy") ? gross.plus(fees) : gross.minus(fees)).eq(
+        total,
+      )
+    )
       throw new Error(
-        "Trading 212 quantity times price does not match Total to the penny.",
+        "Trading 212 quantity, price, GBP conversion, fees and Total do not reconcile to the penny.",
       );
     return trade(
       r.ID!,
@@ -191,8 +261,8 @@ const trading212: NativeAdapter = {
       r.Action!.endsWith("buy") ? "BUY" : "SELL",
       r.ISIN!,
       quantity.toString(),
-      total.toString(),
-      "0",
+      gross.toString(),
+      fees.toString(),
     );
   },
 };
@@ -200,6 +270,13 @@ export function nativeAdapter(
   broker: BrokerId,
   headers: string[],
 ): NativeAdapter | undefined {
+  for (const [id, expected, adapter] of [
+    ["hl", HL_HEADERS, hl],
+    ["ii", II_HEADERS, ii],
+    ["ajbell", AJ_HEADERS, ajbell],
+    ["ibkr", IBKR_HEADERS, ibkr],
+  ] as const)
+    if (broker === id && sameHeaders(headers, [...expected])) return adapter;
   if (broker === "freetrade" && sameHeaders(headers, FREETRADE_HEADERS))
     return freetrade;
   if (broker === "trading212" && sameHeaders(headers, TRADING212_HEADERS))
@@ -207,12 +284,12 @@ export function nativeAdapter(
 }
 export const NATIVE_GUIDANCE: Record<BrokerId, string> = {
   freetrade:
-    "Use the Activity Feed CSV. Only the documented 29-column GBP trade variant is supported in this preview. Transfers and some corporate actions may be missing from the export; reconcile the complete history separately.",
+    "Use the Activity Feed CSV. The documented 29-column layout supports GBP trades and verified foreign trades with zero FX fees. Transfers and some corporate actions may be missing from the export; reconcile the complete history separately.",
   trading212:
-    "Use the Invest account History CSV with all activity categories. Only the documented 21-column GBP trade variant is supported in this preview. Pie holdings and CFD exports cannot establish share acquisition history.",
-  hl: "HL Transaction Summary files need verified security identifiers and dealing-cost details from matching contract notes. Unit cost may be in pence. This CSV cannot be imported on its own yet.",
-  ii: "Interactive Investor exports can identify securities by SEDOL and may omit the wallet currency. Confirm the security ISIN, wallet currency, execution amounts and fees before converting to the template.",
-  ibkr: "IBKR Activity Statements, Flex Queries and Transaction History are different formats. A Flex Query must include execution IDs, ISINs, asset categories, currency, gross proceeds, commission and trade-date FX. Sectioned reports are not yet supported.",
+    "Use the Invest account History CSV with all activity categories. The documented 21-column layout supports GBP/GBX prices, separately identified GBP fees and verified foreign trades with GBP totals. Pie holdings and CFD exports cannot establish share acquisition history.",
+  hl: "HL Transaction Summary files need verified security identifiers and dealing-cost details from matching contract notes. Unit cost may be in pence. Supply these details in the preview; every trade must reconcile before saving.",
+  ii: "Interactive Investor exports can identify securities by SEDOL and may omit the wallet currency. Confirm the security ISIN, wallet currency, execution amounts and fees in the supporting-details form beside each unresolved record.",
+  ibkr: "IBKR Activity Statements, Flex Queries and Transaction History are different formats. A Flex Query must include execution IDs, ISINs, asset categories, currency, gross proceeds, commission and trade-date FX. Use the documented 16-column execution Flex layout; other sectioned layouts remain blocked.",
   ajbell:
-    "AJ Bell descriptions alone cannot identify a security safely. Verify ISINs, price units, dealing charges and GBP consideration against contract notes before converting to the template.",
+    "AJ Bell descriptions alone cannot identify a security safely. Verify ISINs, price units, dealing charges and GBP consideration against contract notes in the supporting-details form beside each unresolved record.",
 };

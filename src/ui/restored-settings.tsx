@@ -197,12 +197,13 @@ export function RestoredSettings() {
         </h2>
         <p>
           Reverse individual imports from Import history. Permanent data
-          deletion is unavailable while retention and billing-record
-          requirements are being completed.
+          deletion requests are handled by support after verifying account
+          ownership and any record-retention requirements. Subscription
+          cancellation is separate.
         </p>
-        <Button variant="danger" disabled>
-          Delete all transaction data
-        </Button>
+        <Link className="button secondary" href="/dashboard/contact">
+          Contact support about data deletion
+        </Link>
       </section>
     </div>
   );

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Client, Pool } from 'pg'
 import { Kysely, PostgresDialect } from 'kysely'
@@ -57,7 +57,7 @@ describe('PostgreSQL 18 deployment qualification',()=> {
   it('applies migrations once and verifies existing logins without rotating passwords', async()=> {
     expect(run('scripts/migrate.ts')).toBe('')
     expect(run('scripts/provision-runtime-logins.ts')).toContain('Four separate runtime logins verified')
-    expect((await owner.query('SELECT count(*)::int AS count FROM cgt_migrations.applied')).rows[0].count).toBe(7)
+    expect((await owner.query('SELECT count(*)::int AS count FROM cgt_migrations.applied')).rows[0].count).toBe(readdirSync('db/migrations').filter(f=>f.endsWith('.sql')).length)
     await expect(assertRuntimeRole(app,'cgt_app')).resolves.toBeUndefined()
     await expect(assertRuntimeRole(authDb,'cgt_auth')).resolves.toBeUndefined()
     await expect(assertRuntimeRole(billingDb,'cgt_billing')).resolves.toBeUndefined()

@@ -1,3 +1,5 @@
+import { reportCsv } from "../src/domain/reports/report";
+import { reportPdf } from "../src/domain/reports/pdf";
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { readFileSync } from "node:fs";
@@ -146,6 +148,10 @@ async function mockWorkspace(
     calculations: [],
   };
   let currentPreview: Preview | null = null;
+  let currentCsv = "";
+  let currentDetails: import("../src/domain/imports/supporting-details").ImportDetails =
+    {};
+  let ordinaryConfirmed = false;
   let conflict = !!options.conflict;
   await page.route("**/api/v2/auth/**", (route) =>
     route.fulfill({
@@ -186,8 +192,12 @@ async function mockWorkspace(
         });
         return route.fulfill({ status: 201, json: state.accounts[0] });
       case "prepare-import": {
+        currentCsv = body.csv;
+        currentDetails = {};
+        ordinaryConfirmed = body.ordinarySharesConfirmed;
         const review = reviewCsv(body.csv, {
-          broker: "trading212",
+          broker: state.accounts[0]!
+            .broker as import("../src/domain/imports/brokers").BrokerId,
           accountId,
           accountType: "GIA",
           format: body.format,
@@ -212,6 +222,29 @@ async function mockWorkspace(
           },
         ];
         return route.fulfill({ status: 201, json: currentPreview });
+      }
+      case "supply-import-details": {
+        currentDetails[String(body.record)] = body.details;
+        const review = reviewCsv(currentCsv, {
+          broker: state.accounts[0]!
+            .broker as import("../src/domain/imports/brokers").BrokerId,
+          accountId,
+          accountType: "GIA",
+          format: "native",
+          ordinarySharesConfirmed: ordinaryConfirmed,
+          supportingDetails: currentDetails,
+        });
+        currentPreview = {
+          ...currentPreview!,
+          reviewVersion: (currentPreview?.reviewVersion ?? 0) + 1,
+          review: {
+            ...review,
+            page: 1,
+            pageSize: 100,
+            issueCount: review.issues.length,
+          },
+        };
+        return route.fulfill({ json: currentPreview });
       }
       case "review-import":
         return route.fulfill({ json: currentPreview });
@@ -336,8 +369,8 @@ test("home and broker support are honest, responsive and accessible", async ({
   });
   await page.goto("/supported-brokers");
   await expect(
-    page.getByText("Native CSV verification pending", { exact: true }),
-  ).toHaveCount(4);
+    page.getByText("Assisted import", { exact: true }),
+  ).toHaveCount(3);
   const download = page.waitForEvent("download");
   await page.getByRole("link", { name: "Download CSV template" }).click();
   expect((await download).suggestedFilename()).toBe("cgt-trades.csv");
@@ -815,14 +848,57 @@ test("restored reports export saved evidence and settings retain edits after fai
   state.calculations = [
     { id: "saved", tax_year: "2024-25", result, coverage_confirmed: true },
   ];
+  await page.route("**/api/v2/reports", async (route) => {
+    const input = route.request().postDataJSON();
+    expect(input.runId).toBe("saved");
+    const snapshot = {
+      id: "saved",
+      input_digest: "synthetic-digest",
+      created_at: "2026-11-17T12:00:00Z",
+      coverage_confirmed: true,
+      result,
+    };
+    return route.fulfill({
+      contentType: input.kind === "csv" ? "text/csv" : "application/pdf",
+      body:
+        input.kind === "csv"
+          ? reportCsv(snapshot)
+          : Buffer.from(await reportPdf(snapshot, input.kind === "evidence")),
+    });
+  });
   await page.goto("/dashboard/reports");
   const downloaded = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download CSV preview" }).click();
+  await page.getByRole("button", { name: "Download CSV evidence" }).click();
   const download = await downloaded;
   const content = readFileSync((await download.path())!, "utf8");
-  expect(content).toContain("PREVIEW ONLY - NOT A TAX RETURN");
+  expect(content).toContain("Not a tax return or personal tax liability");
   expect(content).toContain("2024-25");
   expect(content).toContain(result.disposals[0]!.securityId);
+  const pdfDownloaded = page.waitForEvent("download");
+  await page
+    .getByRole("button", { name: "Download PDF", exact: true })
+    .first()
+    .click();
+  expect((await pdfDownloaded).suggestedFilename()).toBe(
+    "CGT-summary-2024-25.pdf",
+  );
+  await page.route("**/api/v2/reports", (route) =>
+    route.fulfill({
+      status: 402,
+      json: {
+        error: {
+          message: "An active subscription is required for PDF reports.",
+        },
+      },
+    }),
+  );
+  await page
+    .getByRole("button", { name: "Download PDF", exact: true })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("link", { name: "View subscription" }),
+  ).toBeVisible();
   await page.goto("/dashboard/tax-loss-harvesting");
   await expect(page.getByText(/Snapshot at/)).toBeVisible();
   const price = page.getByLabel(
@@ -896,4 +972,129 @@ test("original menus restore keyboard focus on Escape", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Open menu", exact: true }),
   ).toBeFocused();
+});
+
+test("assisted HL import preserves source evidence, validates details and enables an explicit commit", async ({
+  page,
+}) => {
+  const { state, calls } = await mockWorkspace(page, { account: true });
+  state.accounts[0]!.broker = "hl";
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/dashboard/upload");
+  await page
+    .getByLabel("Broker account", { exact: true })
+    .selectOption(accountId);
+  await page
+    .getByLabel("CSV file", { exact: true })
+    .setInputFiles("tests/fixtures/brokers/hl-contract-note-required.csv");
+  await page
+    .getByRole("checkbox", { name: /For a native broker export/ })
+    .check();
+  await page.getByRole("button", { name: "Review file", exact: true }).click();
+  await page
+    .getByText(/Supply or review supporting details for record/)
+    .click();
+  await page
+    .getByRole("button", { name: "Check and save supporting details" })
+    .click();
+  await expect(page.getByLabel("Verified ISIN", { exact: true })).toBeFocused();
+  await page.getByLabel("Verified ISIN", { exact: true }).fill("GB0008706128");
+  await page.getByLabel("Trade currency", { exact: true }).fill("GBP");
+  await page.getByLabel("GBP per currency unit", { exact: true }).fill("1");
+  await page
+    .getByLabel("Price units in the export", { exact: true })
+    .selectOption("minor");
+  await page
+    .getByLabel("Dealing fees and transaction taxes", { exact: true })
+    .fill("14.45");
+  await page
+    .getByLabel("Supporting statement or contract-note reference", {
+      exact: true,
+    })
+    .fill("Synthetic contract note B900000001");
+  await page.getByRole("checkbox", { name: /I checked the currency/ }).check();
+  await page
+    .getByRole("button", { name: "Check and save supporting details" })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Save 1 transactions" }),
+  ).toBeEnabled();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth + 1,
+    ),
+  ).toBe(true);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.screenshot({
+    path: ".private/screenshots/assisted-hl-review.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Save 1 transactions" }).click();
+  expect(calls).toContain("supply-import-details");
+  expect(calls).toContain("commit-import");
+});
+
+test("contact sends through the service, preserves failed input and retries with the same reference", async ({
+  page,
+}) => {
+  const bodies: { requestId: string }[] = [];
+  await page.route("**/api/v2/contact", (route) => {
+    bodies.push(route.request().postDataJSON());
+    return route.fulfill({
+      status: bodies.length === 1 ? 503 : 200,
+      json:
+        bodies.length === 1
+          ? { error: { message: "Temporary delivery problem. Try again." } }
+          : { accepted: true },
+    });
+  });
+  await page.goto("/contact");
+  await page.getByLabel("Full Name", { exact: true }).fill("Synthetic test");
+  await page
+    .getByLabel("Email Address", { exact: true })
+    .fill("synthetic@example.test");
+  await page
+    .getByLabel("Message", { exact: true })
+    .fill("Synthetic support test without external delivery.");
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(page.locator("#contact-error")).toContainText(
+    "Temporary delivery problem",
+  );
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
+    "Synthetic support test without external delivery.",
+  );
+  await page.getByRole("button", { name: "Send message" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Message Accepted" }),
+  ).toBeVisible();
+  expect(bodies[0]!.requestId).toBe(bodies[1]!.requestId);
+});
+
+test("HTML has fresh script nonces and blocks injected inline script", async ({
+  page,
+}) => {
+  await page.route('http://127.0.0.1:3200/', async route => {
+    const response = await route.fetch();
+    const html = (await response.text()).replace('</body>', '<script>window.__cgtInjected = true</script></body>');
+    await route.fulfill({ response, body: html });
+  });
+  const response = await page.goto("/");
+  const policy = response!.headers()["content-security-policy"]!;
+  expect(policy).toContain("'strict-dynamic'");
+  expect(policy).not.toContain("'unsafe-eval'");
+  const first = policy.match(/'nonce-([^']+)'/)![1];
+  expect(
+    await page.evaluate(() => Object.hasOwn(window, "__cgtInjected")),
+  ).toBe(false);
+  const second = await page.reload();
+  expect(second!.headers()["content-security-policy"]).not.toContain(
+    `nonce-${first}`,
+  );
+  await page
+    .getByRole("link", { name: "Log in", exact: false })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("heading", { name: /Sign in to your account/i }),
+  ).toBeVisible();
 });

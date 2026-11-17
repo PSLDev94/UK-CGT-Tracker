@@ -62,7 +62,7 @@ export default async function PricingPage() {
               <li className="flex items-start">
                 <CheckCircle className="w-6 h-6 text-green-500 mr-3 flex-shrink-0" />
                 <span className="text-gray-700">
-                  Calculation evidence; final tax reports in qualification
+                  PDF summaries and detailed calculation evidence
                 </span>
               </li>
             </ul>

@@ -1,4 +1,7 @@
 "use client";
+import { useEffect, useState } from "react";
+import { ImportDetailsForm } from "./import-details-form";
+import type { SupportingDetails } from "../domain/imports/supporting-details";
 import { Button, Notice } from "./primitives";
 import type { Preview } from "./workspace-types";
 
@@ -9,6 +12,8 @@ export function ImportReviewPanel({
   onPage,
   onCommit,
   onDiscard,
+  onDetails,
+  onDirty,
 }: {
   preview: Preview;
   accountLabel: string;
@@ -16,8 +21,13 @@ export function ImportReviewPanel({
   onPage: (page: number) => void;
   onCommit: () => void;
   onDiscard: () => void;
+  onDetails: (record: number, details: SupportingDetails) => Promise<void>;
+  onDirty: (dirty: boolean) => void;
 }) {
   const { review } = preview;
+  const [dirtyRecords, setDirtyRecords] = useState<Set<number>>(new Set());
+  const detailsDirty = dirtyRecords.size > 0;
+  useEffect(() => () => onDirty(false), [onDirty]);
   const pages = Math.max(1, Math.ceil(review.counts.total / review.pageSize));
   return (
     <section className="panel" aria-labelledby="review-title">
@@ -53,7 +63,9 @@ export function ImportReviewPanel({
           {review.status === "unsupported"
             ? "This format is not verified. No transactions can be saved."
             : "This file is not ready to save. Resolve the records below, or discard an all-duplicate preview."}{" "}
-          Correct the source file and upload it again.
+          Supply missing details below where available. For other issues, check
+          the export and upload a corrected file; do not delete unexplained
+          rows.
         </Notice>
       )}
       {review.issues.length > 0 && (
@@ -111,6 +123,20 @@ export function ImportReviewPanel({
                 </td>
                 <td className="reason">
                   {row.reason}
+                  {row.canSupplyDetails && (
+                    <ImportDetailsForm
+                      row={row}
+                      busy={busy}
+                      onSave={onDetails}
+                      onDirty={(dirty) => {
+                        const next = new Set(dirtyRecords);
+                        if (dirty) next.add(row.record);
+                        else next.delete(row.record);
+                        setDirtyRecords(next);
+                        onDirty(next.size > 0);
+                      }}
+                    />
+                  )}
                   {row.trade && (
                     <small style={{ display: "block" }}>
                       {row.trade.date} · {row.trade.side} · {row.trade.quantity}{" "}
@@ -127,7 +153,7 @@ export function ImportReviewPanel({
         <div className="pagination">
           <Button
             variant="secondary"
-            disabled={busy || review.page === 1}
+            disabled={busy || detailsDirty || review.page === 1}
             onClick={() => onPage(review.page - 1)}
           >
             Previous
@@ -137,16 +163,22 @@ export function ImportReviewPanel({
           </span>
           <Button
             variant="secondary"
-            disabled={busy || review.page === pages}
+            disabled={busy || detailsDirty || review.page === pages}
             onClick={() => onPage(review.page + 1)}
           >
             Next
           </Button>
         </div>
       )}
+      {detailsDirty && (
+        <Notice tone="warning">
+          Check and save or reset your supporting details before changing pages
+          or saving transactions.
+        </Notice>
+      )}
       <div className="actions">
         {review.status === "ready" && (
-          <Button busy={busy} onClick={onCommit}>
+          <Button busy={busy} disabled={detailsDirty} onClick={onCommit}>
             {busy
               ? "Saving…"
               : `Save ${review.counts.accepted.toLocaleString("en-GB")} transactions`}

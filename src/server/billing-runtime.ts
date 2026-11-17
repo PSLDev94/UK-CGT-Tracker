@@ -68,6 +68,7 @@ async function initialise() {
     const billing = new Billing(db, gateway, config);
     const application = await runtime();
     return {
+      billing,
       handler: createBillingHandler(
         billing,
         (headers) => application.auth.api.getSession({ headers }),

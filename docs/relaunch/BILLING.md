@@ -48,3 +48,11 @@ Tests cover persisted idempotency, expiry, duplicate prevention, authorization, 
 ### Hosted evidence
 
 On 16 November 2026, the real staging application completed sandbox Checkout, received signed webhook deliveries, reconciled paid access, opened the Customer Portal and blocked duplicate checkout. Portal cancellation exposed a flexible-billing date mismatch; the corrected gateway was redeployed and the scheduled end was verified in the browser. A full test refund produced a persisted review hold and revoked paid access; cancelling the test subscription did not clear that hold or block access to saved investment records. See [operations evidence](ACCESS_AND_OPERATIONS.md#billing-deployment-and-release-control--16-november-2026) for revisions and remaining lifecycle gates. The authorised test account intentionally remains under billing review after this test.
+
+## Review increment: report access and reconciliation
+
+PDF reports call `Billing.status` server-side and reconcile current provider state on every download. CSV evidence remains available without a subscription. An unavailable provider or a risk hold never grants PDF access.
+
+The portable image includes `jobs/reconcile-billing.cjs`. Run it hourly with only BILLING_DATABASE_URL, STRIPE_SECRET_KEY, STRIPE_ACCOUNT_ID, STRIPE_PRICE_ID, STRIPE_PORTAL_CONFIGURATION_ID and APP_ORIGIN. It validates the billing-only role and sandbox account, processes stale accounts in bounded batches, retains risk holds, reports counts without customer details, and exits non-zero on failure/incomplete traversal. No public route exposes this operator action.
+
+Owner confirmed PSL Digital is not VAT-registered, 17 November 2026. Retain £49/year with no VAT added; automatic tax remains off. Live keys stay locked pending production qualification and legacy-customer ownership reconciliation.

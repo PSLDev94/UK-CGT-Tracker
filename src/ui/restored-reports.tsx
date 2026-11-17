@@ -1,83 +1,111 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { FileText, Table, Download } from "lucide-react";
 import { workspaceApi } from "./api";
 import type { Overview } from "./workspace-types";
-import { Notice, Button } from "./primitives";
+import { Notice, Button, SelectField } from "./primitives";
+import type { ReportKind } from "../domain/reports/report";
+
+const cards: {
+  kind: ReportKind;
+  title: string;
+  text: string;
+  icon: typeof FileText;
+}[] = [
+  {
+    kind: "summary",
+    title: "CGT Summary PDF",
+    text: "Gains, losses, costs and history coverage from your saved calculation. PDF downloads require an active subscription.",
+    icon: FileText,
+  },
+  {
+    kind: "evidence",
+    title: "Calculation Evidence PDF",
+    text: "Disposals, same-day and 30-day matching, Section 104 pools and transaction references for your records or accountant.",
+    icon: FileText,
+  },
+  {
+    kind: "csv",
+    title: "Calculation Export (CSV)",
+    text: "Disposals, individual matches, pools and unresolved issues in spreadsheet format. Available without a subscription.",
+    icon: Table,
+  },
+];
 export function RestoredReports() {
-  const [data, setData] = useState<Overview | null>(null);
-  const [year, setYear] = useState("");
-  const [error, setError] = useState("");
+  const [data, setData] = useState<Overview | null>(null),
+    [year, setYear] = useState("");
+  const [error, setError] = useState(""),
+    [message, setMessage] = useState("");
+  const [busy, setBusy] = useState<ReportKind | null>(null),
+    [subscriptionNeeded, setSubscriptionNeeded] = useState(false);
+  const request = useRef<AbortController | null>(null);
   useEffect(() => {
-    let active = true;
-    workspaceApi<Overview>({ action: "overview" })
+    const controller = new AbortController();
+    workspaceApi<Overview>({ action: "overview" }, controller.signal)
       .then((d) => {
-        if (active) {
+        if (!controller.signal.aborted) {
           setData(d);
           setYear(d.calculations[0]?.tax_year ?? "");
         }
       })
       .catch((e) => {
-        if (active) setError(e.message);
+        if (!controller.signal.aborted) setError(e.message);
       });
     return () => {
-      active = false;
+      controller.abort();
+      request.current?.abort();
     };
   }, []);
   const calculation = data?.calculations.find((c) => c.tax_year === year);
-  function download() {
-    if (!calculation) return;
-    const r = calculation.result;
-    const rows = [
-      [
-        "PREVIEW ONLY - NOT A TAX RETURN",
-        "Tax year",
-        r.taxYear,
-        "Status",
-        r.status,
-      ],
-      [
-        "Date",
-        "Security",
-        "Quantity",
-        "Proceeds GBP",
-        "Allowable costs GBP",
-        "Gain GBP",
-        "Matching rules",
-      ],
-      ...r.disposals.map((d) => [
-        d.date,
-        d.securityId,
-        d.quantity,
-        d.proceedsGBP,
-        d.allowableCostGBP ?? "UNRESOLVED",
-        d.gainGBP ?? "UNRESOLVED",
-        d.matches.map((m) => m.rule).join("; "),
-      ]),
-    ];
-    const csv = rows
-      .map((row) =>
-        row
-          .map(
-            (value) =>
-              '"' +
-              String(value)
-                .replace(/^[=+@\-]/, "'$&")
-                .replaceAll('"', '""') +
-              '"',
-          )
-          .join(","),
-      )
-      .join("\r\n");
-    const url = URL.createObjectURL(
-      new Blob([csv], { type: "text/csv;charset=utf-8" }),
-    );
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `CGT-Calculation-Preview-${r.taxYear}.csv`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  async function download(kind: ReportKind) {
+    if (!calculation || busy) return;
+    setBusy(kind);
+    setError("");
+    setMessage("");
+    setSubscriptionNeeded(false);
+    const controller = new AbortController();
+    request.current = controller;
+    try {
+      const response = await fetch("/api/v2/reports", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ runId: calculation.id, kind }),
+        signal: AbortSignal.any([
+          controller.signal,
+          AbortSignal.timeout(45000),
+        ]),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        setSubscriptionNeeded(response.status === 402);
+        throw new Error(
+          body?.error?.message ??
+            "The report could not be downloaded. Try again.",
+        );
+      }
+      const blob = await response.blob(),
+        url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `CGT-${kind}-${year}.${kind === "csv" ? "csv" : "pdf"}`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setMessage(
+        "Report downloaded. Check the completeness status before using the figures.",
+      );
+    } catch (e) {
+      if (!controller.signal.aborted)
+        setError(
+          e instanceof Error
+            ? e.message
+            : "Connection interrupted. Try the download again.",
+        );
+    } finally {
+      if (!controller.signal.aborted) setBusy(null);
+    }
   }
   return (
     <div className="max-w-5xl space-y-8">
@@ -86,42 +114,74 @@ export function RestoredReports() {
           Reports &amp; Exports
         </h1>
         <p className="text-gray-600 mt-1">
-          Review your saved calculations and export their evidence.
+          Download the calculation and supporting evidence for your records.
         </p>
       </div>
       {error && (
         <Notice tone="error">
           {error}{" "}
-          <button
-            type="button"
-            className="underline"
-            onClick={() => window.location.reload()}
-          >
-            Try again
-          </button>
+          {subscriptionNeeded ? (
+            <Link href="/billing">View subscription</Link>
+          ) : !data ? (
+            <button
+              className="underline"
+              onClick={() => window.location.reload()}
+            >
+              Try again
+            </button>
+          ) : null}
         </Notice>
       )}
+      {message && <Notice tone="success">{message}</Notice>}
       {!data && !error && <Notice>Loading saved calculations…</Notice>}
+      {data && !data.calculations.length && (
+        <Notice>
+          No saved calculations yet.{" "}
+          <Link href="/dashboard">Calculate your gains</Link> after importing
+          your accounts.
+        </Notice>
+      )}
+      <div className="max-w-sm">
+        <SelectField
+          id="export-year"
+          label="Tax year"
+          value={year}
+          onChange={(e) => {
+            setYear(e.target.value);
+            setMessage("");
+            setError("");
+          }}
+          disabled={!data?.calculations.length || !!busy}
+        >
+          {!data?.calculations.length && (
+            <option value="">No saved calculations</option>
+          )}
+          {data?.calculations.map((c) => (
+            <option key={c.id} value={c.tax_year}>
+              {c.tax_year}
+            </option>
+          ))}
+        </SelectField>
+      </div>
+      {calculation && (
+        <Notice
+          tone={
+            calculation.result.status === "complete" &&
+            calculation.coverage_confirmed
+              ? "info"
+              : "warning"
+          }
+        >
+          {calculation.result.status === "complete" &&
+          calculation.coverage_confirmed
+            ? "Complete calculation with confirmed account coverage. Check all source records and your wider tax position before filing."
+            : "Draft report: the calculation or account coverage is incomplete. Missing amounts will be labelled unresolved."}
+        </Notice>
+      )}
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {[
-          {
-            title: "CGT Summary PDF",
-            text: "A breakdown of gains, disposals and matching. PDF reports are still being qualified for the rebuilt calculation engine.",
-            icon: FileText,
-          },
-          {
-            title: "SA108 Reference Guide",
-            text: "Year-specific filing figures require independent review. Read the restored guide while downloadable tax reports are being qualified.",
-            icon: FileText,
-          },
-          {
-            title: "Calculation Export (CSV)",
-            text: "Export the disposals and matching rules from a saved calculation. This preview is not a complete transaction archive or a tax return.",
-            icon: Table,
-          },
-        ].map((card, i) => (
+        {cards.map((card, i) => (
           <section
-            key={card.title}
+            key={card.kind}
             className="bg-white rounded-xl shadow-sm border p-6 flex flex-col"
           >
             <span
@@ -133,51 +193,29 @@ export function RestoredReports() {
               {card.title}
             </h2>
             <p className="text-sm text-gray-600 mb-6 flex-1">{card.text}</p>
-            {i === 2 ? (
-              <>
-                <label className="text-sm mb-2" htmlFor="export-year">
-                  Tax year
-                </label>
-                <select
-                  id="export-year"
-                  value={year}
-                  onChange={(e) => setYear(e.target.value)}
-                  className="border rounded-md px-3 py-2 mb-3"
-                  disabled={!data?.calculations.length}
-                >
-                  {!data?.calculations.length && (
-                    <option value="">No saved calculations</option>
-                  )}
-                  {data?.calculations.map((c) => (
-                    <option key={c.id} value={c.tax_year}>
-                      {c.tax_year}
-                    </option>
-                  ))}
-                </select>
-                <Button onClick={download} disabled={!calculation}>
-                  <Download size={16} aria-hidden="true" />
-                  Download CSV preview
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button disabled>Download PDF — in qualification</Button>
-                {i === 1 && (
-                  <Link
-                    href="/guide/sa108-how-to-fill-in"
-                    className="text-sm text-blue-600 mt-3"
-                  >
-                    Read the SA108 guide
-                  </Link>
-                )}
-              </>
-            )}
+            <Button
+              disabled={!calculation || !!busy}
+              busy={busy === card.kind}
+              onClick={() => download(card.kind)}
+            >
+              <Download size={16} aria-hidden="true" />
+              {busy === card.kind
+                ? "Preparing report…"
+                : card.kind === "csv"
+                  ? "Download CSV evidence"
+                  : "Download PDF"}
+            </Button>
           </section>
         ))}
       </div>
       <Notice tone="warning">
-        These are calculation previews for review. Account coverage, other
-        gains, allowances and reliefs must be checked before filing.
+        These reports calculate ordinary-share gains and losses, not personal
+        tax owed. They do not apply allowances, other gains or reliefs, and are
+        not completed HMRC forms.{" "}
+        <Link href="/guide/sa108-how-to-fill-in">
+          Read the SA108 filing guide
+        </Link>
+        .
       </Notice>
     </div>
   );

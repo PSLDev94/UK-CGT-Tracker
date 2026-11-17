@@ -271,8 +271,8 @@ export default function LandingPage() {
                 Your broker accounts, together
               </h2>
               <p className="text-gray-600 max-w-2xl mx-auto">
-                Selected Trading 212 and Freetrade GBP exports are available for
-                preview testing. Other formats remain in qualification.
+                Documented layouts from all six brokers can be reviewed. Some need
+                supporting details from contract notes; unknown layouts stay blocked.
               </p>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -291,8 +291,8 @@ export default function LandingPage() {
                     </p>
                     <span className="block text-xs text-gray-500 mt-2">
                       {["Trading 212", "Freetrade"].includes(broker.name)
-                        ? "Limited GBP preview"
-                        : "In qualification"}
+                        ? "Automatic + assisted"
+                        : "Assisted review"}
                     </span>
                   </div>
                 </div>
@@ -389,7 +389,7 @@ export default function LandingPage() {
                 </h3>
                 <p className="text-gray-600 leading-relaxed relative z-10">
                   Review saved calculations and export disposal evidence as CSV.
-                  Filing-ready PDF and SA108 reports remain in qualification.
+                  Download calculation summaries and matching evidence. SA108 filing guidance is available separately.
                 </p>
               </div>
             </div>
@@ -524,7 +524,7 @@ export default function LandingPage() {
                 <h3 className="font-bold text-xl mb-3">Review your result</h3>
                 <p className="text-slate-400 leading-relaxed">
                   See your calculation, disposal evidence and historical pools.
-                  Final tax-report exports remain in qualification.
+                  PDF summaries and CSV evidence support your review; they are not completed tax returns.
                 </p>
               </div>
             </div>
@@ -605,7 +605,7 @@ export default function LandingPage() {
                 <li className="flex items-start">
                   <CheckCircle className="w-6 h-6 text-green-500 mr-3 flex-shrink-0" />
                   <span className="text-gray-700 font-medium">
-                    Calculation evidence; SA108 reports in qualification
+                    PDF summaries and detailed calculation evidence
                   </span>
                 </li>
               </ul>

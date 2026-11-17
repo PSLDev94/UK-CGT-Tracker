@@ -193,15 +193,17 @@ describe("source-documented native GBP preview readers", () => {
     expect(() => ukTradeDate("2023-02-29T12:00:00Z")).toThrow();
   });
   it.each([
-    ["hl", "hl-contract-note-required", "contract notes"],
-    ["ii", "ii-wallet-review", "wallet currency"],
+    ["hl", "hl-contract-note-required", "contract note"],
+    ["ii", "ii-wallet-review", "currency"],
     ["ibkr", "ibkr-transaction-history-review", "Flex Query"],
     ["ajbell", "ajbell-unverified-illustration", "ISIN"],
   ] as const)(
     "gives a specific, non-invented recovery path for %s",
     (broker, name, reason) => {
       const review = reviewCsv(fixture(name), options(broker));
-      expect(review.status).toBe("unsupported");
+      expect(review.status).toBe(
+        broker === "ibkr" ? "unsupported" : "needs_review",
+      );
       expect(review.issues[0]?.message).toContain(reason);
       expect(review.counts.accepted).toBe(0);
       expect(review.counts.needsReview).toBe(review.counts.total);
@@ -241,4 +243,61 @@ describe("source-documented native GBP preview readers", () => {
         .counts.duplicate,
     ).toBe(2);
   });
+});
+
+it("reconciles Trading 212 GBP dealing fees and explicit pence prices", () => {
+  const csv = fixture("trading212-gbp");
+  const fee = change(
+    change(
+      change(csv, "Transaction fee", "0.50"),
+      "Currency (Transaction fee)",
+      "GBP",
+    ),
+    "Total",
+    "11.00",
+  );
+  const reviewed = reviewCsv(fee, options("trading212"));
+  expect(reviewed.status).toBe("ready");
+  expect(reviewed.records[0]?.trade?.feesGBP).toBe("0.5");
+  const pence = change(
+    change(csv, "Currency (Price / share)", "GBX"),
+    "Price / share",
+    "100",
+  );
+  expect(
+    reviewCsv(pence, options("trading212")).records[0]?.trade?.considerationGBP,
+  ).toBe("10.5");
+});
+it("requires explicit, reconciling evidence for foreign Freetrade and Trading 212 trades", () => {
+  const evidence = {
+    isin: "GB0008706128",
+    currency: "USD",
+    gbpPerUnit: "0.8",
+    priceUnit: "major" as const,
+    fees: "3.125",
+    transactionId: "",
+    reference: "Synthetic FX contract note 001",
+    netAmountConfirmed: true,
+  };
+  const freetrade = reviewCsv(fixture("freetrade-foreign-review"), {
+    ...options("freetrade"),
+    supportingDetails: { "2": evidence },
+  });
+  expect(freetrade.status).toBe("ready");
+  expect(freetrade.records[0]?.trade?.considerationGBP).toBe("500");
+  const csv = change(fixture("trading212-foreign-review"), "Total", "8.40");
+  const t212 = reviewCsv(csv, {
+    ...options("trading212"),
+    supportingDetails: { "2": { ...evidence, fees: "0" } },
+  });
+  expect(t212.status).toBe("ready");
+  expect(t212.records[0]?.trade?.considerationGBP).toBe("8.4");
+  expect(
+    reviewCsv(csv, {
+      ...options("trading212"),
+      supportingDetails: {
+        "2": { ...evidence, fees: "0", gbpPerUnit: "1.25" },
+      },
+    }).status,
+  ).toBe("needs_review");
 });

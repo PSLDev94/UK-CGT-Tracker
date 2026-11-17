@@ -354,3 +354,43 @@ describe("Stripe webhook verification", () => {
     ).toBe(413);
   });
 });
+
+it("reconciles missed lifecycle changes in bounded operator batches and preserves risk holds", async () => {
+  const s = await setup();
+  await query(
+    database.db,
+    "UPDATE cgt.billing_accounts SET reconciled_at=now()",
+  );
+  await s.billing.checkout(s.identity);
+  s.state.subscriptions = [active()];
+  await query(
+    database.db,
+    "UPDATE cgt.billing_accounts SET reconciled_at=now()-interval '1 day' WHERE owner_id=$1",
+    [s.identity.ownerId],
+  );
+  const first = await s.billing.reconcileBatch();
+  expect(first.updated).toBeGreaterThan(0);
+  expect((await s.billing.status(s.identity)).entitled).toBe(true);
+  s.state.subscriptions[0]!.paid = false;
+  s.state.subscriptions[0]!.status = "past_due";
+  await query(
+    database.db,
+    "UPDATE cgt.billing_accounts SET reconciled_at=now()-interval '1 day' WHERE owner_id=$1",
+    [s.identity.ownerId],
+  );
+  await s.billing.reconcileBatch();
+  const rows = await query<{ entitled: boolean }>(
+    database.db,
+    "SELECT entitled FROM cgt.billing_accounts WHERE owner_id=$1",
+    [s.identity.ownerId],
+  );
+  expect(rows[0]?.entitled).toBe(false);
+  await query(
+    database.db,
+    "UPDATE cgt.billing_accounts SET risk_hold=true,risk_reason='qualification test',reconciled_at=now()-interval '1 day' WHERE owner_id=$1",
+    [s.identity.ownerId],
+  );
+  s.state.subscriptions = [active()];
+  expect((await s.billing.reconcileBatch()).needsReview).toBeGreaterThan(0);
+  expect((await s.billing.status(s.identity)).entitled).toBe(false);
+});

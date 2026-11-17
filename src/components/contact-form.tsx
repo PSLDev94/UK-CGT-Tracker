@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
+import { api } from "@/ui/api";
 import {
   Send,
   CheckCircle,
@@ -15,6 +16,7 @@ import {
 import { PublicNav } from "@/components/public-nav";
 
 export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
+  const requestId = useRef<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
@@ -22,23 +24,55 @@ export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
     "idle" | "sending" | "success" | "error"
   >("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  const [invalidField, setInvalidField] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (status === "sending") return;
     setStatus("sending");
     setErrorMsg("");
+    setInvalidField("");
 
     if (
       !name.trim() ||
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
-      !message.trim()
+      message.trim().length < 10 ||
+      message.length > 5000 ||
+      name.length > 100 ||
+      email.length > 254
     ) {
-      setErrorMsg("Enter your name, a valid email and a message.");
+      setErrorMsg(
+        "Enter your name, a valid email and a message of 10–5,000 characters.",
+      );
+      const invalid =
+        !name.trim() || name.length > 100
+          ? "contact-name"
+          : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254
+            ? "contact-email"
+            : "contact-message";
+      setInvalidField(invalid);
+      e.currentTarget.querySelector<HTMLElement>(`#${invalid}`)?.focus();
       setStatus("error");
       return;
     }
-    window.location.href = `mailto:support@cgttracker.com?subject=${encodeURIComponent("CGT Tracker support")}&body=${encodeURIComponent(`Name: ${name}\nReply email: ${email}\n\n${message}`)}`;
-    setStatus("success");
+    requestId.current ??= crypto.randomUUID();
+    try {
+      await api("/api/v2/contact", {
+        name,
+        email,
+        message,
+        requestId: requestId.current,
+      });
+      setStatus("success");
+      requestId.current = null;
+    } catch (error) {
+      setErrorMsg(
+        error instanceof Error
+          ? error.message
+          : "The message could not be sent. Try again or email support@cgttracker.com.",
+      );
+      setStatus("error");
+    }
   };
 
   return (
@@ -63,7 +97,7 @@ export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
           </h1>
           <p className="text-lg text-gray-600 leading-relaxed">
             Have a question, feedback, or need help with your CGT calculations?
-            Prepare a message to support@cgttracker.com in your email app.
+            Contact PSL Digital at support@cgttracker.com, or use this form.
           </p>
         </div>
 
@@ -71,23 +105,26 @@ export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
         {status === "success" ? (
           <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
             <div className="h-1.5 bg-gradient-to-r from-green-400 to-emerald-500"></div>
-            <div className="p-8 sm:p-12 text-center">
+            <div role="status" className="p-8 sm:p-12 text-center">
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
                 <CheckCircle className="w-8 h-8 text-green-600" />
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-3">
-                Email Draft Prepared
+                Message Accepted
               </h2>
               <p className="text-gray-600 mb-8 max-w-md mx-auto">
-                Your email app has been asked to open a draft. Check and send it
-                there. If no app opened, email support@cgttracker.com directly.
+                Your message has been accepted by our email service. The support
+                team will reply to the email address you provided.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
                 <button
-                  onClick={() => setStatus("idle")}
+                  onClick={() => {
+                    setMessage("");
+                    setStatus("idle");
+                  }}
                   className="px-6 py-2.5 border border-gray-300 rounded-xl font-medium text-gray-700 hover:bg-gray-50 transition-colors"
                 >
-                  Edit your message
+                  Write another message
                 </button>
                 <Link
                   href="/"
@@ -109,7 +146,11 @@ export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
             >
               {/* Error Banner */}
               {status === "error" && errorMsg && (
-                <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl">
+                <div
+                  id="contact-error"
+                  role="alert"
+                  className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl"
+                >
                   <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-red-700">{errorMsg}</p>
                 </div>
@@ -126,10 +167,20 @@ export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
                 </label>
                 <input
                   id="contact-name"
+                  disabled={status === "sending"}
+                  aria-invalid={invalidField === "contact-name"}
+                  aria-describedby={
+                    invalidField === "contact-name"
+                      ? "contact-error"
+                      : undefined
+                  }
                   type="text"
                   required
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    requestId.current = null;
+                  }}
                   placeholder="Your full name"
                   className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow placeholder:text-gray-400"
                 />
@@ -146,10 +197,20 @@ export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
                 </label>
                 <input
                   id="contact-email"
+                  disabled={status === "sending"}
+                  aria-invalid={invalidField === "contact-email"}
+                  aria-describedby={
+                    invalidField === "contact-email"
+                      ? "contact-error"
+                      : undefined
+                  }
                   type="email"
                   required
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    requestId.current = null;
+                  }}
                   placeholder="you@example.com"
                   className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow placeholder:text-gray-400"
                 />
@@ -167,10 +228,20 @@ export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
                 <textarea
                   style={{ resize: "none" }}
                   id="contact-message"
+                  disabled={status === "sending"}
+                  aria-invalid={invalidField === "contact-message"}
+                  aria-describedby={
+                    invalidField === "contact-message"
+                      ? "contact-error"
+                      : undefined
+                  }
                   required
                   rows={6}
                   value={message}
-                  onChange={(e) => setMessage(e.target.value)}
+                  onChange={(e) => {
+                    setMessage(e.target.value);
+                    requestId.current = null;
+                  }}
                   placeholder="How can we help you?"
                   className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow resize-none placeholder:text-gray-400"
                 />
@@ -190,7 +261,7 @@ export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
                 ) : (
                   <>
                     <Send className="w-5 h-5" />
-                    Prepare email
+                    Send message
                   </>
                 )}
               </button>

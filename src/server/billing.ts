@@ -186,6 +186,41 @@ export class Billing {
       },
     };
   }
+  /** Operator-only batch entry point: no public HTTP route or user-supplied owner. */
+  async reconcileBatch(afterOwner = "", limit = 50) {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+      throw new Error("Invalid reconciliation batch size");
+    const rows = await query<{ owner_id: string }>(
+      this.db,
+      `SELECT owner_id FROM cgt.billing_accounts
+      WHERE stripe_account_id=$1 AND livemode=$2 AND stripe_customer_id IS NOT NULL AND owner_id>$3
+      AND (reconciled_at IS NULL OR reconciled_at<now()-interval '15 minutes')
+      ORDER BY owner_id LIMIT $4`,
+      [this.config.accountId, this.config.livemode, afterOwner, limit],
+    );
+    let updated = 0,
+      failed = 0,
+      needsReview = 0;
+    for (const row of rows) {
+      try {
+        const result = await this.locked(row.owner_id, (tx, current) =>
+          this.reconcile(tx, current),
+        );
+        updated++;
+        if (result.status.needsReview) needsReview++;
+      } catch {
+        failed++;
+      }
+    }
+    return {
+      checked: rows.length,
+      updated,
+      failed,
+      needsReview,
+      nextCursor: rows.length === limit ? rows.at(-1)!.owner_id : null,
+    };
+  }
+
   async status(identity: Identity): Promise<BillingStatus> {
     assertIdentity(identity);
     const rows = await query(

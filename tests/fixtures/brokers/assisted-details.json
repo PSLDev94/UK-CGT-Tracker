@@ -1,0 +1,22 @@
+{
+  "2": {
+    "isin": "GB0008706128",
+    "currency": "GBP",
+    "gbpPerUnit": "1",
+    "priceUnit": "minor",
+    "fees": "8.49",
+    "transactionId": "SYNTHETIC-AJ-001",
+    "reference": "Synthetic contract note 001",
+    "netAmountConfirmed": true
+  },
+  "3": {
+    "isin": "GB0008706128",
+    "currency": "GBP",
+    "gbpPerUnit": "1",
+    "priceUnit": "minor",
+    "fees": "2",
+    "transactionId": "SYNTHETIC-AJ-002",
+    "reference": "Synthetic contract note 002",
+    "netAmountConfirmed": true
+  }
+}

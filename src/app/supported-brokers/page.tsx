@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Header } from "@/ui/header";
 import { BROKERS } from "@/domain/imports/brokers";
+import { IBKR_HEADERS } from "@/domain/imports/additional-brokers";
 import { NATIVE_GUIDANCE } from "@/domain/imports/native";
 
 export default function BrokerSupport() {
@@ -12,9 +13,11 @@ export default function BrokerSupport() {
           <span className="eyebrow">Support you can verify</span>
           <h1>Know what your file can tell us.</h1>
           <p className="lead">
-            These six brokers are in the relaunch scope. Selected Trading 212
-            and Freetrade GBP layouts are available for preview testing. General
-            broker certification is still pending; unknown records block saving.
+            Import documented layouts from all six brokers. Trading 212 and
+            Freetrade GBP trades can be read automatically; other layouts may
+            require verified details from contract notes. These readers are
+            tested with synthetic examples, not certified against every broker
+            export. Unknown records block saving.
           </p>
           <div className="broker-grid">
             {BROKERS.map((b) => (
@@ -22,13 +25,30 @@ export default function BrokerSupport() {
                 <h2>{b.name}</h2>
                 <span className="tag">
                   {b.id === "freetrade" || b.id === "trading212"
-                    ? "Limited GBP preview"
-                    : "Native CSV verification pending"}
+                    ? "Automatic + assisted"
+                    : b.id === "ibkr"
+                      ? "Execution Flex CSV"
+                      : "Assisted import"}
                 </span>
                 <p className="muted">{NATIVE_GUIDANCE[b.id]}</p>
               </article>
             ))}
           </div>
+          <section className="panel mt-8">
+            <h2>Interactive Brokers Flex setup</h2>
+            <p>
+              Use an Activity Flex Query with Trades at execution level, one
+              taxable account, CSV output and trade dates in YYYY-MM-DD or
+              YYYYMMDD. Select these fields (any order):
+            </p>
+            <p className="text-sm break-words">{IBKR_HEADERS.join(", ")}</p>
+            <p>
+              For foreign trades, verify the statement base currency is GBP and
+              supply the trade-date conversion shown in the file. Reconcile
+              transfers and corporate actions separately; an execution-only
+              export cannot establish complete acquisition history by itself.
+            </p>
+          </section>
           <section className="panel" style={{ marginTop: "2rem" }}>
             <h2>Use the explicit CSV template for testing.</h2>
             <p>

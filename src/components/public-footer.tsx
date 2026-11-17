@@ -171,14 +171,30 @@ export function PublicFooter() {
                   Try the Preview
                 </Link>
               </li>
+              <li>
+                <Link
+                  className="text-gray-500 hover:text-gray-900"
+                  href="/privacy"
+                >
+                  Privacy &amp; data
+                </Link>
+              </li>
+              <li>
+                <Link
+                  className="text-gray-500 hover:text-gray-900"
+                  href="/terms"
+                >
+                  Service information
+                </Link>
+              </li>
             </ul>
           </div>
         </div>
 
         <div className="border-t border-gray-100 pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p className="text-gray-500 text-xs">
-            &copy; {new Date().getFullYear()} CGT Tracker. Data provided for
-            guidance only. Consult a qualified tax advisor.
+            &copy; {new Date().getFullYear()} PSL Digital · CGT Tracker. Data
+            provided for guidance only. Consult a qualified tax advisor.
           </p>
           <p className="text-gray-500 text-xs">
             Built for UK self-directed investors

@@ -80,7 +80,9 @@ export function WorkspaceScreen({
   const [ordinarySharesConfirmed, setOrdinarySharesConfirmed] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [taxYear, setTaxYear] = useState("2025-26");
-  const [dirty, setDirty] = useState(false);
+  const [formDirty, setDirty] = useState(false);
+  const [detailsDirty, setDetailsDirty] = useState(false);
+  const dirty = formDirty || detailsDirty;
   const [reverse, setReverse] = useState<SavedImport | null>(null);
   const [leaveAction, setLeaveAction] = useState<(() => void) | null>(null);
   const reverseDialog = useRef<HTMLDialogElement>(null);
@@ -528,10 +530,10 @@ export function WorkspaceScreen({
             </section>
             <section hidden={view !== "imports"}>
               <Notice tone="warning">
-                Selected Trading 212 and Freetrade GBP layouts are available for
-                preview testing. Other layouts, foreign currencies and corporate
-                actions remain in review. A readable CSV does not prove complete
-                history.{" "}
+                All six brokers have import paths for the documented layouts.
+                Some require supporting details from contract notes. Unknown
+                layouts and corporate actions remain blocked. A readable CSV
+                does not prove complete history.{" "}
                 <Link href="/supported-brokers">
                   Check support and template guidance
                 </Link>
@@ -588,7 +590,7 @@ export function WorkspaceScreen({
                         defaultValue="native"
                       >
                         <option value="native">
-                          Broker export — limited preview support
+                          Broker export — automatic or assisted review
                         </option>
                         <option value="canonical-v1">
                           CGT Tracker CSV template
@@ -660,7 +662,24 @@ export function WorkspaceScreen({
               )}
               {preview && (
                 <ImportReviewPanel
+                  key={preview.draftId}
                   preview={preview}
+                  onDirty={setDetailsDirty}
+                  onDetails={async (record, details) => {
+                    setBusy(true);
+                    try {
+                      const result = await workspaceApi<Preview>({
+                        action: "supply-import-details",
+                        draftId: preview.draftId,
+                        record,
+                        details,
+                        reviewVersion: preview.reviewVersion ?? 0,
+                      });
+                      setPreview(result);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
                   accountLabel={accountName(preview.accountId)}
                   busy={busy}
                   onPage={(page) =>
@@ -693,6 +712,7 @@ export function WorkspaceScreen({
                         action: "commit-import",
                         draftId: preview.draftId,
                         revision: preview.revision,
+                        reviewVersion: preview.reviewVersion ?? 0,
                       });
                       if (
                         result.outcome === "review_changed" ||
