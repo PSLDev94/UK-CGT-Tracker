@@ -10,6 +10,11 @@ import {
 import type { Workspace } from "./workspace";
 import type { SupportingDetails } from "../domain/imports/supporting-details";
 import type { ImportReview } from "../domain/imports/review";
+import { MAX_CSV_BYTES } from "../domain/imports/review";
+
+// JSON.stringify escapes quotes, backslashes and allowed CSV whitespace. The
+// decoded file still has its own 10 MiB cap; allow its bounded wire expansion.
+export const WORKSPACE_BODY_BYTES = 2 * MAX_CSV_BYTES + 64 * 1024;
 
 export function reviewPage(review: ImportReview, page: number) {
   const pageSize = 100;
@@ -37,7 +42,7 @@ export function createWorkspaceHandler(
         );
       assertSameOrigin(request, origin);
       const identity = await authenticate(request.headers, readSession);
-      const input = await jsonInput(request);
+      const input = await jsonInput(request, WORKSPACE_BODY_BYTES);
       await workspace.consumeRequest(identity, "general");
       if (
         input.action === "supply-import-details" ||

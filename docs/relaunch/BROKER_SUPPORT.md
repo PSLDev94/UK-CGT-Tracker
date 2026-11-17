@@ -39,7 +39,7 @@ The currently implemented format is an internal template, not a native broker CS
 - GBP per unit: the number of pounds per one major source-currency unit, using the applicable trade-date conversion; exactly `1` for GBP. No reciprocal guessing.
 - Asset type: `ORDINARY_SHARE` in this first increment. Other classifications require explicit handling.
 
-Decimal points are `.` with no currency symbols, grouping separators or exponent notation. CSV quoting and UTF-8 BOMs are supported. The limit is 10 MiB and 100,000 data records. Original monetary values, currency and exchange rate are retained in provenance. Converted GBP values use up to 12 decimal places; reporting rounds only at the documented output boundary.
+Decimal points are `.` with no currency symbols, grouping separators or exponent notation. CSV quoting and UTF-8 BOMs are supported. Binary/control characters other than tabs and line endings are rejected. JSON transport overhead is allowed separately from the decoded file-size cap. The limit is 10 MiB and 100,000 data records. Original monetary values, currency and exchange rate are retained in provenance. Converted GBP values use up to 12 decimal places; reporting rounds only at the documented output boundary.
 
 The preview classifies all parsed data records as accepted, excluded, duplicate or needs review. A single unresolved record blocks committing the entire file. Duplicate IDs with conflicting contents are flagged, not overwritten. An all-duplicate file is a no-op requiring an explanatory result, never a successful new import.
 

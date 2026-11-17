@@ -34,11 +34,11 @@ export async function limitedBody(request: Request, maximum: number): Promise<st
   } finally { reader.releaseLock() }
 }
 
-export async function jsonInput(request: Request): Promise<Record<string, unknown>> {
+export async function jsonInput(request: Request, maximum = 12 * 1024 * 1024): Promise<Record<string, unknown>> {
   if (request.headers.get('content-type')?.split(';')[0]?.trim() !== 'application/json') {
     throw new AppError(415, 'INVALID_CONTENT_TYPE', 'Send this request as JSON.')
   }
-  const raw = await limitedBody(request, 12 * 1024 * 1024)
+  const raw = await limitedBody(request, maximum)
   let input: unknown
   try { input = JSON.parse(raw) } catch { throw new AppError(400, 'INVALID_JSON', 'The request could not be read. Try again.') }
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new AppError(400, 'INVALID_REQUEST', 'The request could not be read. Try again.')

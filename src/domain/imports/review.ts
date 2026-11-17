@@ -173,12 +173,12 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
   if (
     !csv.trim() ||
     Buffer.byteLength(csv, "utf8") > MAX_CSV_BYTES ||
-    csv.includes("\0")
+    /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(csv)
   ) {
     issues.push({
       code: "INVALID_FILE",
       message:
-        "Provide a non-empty UTF-8 CSV of at most 10 MiB, without binary content.",
+        "Provide a non-empty UTF-8 CSV of at most 10 MiB, without binary or unsupported control characters.",
     });
     return finish([]);
   }
