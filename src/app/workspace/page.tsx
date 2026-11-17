@@ -1,10 +1,5 @@
-import { Header } from "@/ui/header";
 import { WorkspaceScreen } from "@/ui/workspace";
+export const metadata = { title: "Workspace" };
 export default function WorkspacePage() {
-  return (
-    <>
-      <Header />
-      <WorkspaceScreen />
-    </>
-  );
+  return <WorkspaceScreen />;
 }

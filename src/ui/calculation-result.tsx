@@ -14,7 +14,7 @@ export function CalculationResult({
   coverage: boolean;
 }) {
   return (
-    <section className="panel">
+    <section className="panel calculation-result">
       <div className="panel-heading">
         <h2>{result.taxYear} share gains</h2>
         <span className="tag">
@@ -50,21 +50,25 @@ export function CalculationResult({
         </Notice>
       )}
       {result.summary && (
-        <div className="metrics">
-          {[
-            ["Proceeds", result.summary.proceedsGBP],
-            ["Allowable costs", result.summary.allowableCostsGBP],
-            ["Gains", result.summary.gainsGBP],
-            ["Losses", result.summary.lossesGBP],
-          ].map(([label, value]) => (
-            <div className="metric" key={label}>
-              <strong style={{ fontSize: "1.15rem" }}>{money(value)}</strong>
-              <span>{label}</span>
-            </div>
-          ))}
-          <p className="full-width" style={{ padding: "1rem", margin: 0 }}>
-            Net gain: <strong>{money(result.summary.netGainGBP)}</strong>
-          </p>
+        <div className="result-summary">
+          <div className="net-gain">
+            <span>Net gain</span>
+            <strong>{money(result.summary.netGainGBP)}</strong>
+            <small>For the selected tax year</small>
+          </div>
+          <div className="metrics">
+            {[
+              ["Proceeds", result.summary.proceedsGBP],
+              ["Allowable costs", result.summary.allowableCostsGBP],
+              ["Gains", result.summary.gainsGBP],
+              ["Losses", result.summary.lossesGBP],
+            ].map(([label, value]) => (
+              <div className="metric" key={label}>
+                <strong>{money(value)}</strong>
+                <span>{label}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       <p className="caption">

@@ -2,6 +2,15 @@
 
 import Link from "next/link";
 import {
+  WalletCards,
+  FileUp,
+  ChartNoAxesCombined,
+  History,
+  ArrowUpRight,
+  ShieldCheck,
+} from "lucide-react";
+import { Brand } from "./brand";
+import {
   useCallback,
   useEffect,
   useRef,
@@ -322,7 +331,8 @@ export function WorkspaceScreen() {
   return (
     <div className="workspace">
       <aside className="workspace-nav" aria-label="Workspace navigation">
-        <span className="eyebrow">Your workspace</span>
+        <Brand />
+        <span className="nav-label">WORKSPACE</span>
         {(["accounts", "imports", "calculations", "history"] as View[]).map(
           (tab) => (
             <button
@@ -335,6 +345,15 @@ export function WorkspaceScreen() {
                 setErrors({});
               }}
             >
+              {(() => {
+                const Icon = {
+                  accounts: WalletCards,
+                  imports: FileUp,
+                  calculations: ChartNoAxesCombined,
+                  history: History,
+                }[tab];
+                return <Icon size={19} aria-hidden="true" />;
+              })()}
               {
                 {
                   accounts: "Broker accounts",
@@ -346,7 +365,15 @@ export function WorkspaceScreen() {
             </button>
           ),
         )}
+        <div className="nav-help">
+          <ShieldCheck size={20} aria-hidden="true" />
+          <strong>Your records, together.</strong>
+          <p>One personal portfolio across your taxable accounts.</p>
+        </div>
         <div className="nav-end">
+          <Link href="/supported-brokers">
+            Broker support <ArrowUpRight size={14} aria-hidden="true" />
+          </Link>
           <p className="caption">{userName || "Private workspace"}</p>
           {data && !authRequired && <Link href="/billing">Billing test</Link>}
           <button
@@ -358,15 +385,19 @@ export function WorkspaceScreen() {
         </div>
       </aside>
       <main id="main" className="workspace-main">
+        <div className="workspace-topbar">
+          <span>Personal portfolio</span>
+          <span className="tag">Relaunch preview</span>
+        </div>
         <div className="page-intro">
-          <span className="eyebrow">Relaunch preview</span>
+          <span className="eyebrow">Your portfolio, in focus</span>
           <h1>
             {
               {
-                accounts: "Bring your accounts together.",
-                imports: "Every record, accounted for.",
-                calculations: "Follow the matching evidence.",
-                history: "A record of every import.",
+                accounts: "Broker accounts",
+                imports: "Import & review",
+                calculations: "Share gains",
+                history: "Import history",
               }[view]
             }
           </h1>
@@ -415,93 +446,128 @@ export function WorkspaceScreen() {
         ) : (
           <>
             <section hidden={view !== "accounts"}>
-              <div className="panel">
-                <h2>Your taxable accounts</h2>
-                {!data.accounts.length ? (
-                  <div className="empty">
-                    <h3>Start with your first broker account.</h3>
-                    <p>
-                      Add each taxable account you trade through. Their share
-                      histories will be combined for matching.
-                    </p>
-                  </div>
-                ) : (
-                  <ul className="record-list">
-                    {data.accounts.map((a) => (
-                      <li key={a.id}>
-                        <div>
-                          <strong>{a.label}</strong>
-                          <p>
-                            {BROKERS.find((b) => b.id === a.broker)?.name} ·
-                            General investment account
-                          </p>
-                        </div>
-                        <span className="tag">Taxable</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+              <div className="portfolio-summary" aria-label="Portfolio summary">
+                <div>
+                  <span>Taxable accounts</span>
+                  <strong>
+                    {data.accounts.length.toLocaleString("en-GB")}
+                  </strong>
+                  <small>Combined for share matching</small>
+                </div>
+                <div>
+                  <span>Import records</span>
+                  <strong>
+                    {(history?.total ?? 0).toLocaleString("en-GB")}
+                  </strong>
+                  <small>Including reversed imports</small>
+                </div>
+                <div>
+                  <span>Saved previews</span>
+                  <strong>{data.drafts.length.toLocaleString("en-GB")}</strong>
+                  <small>Awaiting your review</small>
+                </div>
               </div>
-              <section className="panel">
-                <h2>Add a broker account</h2>
-                <form
-                  noValidate
-                  onSubmit={addAccount}
-                  onChange={() => setDirty(true)}
-                  className="form-stack"
-                >
-                  <div className="form-columns">
-                    <SelectField
-                      id="broker"
-                      name="broker"
-                      label="Broker"
-                      defaultValue=""
-                      error={errors.broker}
+              <div className="accounts-layout">
+                <div className="panel accounts-panel">
+                  <div className="panel-heading">
+                    <h2>Your taxable accounts</h2>
+                    <Button
+                      variant="secondary"
+                      disabled={busy || !data.accounts.length}
+                      onClick={() => setView("imports")}
                     >
-                      <option value="">Choose broker</option>
-                      {BROKERS.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}
-                        </option>
-                      ))}
-                    </SelectField>
-                    <Field
-                      id="label"
-                      name="label"
-                      label="Account name"
-                      placeholder="For example, my Trading 212 Invest"
-                      maxLength={100}
-                      error={errors.label}
-                    />
-                  </div>
-                  <div>
-                    <label className="checkbox-label">
-                      <input
-                        name="taxable"
-                        type="checkbox"
-                        aria-invalid={!!errors.taxable}
-                        aria-describedby={
-                          errors.taxable ? "taxable-error" : undefined
-                        }
-                      />
-                      <span>
-                        This is a taxable general investment account, not an ISA
-                        or pension.
-                      </span>
-                    </label>
-                    {errors.taxable && (
-                      <small className="field-error" id="taxable-error">
-                        {errors.taxable}
-                      </small>
-                    )}
-                  </div>
-                  <div>
-                    <Button type="submit" busy={busy}>
-                      {busy ? "Adding account…" : "Add account"}
+                      Import a CSV <ArrowUpRight size={16} aria-hidden="true" />
                     </Button>
                   </div>
-                </form>
-              </section>
+                  {!data.accounts.length ? (
+                    <div className="empty">
+                      <h3>Start with your first broker account.</h3>
+                      <p>
+                        Add each taxable account you trade through. Their share
+                        histories will be combined for matching.
+                      </p>
+                    </div>
+                  ) : (
+                    <ul className="record-list">
+                      {data.accounts.map((a) => (
+                        <li key={a.id}>
+                          <div>
+                            <strong>{a.label}</strong>
+                            <p>
+                              {BROKERS.find((b) => b.id === a.broker)?.name} ·
+                              General investment account
+                            </p>
+                          </div>
+                          <span className="tag">Taxable</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <section className="panel account-form">
+                  <h2>Add a broker account</h2>
+                  <p className="caption">
+                    Keep each source identifiable. Add taxable accounts only.
+                  </p>
+                  <form
+                    noValidate
+                    onSubmit={addAccount}
+                    onChange={() => setDirty(true)}
+                    className="form-stack"
+                  >
+                    <div className="form-columns">
+                      <SelectField
+                        id="broker"
+                        name="broker"
+                        label="Broker"
+                        defaultValue=""
+                        error={errors.broker}
+                      >
+                        <option value="">Choose broker</option>
+                        {BROKERS.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name}
+                          </option>
+                        ))}
+                      </SelectField>
+                      <Field
+                        id="label"
+                        name="label"
+                        label="Account name"
+                        placeholder="For example, my Trading 212 Invest"
+                        maxLength={100}
+                        error={errors.label}
+                      />
+                    </div>
+                    <div>
+                      <label className="checkbox-label">
+                        <input
+                          name="taxable"
+                          type="checkbox"
+                          aria-invalid={!!errors.taxable}
+                          aria-describedby={
+                            errors.taxable ? "taxable-error" : undefined
+                          }
+                        />
+                        <span>
+                          This is a taxable general investment account, not an
+                          ISA or pension.
+                        </span>
+                      </label>
+                      {errors.taxable && (
+                        <small className="field-error" id="taxable-error">
+                          {errors.taxable}
+                        </small>
+                      )}
+                    </div>
+                    <div>
+                      <Button type="submit" busy={busy}>
+                        {busy ? "Adding account…" : "Add account"}
+                      </Button>
+                    </div>
+                  </form>
+                </section>
+              </div>
             </section>
             <section hidden={view !== "imports"}>
               <Notice tone="warning">
@@ -536,7 +602,8 @@ export function WorkspaceScreen() {
                       const target = event.target;
                       if (
                         target instanceof HTMLSelectElement &&
-                        (target.name === "accountId" || target.name === "format")
+                        (target.name === "accountId" ||
+                          target.name === "format")
                       )
                         setOrdinarySharesConfirmed(false);
                     }}
@@ -725,83 +792,98 @@ export function WorkspaceScreen() {
               )}
             </section>
             <section hidden={view !== "calculations"}>
-              <section className="panel">
-                <h2>Choose the history to calculate</h2>
-                <p>
-                  Confirm complete acquisition history across your taxable
-                  accounts, including trades within the 30-day look-ahead.
-                  Missing accounts can change the result.
-                </p>
-                <form
-                  noValidate
-                  onSubmit={calculate}
-                  onChange={() => setDirty(true)}
-                  className="form-stack"
-                >
-                  <div className="form-columns">
-                    <SelectField
-                      id="taxYear"
-                      name="taxYear"
-                      label="Tax year"
-                      value={taxYear}
-                      onChange={(e) => setTaxYear(e.target.value)}
-                    >
-                      {Object.keys(TAX_YEARS)
-                        .reverse()
-                        .map((year) => (
-                          <option key={year} value={year}>
-                            {year}
-                          </option>
-                        ))}
-                    </SelectField>
-                    <Field
-                      id="historyThrough"
-                      name="historyThrough"
-                      label="History complete through"
-                      placeholder="2026-05-05"
-                      hint="YYYY-MM-DD. Use today or an earlier date."
-                      error={errors.historyThrough}
-                    />
-                  </div>
-                  <fieldset>
-                    <legend>Accounts with complete history</legend>
-                    {data.accounts.length ? (
-                      data.accounts.map((a) => (
-                        <label key={a.id} className="checkbox-label">
-                          <input
-                            name="confirmedAccountIds"
-                            value={a.id}
-                            type="checkbox"
-                          />
-                          <span>{a.label}</span>
-                        </label>
-                      ))
-                    ) : (
-                      <p>Add your taxable accounts before calculating.</p>
-                    )}
-                  </fieldset>
-                  <p className="caption">
-                    Leave an account unchecked if its history is incomplete. The
-                    result will show that account coverage has not been
-                    confirmed.
+              <div className="calculation-layout">
+                <section className="panel">
+                  <h2>Calculation settings</h2>
+                  <p>
+                    Confirm complete acquisition history across your taxable
+                    accounts, including trades within the 30-day look-ahead.
+                    Missing accounts can change the result.
                   </p>
-                  <div>
-                    <Button
-                      type="submit"
-                      busy={busy}
-                      disabled={!data.accounts.length}
-                    >
-                      {busy ? "Calculating…" : "Calculate gains"}
-                    </Button>
+                  <form
+                    noValidate
+                    onSubmit={calculate}
+                    onChange={() => setDirty(true)}
+                    className="form-stack"
+                  >
+                    <div className="form-columns">
+                      <SelectField
+                        id="taxYear"
+                        name="taxYear"
+                        label="Tax year"
+                        value={taxYear}
+                        onChange={(e) => setTaxYear(e.target.value)}
+                      >
+                        {Object.keys(TAX_YEARS)
+                          .reverse()
+                          .map((year) => (
+                            <option key={year} value={year}>
+                              {year}
+                            </option>
+                          ))}
+                      </SelectField>
+                      <Field
+                        id="historyThrough"
+                        name="historyThrough"
+                        label="History complete through"
+                        placeholder="2026-05-05"
+                        hint="YYYY-MM-DD. Use today or an earlier date."
+                        error={errors.historyThrough}
+                      />
+                    </div>
+                    <fieldset>
+                      <legend>Accounts with complete history</legend>
+                      {data.accounts.length ? (
+                        data.accounts.map((a) => (
+                          <label key={a.id} className="checkbox-label">
+                            <input
+                              name="confirmedAccountIds"
+                              value={a.id}
+                              type="checkbox"
+                            />
+                            <span>{a.label}</span>
+                          </label>
+                        ))
+                      ) : (
+                        <p>Add your taxable accounts before calculating.</p>
+                      )}
+                    </fieldset>
+                    <p className="caption">
+                      Leave an account unchecked if its history is incomplete.
+                      The result will show that account coverage has not been
+                      confirmed.
+                    </p>
+                    <div>
+                      <Button
+                        type="submit"
+                        busy={busy}
+                        disabled={!data.accounts.length}
+                      >
+                        {busy ? "Calculating…" : "Calculate gains"}
+                      </Button>
+                    </div>
+                  </form>
+                </section>
+                {currentCalculation && (
+                  <CalculationResult
+                    result={currentCalculation.result}
+                    coverage={currentCalculation.coverage_confirmed}
+                  />
+                )}
+                {!currentCalculation && (
+                  <div className="calculation-empty panel">
+                    <ChartNoAxesCombined size={36} aria-hidden="true" />
+                    <h2>Your gains, explained.</h2>
+                    <p>
+                      Choose a tax year and confirm your account history to see
+                      gains, losses and the share matching behind each disposal.
+                    </p>
+                    <span className="caption">
+                      Same day · 30-day rule · Section 104
+                    </span>
                   </div>
-                </form>
-              </section>
-              {currentCalculation && (
-                <CalculationResult
-                  result={currentCalculation.result}
-                  coverage={currentCalculation.coverage_confirmed}
-                />
-              )}
+                )}
+              </div>
             </section>
             <section hidden={view !== "history"}>
               <section className="panel">

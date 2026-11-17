@@ -407,6 +407,16 @@ test("account → review → conflict → commit → calculate → reverse", asy
   await page.getByLabel("Account name", { exact: true }).fill("My Invest");
   await page.getByRole("checkbox", { name: /This is a taxable/ }).check();
   await page.getByRole("button", { name: "Add account", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Broker accounts", exact: true })
+    .click();
+  await expect(page.getByLabel("Portfolio summary")).toContainText(
+    "Taxable accounts1",
+  );
+  await page.screenshot({
+    path: ".private/screenshots/accounts-desktop.png",
+    fullPage: true,
+  });
   await uploadTemplate(page);
   await expect(
     page.getByRole("cell", { name: "Excluded", exact: true }),
@@ -432,12 +442,16 @@ test("account → review → conflict → commit → calculate → reverse", asy
     .getByRole("button", { name: "Calculate gains", exact: true })
     .click();
   await expect(
-    page.getByText("Net gain: £391.00", { exact: true }),
+    page.locator(".net-gain").getByText("£391.00", { exact: true }),
   ).toBeVisible();
   await page
     .getByText("2024-09-01 · US0378331005 · £391.00", { exact: true })
     .click();
   await expect(page.getByText(/Section 104 pool: 50 shares/)).toBeVisible();
+  await page.screenshot({
+    path: ".private/screenshots/calculation-desktop.png",
+    fullPage: true,
+  });
   expect(
     (
       await new AxeBuilder({ page })

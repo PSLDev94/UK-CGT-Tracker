@@ -8,11 +8,13 @@ export default function Home() {
       <main id="main" className="public-main">
         <section className="hero">
           <div>
-            <span className="eyebrow">UK share gains · Relaunch preview</span>
+            <span className="eyebrow">
+              A clearer view of your UK share gains
+            </span>
             <h1>
               Know how your
               <br />
-              share gains add up.
+              gains add up.
             </h1>
             <p className="lead">
               Bring your taxable accounts together. Review the records. Follow
@@ -31,41 +33,41 @@ export default function Home() {
           </div>
           <div
             className="hero-ledger"
-            aria-label="Illustrative review workflow"
+            aria-label="Illustrative share matching example"
           >
             <div className="ledger-heading">
-              <span>From records to a traceable result</span>
-              <span className="tag">How it works</span>
+              <span>SHARE GAINS</span>
+              <span className="tag">Illustrative example</span>
             </div>
-            <ol className="process">
-              <li>
-                <span className="step-number">1</span>
-                <div>
-                  <h2>Bring in your records</h2>
-                  <p>Keep each broker account identifiable.</p>
-                </div>
-              </li>
-              <li>
-                <span className="step-number">2</span>
-                <div>
-                  <h2>Account for every row</h2>
-                  <p>Included, excluded, duplicate or unresolved.</p>
-                  <div className="reconciliation-demo">
-                    <span>Included</span>
-                    <span>Excluded</span>
-                    <span>Duplicate</span>
-                    <span>Review</span>
-                  </div>
-                </div>
-              </li>
-              <li>
-                <span className="step-number">3</span>
-                <div>
-                  <h2>See the matching evidence</h2>
-                  <p>Same-day, 30-day and Section 104 matches.</p>
-                </div>
-              </li>
-            </ol>
+            <div className="example-result">
+              <span>2024–25 · Net gain</span>
+              <strong>£391.00</strong>
+              <p>One disposal. A clear trail back to its cost.</p>
+            </div>
+            <div className="example-equation">
+              <div>
+                <span>Sale proceeds</span>
+                <strong>£795.00</strong>
+              </div>
+              <span aria-hidden="true">−</span>
+              <div>
+                <span>Allowable cost</span>
+                <strong>£404.00</strong>
+              </div>
+            </div>
+            <div className="example-match">
+              <span className="match-line" aria-hidden="true"></span>
+              <div>
+                <strong>50 shares matched</strong>
+                <span>Section 104 pool · £8.08 per share</span>
+              </div>
+              <span className="tag">Traceable</span>
+            </div>
+            <div className="ledger-footnote">
+              Every result starts with the records you review.
+              <br />
+              Example only. Gains shown before personal allowances.
+            </div>
           </div>
         </section>
         <section className="principles" aria-labelledby="principles-title">

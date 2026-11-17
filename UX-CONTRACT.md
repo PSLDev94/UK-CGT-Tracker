@@ -38,3 +38,7 @@ Target WCAG 2.2 AA. All forms use noValidate, field-level text errors, labelled 
 ## Evidence and limits
 
 `tests/ui.spec.ts` covers the new browser flows with controlled API responses, including interrupted requests, pending actions and guarded navigation. These complement the actual auth/PostgreSQL tests; they do not replace hosted end-to-end checks, real mail delivery, native CSV certification or Stripe lifecycle tests. Staging remains explicitly labelled a preview until the release gates in the implementation plan pass.
+
+## November 2026 visual revision
+
+The user authorised replacing the rejected visual system. Workspace navigation owns the brand and account links; no duplicated marketing header appears above it. Account summaries use server-returned counts (import records include reversals), never invented performance data. Accounts and calculation settings sit beside their evidence at wide widths and stack at narrower widths. All views retain document scrolling, visible labels, keyboard navigation and existing error/retry/confirmation behaviour. Public marketing, authentication, billing and broker support share the same self-hosted typefaces and canonical tokens.
