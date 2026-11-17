@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
-import { AuthForm, type AuthMode } from "@/ui/auth-form";
-import { Header } from "@/ui/header";
+import { type AuthMode } from "@/ui/auth-form";
+import { AuthPage } from "@/ui/auth-page";
 
 export default async function AccountPage({
   params,
@@ -14,14 +14,9 @@ export default async function AccountPage({
     notFound();
   const { token } = await searchParams;
   return (
-    <>
-      <Header />
-      <main id="main">
-        <AuthForm
-          mode={mode as AuthMode}
-          token={typeof token === "string" ? token : undefined}
-        />
-      </main>
-    </>
+    <AuthPage
+      mode={mode as AuthMode}
+      token={typeof token === "string" ? token : undefined}
+    />
   );
 }

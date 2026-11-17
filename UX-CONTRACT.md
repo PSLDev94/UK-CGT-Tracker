@@ -8,7 +8,7 @@ Visual intent is in `DESIGN.md`. Domain authority is in `docs/relaunch/API_CONTR
 | -------------- | ------------------------------ | ---------------------- | ------------------------------ | -------------------------------------- |
 | Form           | `src/ui/primitives.tsx`        | API contract           | account, import, calculation   | browser validation and failure tests   |
 | Select/Listbox | `SelectField`                  | DESIGN.md              | native OS popup                | keyboard and narrow viewport           |
-| Date           | `Field` with date hint         | API date-only contract | typed YYYY-MM-DD               | invalid date and calculation tests     |
+| Date | `Field` with date hint; recovered public calculators use native date inputs | API date-only contract | typed YYYY-MM-DD for history; native dates for examples | invalid date and calculation tests |
 | Scrollbar      | `src/app/globals.css`          | DESIGN.md              | global and table overflow      | computed style and viewport checks     |
 | Toast          | `Notice`                       | API contract           | persistent inline status/error | live region tests                      |
 | CRUD           | `src/ui/workspace.tsx` and API | API contract           | preview/commit/discard/reverse | browser workflow plus PostgreSQL tests |
@@ -39,6 +39,12 @@ Target WCAG 2.2 AA. All forms use noValidate, field-level text errors, labelled 
 
 `tests/ui.spec.ts` covers the new browser flows with controlled API responses, including interrupted requests, pending actions and guarded navigation. These complement the actual auth/PostgreSQL tests; they do not replace hosted end-to-end checks, real mail delivery, native CSV certification or Stripe lifecycle tests. Staging remains explicitly labelled a preview until the release gates in the implementation plan pass.
 
-## November 2026 visual revision
+## Original interface restoration — 17 November 2026
 
-The user authorised replacing the rejected visual system. Workspace navigation owns the brand and account links; no duplicated marketing header appears above it. Account summaries use server-returned counts (import records include reversals), never invented performance data. Accounts and calculation settings sit beside their evidence at wide widths and stack at narrower widths. All views retain document scrolling, visible labels, keyboard navigation and existing error/retry/confirmation behaviour. Public marketing, authentication, billing and broker support share the same self-hosted typefaces and canonical tokens.
+The user requested the original website and all its pages, with every new screen following the existing UI/UX. Revision `9ded8c0` is the visual source. Original public markup, pie-chart logo, Inter typography, blue/white/gray palette, pricing, guide articles, calculators and sidebar navigation are restored. Original gradients and guide callouts are intentional user-approved design, not new decoration. New accounts, import review, history, broker support and sandbox billing use the same controls and card styling.
+
+`/dashboard` opens Tax Overview; `/dashboard/upload`, `/dashboard/accounts` and `/dashboard/history` open their matching workspace views. `/workspace` retains account-first setup. `/dashboard/settings`, `/dashboard/reports`, `/dashboard/tax-loss-harvesting` and `/dashboard/contact` restore the other original pages. `/login`, `/signup`, `/forgot-password` and `/reset-password` preserve original entry points alongside the existing `/account/*` routes.
+
+Settings uses authenticated Better Auth profile/password endpoints and retains edits on error. Email is read-only. Permanent deletion is visibly unavailable until retention/billing consequences are qualified. Reports can download saved disposal evidence as a CSV explicitly marked preview, with CSV formula escaping. PDF filing reports remain visibly unavailable. Historical price scenarios use saved complete pools and user-entered prices; they are not current holdings, sale computations or tax-savings recommendations. Contact prepares an email draft in the user's email app and never claims server delivery.
+
+Public educational calculators retain their original layouts with Decimal arithmetic and explicit bounded input checks. The allowance example models the standard basic-rate band rather than treating all gains of a basic-rate taxpayer as 18%. Oversells produce no pool result; same-day purchases are distinguished from 30-day matches. Tax articles link to official year-specific HMRC sources. Mobile menus support keyboard Escape and restore focus. Original source content does not override validated product support or current financial facts.

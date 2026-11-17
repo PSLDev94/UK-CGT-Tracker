@@ -14,7 +14,7 @@ const home = await request('/', undefined, 200)
 assert.equal(home.headers.get('x-frame-options'), 'DENY')
 assert.match(home.headers.get('x-robots-tag') ?? '', /noindex/)
 const html = await home.text()
-assert.match(html, /Know how your/)
+assert.match(html, /Calculate your Capital Gains Tax/)
 const stylesheet = html.match(/href="([^" ]*\/_next\/static\/[^" ]+\.css[^" ]*)"/)?.[1]
 assert(stylesheet?.startsWith('/_next/static/'), 'A packaged stylesheet must be present')
 assert.match((await request(stylesheet, undefined, 200)).headers.get('content-type') ?? '', /text\/css/)

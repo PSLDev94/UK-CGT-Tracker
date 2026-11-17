@@ -18,12 +18,12 @@ const copy: Record<
   { title: string; description: string; action: string }
 > = {
   "sign-in": {
-    title: "Welcome back.",
+    title: "Sign in to your account",
     description: "Sign in to your CGT Tracker workspace.",
     action: "Sign in",
   },
   "sign-up": {
-    title: "Start with your records.",
+    title: "Create your account",
     description:
       "Create an account for the relaunch preview. Verify your email before uploading financial information.",
     action: "Create account",
@@ -96,7 +96,7 @@ export function AuthForm({ mode, token }: { mode: AuthMode; token?: string }) {
     try {
       if (mode === "sign-in") {
         await authApi("sign-in/email", { email, password });
-        router.replace("/workspace");
+        router.replace("/dashboard");
         router.refresh();
       } else if (mode === "sign-up") {
         await authApi("sign-up/email", {
@@ -151,7 +151,7 @@ export function AuthForm({ mode, token }: { mode: AuthMode; token?: string }) {
 
   return (
     <section className="auth-wrap panel">
-      <span className="eyebrow">Your CGT Tracker account</span>
+      <Link href="/" className="text-sm text-blue-600 font-medium inline-block mb-4">← Back to home</Link>
       <h1>{copy[mode].title}</h1>
       <p className="muted">{copy[mode].description}</p>
       {error && <Notice tone="error">{error}</Notice>}

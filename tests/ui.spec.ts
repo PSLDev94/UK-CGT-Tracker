@@ -287,9 +287,7 @@ async function mockWorkspace(
 }
 
 async function uploadTemplate(page: Page) {
-  await page
-    .getByRole("button", { name: "Import & review", exact: true })
-    .click();
+  await navigateWorkspace(page, "Upload CSV");
   await page
     .getByLabel("Broker account", { exact: true })
     .selectOption(accountId);
@@ -301,12 +299,19 @@ async function uploadTemplate(page: Page) {
   ).toBeVisible();
 }
 
+async function navigateWorkspace(page: Page, name: string) {
+  const button = page.getByRole("button", { name, exact: true });
+  if (!(await button.isVisible()))
+    await page.getByRole("button", { name: "Open sidebar menu" }).click();
+  await button.click();
+}
+
 test("home and broker support are honest, responsive and accessible", async ({
   page,
 }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
-    "Know how your",
+    "Calculate your Capital Gains Tax",
   );
   expect(
     (
@@ -407,9 +412,7 @@ test("account → review → conflict → commit → calculate → reverse", asy
   await page.getByLabel("Account name", { exact: true }).fill("My Invest");
   await page.getByRole("checkbox", { name: /This is a taxable/ }).check();
   await page.getByRole("button", { name: "Add account", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Broker accounts", exact: true })
-    .click();
+  await navigateWorkspace(page, "Broker accounts");
   await expect(page.getByLabel("Portfolio summary")).toContainText(
     "Taxable accounts1",
   );
@@ -434,7 +437,7 @@ test("account → review → conflict → commit → calculate → reverse", asy
   await expect(
     page.getByRole("heading", { name: "Review before saving" }),
   ).not.toBeVisible();
-  await page.getByRole("button", { name: "Share gains", exact: true }).click();
+  await navigateWorkspace(page, "Tax Overview");
   await page.getByLabel("Tax year", { exact: true }).selectOption("2024-25");
   await page.getByLabel("History complete through").fill("2025-05-05");
   await page.getByRole("checkbox", { name: "My Invest", exact: true }).check();
@@ -459,9 +462,7 @@ test("account → review → conflict → commit → calculate → reverse", asy
         .analyze()
     ).violations,
   ).toEqual([]);
-  await page
-    .getByRole("button", { name: "Import history", exact: true })
-    .click();
+  await navigateWorkspace(page, "Import history");
   await page
     .getByRole("button", { name: "Reverse import", exact: true })
     .click();
@@ -480,7 +481,7 @@ test("account → review → conflict → commit → calculate → reverse", asy
     .getByRole("button", { name: "Reverse import", exact: true })
     .click();
   await expect(page.getByText("Reversed", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Share gains", exact: true }).click();
+  await navigateWorkspace(page, "Tax Overview");
   await expect(
     page.getByRole("heading", { name: "2024-25 share gains" }),
   ).not.toBeVisible();
@@ -491,9 +492,7 @@ test("unsupported files cannot be saved and can be discarded", async ({
 }) => {
   await mockWorkspace(page, { account: true });
   await page.goto("/workspace");
-  await page
-    .getByRole("button", { name: "Import & review", exact: true })
-    .click();
+  await navigateWorkspace(page, "Upload CSV");
   await page
     .getByLabel("Broker account", { exact: true })
     .selectOption(accountId);
@@ -518,9 +517,7 @@ test("narrow workspace, keyboard, unsaved navigation and reduced motion", async 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await mockWorkspace(page, { account: true });
   await page.goto("/workspace");
-  await page
-    .getByRole("button", { name: "Import & review", exact: true })
-    .click();
+  await navigateWorkspace(page, "Upload CSV");
   const broker = page.getByLabel("Broker account", { exact: true });
   await broker.focus();
   await page.keyboard.press("Space");
@@ -529,6 +526,12 @@ test("narrow workspace, keyboard, unsaved navigation and reduced motion", async 
   await page.keyboard.press("Tab");
   await expect(broker).toHaveValue(accountId);
   await page.getByLabel("CSV file", { exact: true }).setInputFiles(file);
+  if (
+    !(await page
+      .getByRole("link", { name: "Broker support", exact: true })
+      .isVisible())
+  )
+    await page.getByRole("button", { name: "Open sidebar menu" }).click();
   await page.getByRole("link", { name: "Broker support", exact: true }).click();
   await expect(
     page.getByRole("dialog", { name: "Leave this workspace?" }),
@@ -563,6 +566,12 @@ test("narrow workspace, keyboard, unsaved navigation and reduced motion", async 
     nativeDialogs.push(dialog.type());
     await dialog.dismiss();
   });
+  if (
+    !(await page
+      .getByRole("link", { name: "Broker support", exact: true })
+      .isVisible())
+  )
+    await page.getByRole("button", { name: "Open sidebar menu" }).click();
   await page.getByRole("link", { name: "Broker support", exact: true }).click();
   await page
     .getByRole("button", { name: "Leave workspace", exact: true })
@@ -591,9 +600,7 @@ test("interrupted upload retains the file; pending retry prevents duplicate subm
     return route.fallback();
   });
   await page.goto("/workspace");
-  await page
-    .getByRole("button", { name: "Import & review", exact: true })
-    .click();
+  await navigateWorkspace(page, "Upload CSV");
   await page
     .getByLabel("Broker account", { exact: true })
     .selectOption(accountId);
@@ -647,9 +654,7 @@ test("native import requires classification and shows incomplete-history guidanc
 }) => {
   await mockWorkspace(page, { account: true });
   await page.goto("/workspace");
-  await page
-    .getByRole("button", { name: "Import & review", exact: true })
-    .click();
+  await navigateWorkspace(page, "Upload CSV");
   await page
     .getByLabel("Broker account", { exact: true })
     .selectOption(accountId);
@@ -707,4 +712,188 @@ test("native import requires classification and shows incomplete-history guidanc
         .analyze()
     ).violations,
   ).toEqual([]);
+});
+
+const restoredPublicRoutes = [
+  "/pricing",
+  "/contact",
+  "/guide",
+  "/guide/section-104-pool",
+  "/guide/bed-and-breakfast-rule",
+  "/guide/cgt-rates-2025-26",
+  "/guide/sa108-how-to-fill-in",
+  "/guide/trading-212-cgt",
+  "/guide/freetrade-cgt",
+  "/guide/hargreaves-lansdown-cgt",
+  "/tools/bed-and-breakfast-calculator",
+  "/tools/section-104-calculator",
+  "/tools/cgt-allowance-checker",
+  "/login",
+  "/signup",
+  "/forgot-password",
+  "/reset-password",
+];
+for (const url of restoredPublicRoutes)
+  test(`restored ${url} is accessible at mobile width`, async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    const response = await page.goto(url);
+    expect(response?.status()).toBe(200);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    expect(
+      (
+        await new AxeBuilder({ page })
+          .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+          .analyze()
+      ).violations,
+    ).toEqual([]);
+  });
+
+test("restored tools handle band boundaries, oversells and same-day matching", async ({
+  page,
+}) => {
+  await page.goto("/tools/cgt-allowance-checker");
+  await page.getByLabel("Total gains so far").fill("10000");
+  await page.getByLabel("Total losses so far").fill("1000");
+  await page.getByLabel("Taxable income after").fill("36700");
+  await expect(page.getByText("£1,380.00", { exact: true })).toBeVisible();
+  await page.getByLabel("Taxable income after").fill("-1");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText(
+    "non-negative",
+  );
+  await expect(page.getByText("£1,380.00", { exact: true })).toHaveCount(0);
+  await page.goto("/tools/section-104-calculator");
+  await page.getByLabel("Quantity — purchase 1").fill("100");
+  await page.getByLabel("Price/share (£) — purchase 1").fill("3");
+  await page.getByLabel("Fees (£) — purchase 1").fill("5");
+  await page.getByLabel("Quantity to sell").fill("50");
+  await page.getByLabel("Sale price per share").fill("4");
+  await expect(
+    page.getByText("£152.50", { exact: true }).first(),
+  ).toBeVisible();
+  await page.getByLabel("Quantity to sell").fill("101");
+  await expect(
+    page.getByRole("heading", { name: "Disposal Result" }),
+  ).toHaveCount(0);
+  await page.goto("/tools/bed-and-breakfast-calculator");
+  await page.locator('input[type="date"]').nth(0).fill("2025-03-01");
+  await page.locator('input[type="date"]').nth(1).fill("2025-03-31");
+  const numbers = page.locator('input[type="number"]');
+  for (const [index, value] of ["100", "4", "50", "3"].entries())
+    await numbers.nth(index).fill(value);
+  await page.getByRole("button", { name: "Check B&B Rule" }).click();
+  await expect(
+    page.getByRole("heading", { name: /B&B Rule Triggered — 30 days/ }),
+  ).toBeVisible();
+  await expect(page.getByText("+£50.00", { exact: true })).toBeVisible();
+  await page.locator('input[type="date"]').nth(1).fill("2025-03-01");
+  await page.getByRole("button", { name: "Check B&B Rule" }).click();
+  await expect(
+    page.getByRole("heading", { name: /Same-day matching takes priority/ }),
+  ).toBeVisible();
+});
+
+test("restored reports export saved evidence and settings retain edits after failure", async ({
+  page,
+}) => {
+  const { state } = await mockWorkspace(page, { account: true });
+  const result = calculateGains(
+    tradesFromReview(
+      reviewCsv(csv, {
+        broker: "trading212",
+        accountId,
+        accountType: "GIA",
+        format: "canonical-v1",
+      }),
+    ),
+    { taxYear: "2024-25", historyThrough: "2025-05-05" },
+  );
+  state.calculations = [
+    { id: "saved", tax_year: "2024-25", result, coverage_confirmed: true },
+  ];
+  await page.goto("/dashboard/reports");
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download CSV preview" }).click();
+  const download = await downloaded;
+  const content = readFileSync((await download.path())!, "utf8");
+  expect(content).toContain("PREVIEW ONLY - NOT A TAX RETURN");
+  expect(content).toContain("2024-25");
+  expect(content).toContain(result.disposals[0]!.securityId);
+  await page.goto("/dashboard/tax-loss-harvesting");
+  await expect(page.getByText(/Snapshot at/)).toBeVisible();
+  const price = page.getByLabel(
+    `Current price for ${result.pools[0]!.securityId}`,
+  );
+  await price.fill("1");
+  await expect(
+    page.getByRole("heading", { name: "Illustrative Holding Scenarios" }),
+  ).toBeVisible();
+  await price.fill("-1");
+  await expect(price).toHaveAttribute("aria-invalid", "true");
+  await expect(
+    page.getByRole("heading", { name: "Illustrative Holding Scenarios" }),
+  ).toHaveCount(0);
+  await expect(page.getByText(/not model a disposal/)).toBeVisible();
+  let calls = 0;
+  await page.route("**/api/v2/auth/update-user", (route) => {
+    calls++;
+    return route.fulfill({
+      status: calls === 1 ? 500 : 200,
+      json: calls === 1 ? { message: "Please try again." } : { status: true },
+    });
+  });
+  await page.goto("/dashboard/settings");
+  await page.getByLabel("Full name").fill("Updated investor");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toBeVisible();
+  await expect(page.getByLabel("Full name")).toHaveValue("Updated investor");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "Profile updated successfully",
+  );
+  expect(calls).toBe(2);
+  await page.setViewportSize({ width: 375, height: 812 });
+  for (const url of [
+    "/dashboard/reports",
+    "/dashboard/settings",
+    "/dashboard/tax-loss-harvesting",
+    "/dashboard/contact",
+  ]) {
+    await page.goto(url);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    expect(
+      (
+        await new AxeBuilder({ page })
+          .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+          .analyze()
+      ).violations,
+    ).toEqual([]);
+  }
+});
+
+test("original menus restore keyboard focus on Escape", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Free Tools" }).click();
+  await page
+    .getByRole("navigation", { name: "Main navigation" })
+    .getByRole("link", { name: /B&B Rule Calculator Check/ })
+    .focus();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Free Tools" })).toBeFocused();
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.getByRole("button", { name: "Open menu", exact: true }).click();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("button", { name: "Open menu", exact: true }),
+  ).toBeFocused();
 });

@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 const frontmatter = readFileSync('DESIGN.md', 'utf8').split('---')[1]
 assert(frontmatter, 'DESIGN.md must have frontmatter')
 const css = readFileSync('src/app/globals.css', 'utf8')
-const tokens = [...css.matchAll(/^  --((?:color|font|radius|space)-[\w-]+): (.+);$/gm)]
+const tokens = [...css.matchAll(/^\s+--((?:color|font|radius|space)-[\w-]+): (.+);$/gm)]
 assert(tokens.length > 0, 'No runtime tokens found')
 const groups = { color: 'colors', font: 'typography', radius: 'rounded', space: 'spacing' }
 for (const [, token, value] of tokens) {

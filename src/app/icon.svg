@@ -1,0 +1,9 @@
+<svg width="512" height="512" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Rounded Blue Background Matching Tailwind bg-blue-600 rounded-lg -->
+  <rect width="32" height="32" rx="8" fill="#2563eb"/>
+  <!-- PieChart Icon from Lucide-React Matching text-white strokeWidth 2.5 -->
+  <g transform="translate(4, 4)" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/>
+    <path d="M22 12A10 10 0 0 0 12 2v10z"/>
+  </g>
+</svg>

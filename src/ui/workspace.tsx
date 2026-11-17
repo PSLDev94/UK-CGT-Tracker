@@ -1,15 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowUpRight, ChartNoAxesCombined } from "lucide-react";
 import {
-  WalletCards,
-  FileUp,
-  ChartNoAxesCombined,
-  History,
-  ArrowUpRight,
-  ShieldCheck,
-} from "lucide-react";
-import { Brand } from "./brand";
+  DashboardSidebar,
+  type WorkspaceView,
+} from "@/components/dashboard-sidebar";
 import {
   useCallback,
   useEffect,
@@ -62,11 +58,15 @@ function useModal(
   }, [open, ref]);
 }
 
-export function WorkspaceScreen() {
+export function WorkspaceScreen({
+  initialView = "accounts",
+}: {
+  initialView?: WorkspaceView;
+}) {
   const [data, setData] = useState<Overview | null>(null);
   const [history, setHistory] = useState<History | null>(null);
   const [userName, setUserName] = useState("");
-  const [view, setView] = useState<View>("accounts");
+  const [view, setView] = useState<View>(initialView);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -330,60 +330,17 @@ export function WorkspaceScreen() {
 
   return (
     <div className="workspace">
-      <aside className="workspace-nav" aria-label="Workspace navigation">
-        <Brand />
-        <span className="nav-label">WORKSPACE</span>
-        {(["accounts", "imports", "calculations", "history"] as View[]).map(
-          (tab) => (
-            <button
-              key={tab}
-              disabled={busy}
-              aria-current={view === tab ? "page" : undefined}
-              onClick={() => {
-                setView(tab);
-                setError("");
-                setErrors({});
-              }}
-            >
-              {(() => {
-                const Icon = {
-                  accounts: WalletCards,
-                  imports: FileUp,
-                  calculations: ChartNoAxesCombined,
-                  history: History,
-                }[tab];
-                return <Icon size={19} aria-hidden="true" />;
-              })()}
-              {
-                {
-                  accounts: "Broker accounts",
-                  imports: "Import & review",
-                  calculations: "Share gains",
-                  history: "Import history",
-                }[tab]
-              }
-            </button>
-          ),
-        )}
-        <div className="nav-help">
-          <ShieldCheck size={20} aria-hidden="true" />
-          <strong>Your records, together.</strong>
-          <p>One personal portfolio across your taxable accounts.</p>
-        </div>
-        <div className="nav-end">
-          <Link href="/supported-brokers">
-            Broker support <ArrowUpRight size={14} aria-hidden="true" />
-          </Link>
-          <p className="caption">{userName || "Private workspace"}</p>
-          {data && !authRequired && <Link href="/billing">Billing test</Link>}
-          <button
-            disabled={busy || authRequired || !data}
-            onClick={() => (dirty ? setLeaveAction(() => signOut) : signOut())}
-          >
-            Sign out
-          </button>
-        </div>
-      </aside>
+      <DashboardSidebar
+        userEmail={userName}
+        view={view}
+        busy={busy}
+        onView={(next) => {
+          setView(next);
+          setError("");
+          setErrors({});
+        }}
+        onSignOut={() => (dirty ? setLeaveAction(() => signOut) : signOut())}
+      />
       <main id="main" className="workspace-main">
         <div className="workspace-topbar">
           <span>Personal portfolio</span>
@@ -395,8 +352,8 @@ export function WorkspaceScreen() {
             {
               {
                 accounts: "Broker accounts",
-                imports: "Import & review",
-                calculations: "Share gains",
+                imports: "Upload CSV",
+                calculations: "Tax Overview",
                 history: "Import history",
               }[view]
             }

@@ -1,0 +1,163 @@
+import Link from "next/link";
+import { ChevronRight, ArrowRight } from "lucide-react";
+import { PublicNav } from "./public-nav";
+import { PublicFooter } from "./public-footer";
+
+interface RelatedGuide {
+  href: string;
+  title: string;
+}
+
+interface GuideLayoutProps {
+  title: string;
+  breadcrumb: string;
+  lastUpdated?: string;
+  relatedGuides: RelatedGuide[];
+  children: React.ReactNode;
+  jsonLd?: object[];
+}
+
+export function GuideLayout({
+  title,
+  breadcrumb,
+  lastUpdated = "April 2026",
+  relatedGuides,
+  children,
+  jsonLd = [],
+}: GuideLayoutProps) {
+  const breadcrumbLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Home",
+        item: "https://www.cgttracker.com",
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "CGT Guide",
+        item: "https://www.cgttracker.com/guide",
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: breadcrumb,
+        item: `https://www.cgttracker.com/guide`,
+      },
+    ],
+  };
+
+  const articleLd = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: title,
+    datePublished: "2026-04-01",
+    dateModified: "2026-04-26",
+    author: { "@type": "Organization", name: "CGT Tracker" },
+    publisher: {
+      "@type": "Organization",
+      name: "CGT Tracker",
+      url: "https://www.cgttracker.com",
+    },
+  };
+
+  return (
+    <div className="min-h-screen bg-white">
+      {[breadcrumbLd, articleLd, ...jsonLd].map((ld, i) => (
+        <script
+          key={i}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }}
+        />
+      ))}
+      <PublicNav />
+
+      <main id="main" className="max-w-4xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-1.5 text-sm text-gray-500 mb-8 flex-wrap">
+          <Link href="/" className="hover:text-gray-900 transition-colors">
+            Home
+          </Link>
+          <ChevronRight className="w-3.5 h-3.5" />
+          <Link href="/guide" className="hover:text-gray-900 transition-colors">
+            CGT Guide
+          </Link>
+          <ChevronRight className="w-3.5 h-3.5" />
+          <span className="text-gray-900 font-medium">{breadcrumb}</span>
+        </nav>
+
+        <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-3 leading-tight">
+          {title}
+        </h1>
+        <p className="text-sm text-gray-500 mb-10">
+          Last updated: {lastUpdated}
+        </p>
+
+        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-8 text-sm text-blue-900">
+          Relaunch preview: this educational guide is not a certification of
+          broker support or a filing-ready report.{" "}
+          <Link href="/supported-brokers" className="underline">
+            Check current broker support
+          </Link>
+          . Verify the rules for your tax year with{" "}
+          <a
+            className="underline"
+            href="https://www.gov.uk/government/publications/shares-and-capital-gains-tax-hs284-self-assessment-helpsheet/hs284-shares-and-capital-gains-tax-2026"
+          >
+            HMRC HS284
+          </a>
+          .
+        </div>
+        <article className="guide-article">{children}</article>
+
+        {/* Related Guides */}
+        {relatedGuides.length > 0 && (
+          <section className="mt-16 pt-8 border-t border-gray-200">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">
+              Related Guides
+            </h2>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {relatedGuides.map((g) => (
+                <Link
+                  key={g.href}
+                  href={g.href}
+                  className="group flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-blue-50 transition-colors border border-gray-100"
+                >
+                  <span className="font-medium text-gray-900 group-hover:text-blue-600 transition-colors">
+                    {g.title}
+                  </span>
+                  <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-blue-600 transition-colors" />
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* CTA */}
+        <section className="mt-12 bg-blue-50 rounded-2xl p-8 text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-3">
+            Ready to review your share gains?
+          </h2>
+          <p className="text-gray-600 mb-6">
+            Review supported broker files and follow your share-matching
+            evidence.
+          </p>
+          <Link
+            href="/signup"
+            className="inline-block bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-medium hover:bg-blue-700 transition-colors"
+          >
+            Try the preview
+          </Link>
+          <p className="text-sm text-gray-600 mt-3">
+            Relaunch preview. No live payments.
+          </p>
+        </section>
+      </main>
+
+      <PublicFooter />
+    </div>
+  );
+}
