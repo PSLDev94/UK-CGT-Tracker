@@ -10,7 +10,7 @@ The review is a staging release, not a claim that all production launch gates ha
 
 | Broker | Implemented path | Important boundary |
 | --- | --- | --- |
-| Trading 212 | 21-column Invest history; GBP and GBX prices, separately identified GBP fees; foreign trades with verified rate and GBP totals | Other headers, non-GBP cash totals and unexplained activity block the file |
+| Trading 212 | 21-column and 33-column Invest history; GBP and GBX prices, separately identified GBP fees; foreign trades with verified rate and GBP totals | Other headers, non-GBP cash totals and unexplained activity block the file |
 | Freetrade | 29-column Activity; GBP account; GBP trades and verified foreign trades | Non-zero FX fees, transfers/free shares and corporate actions block the file |
 | Hargreaves Lansdown | Transaction Summary including known preamble; pence prices and signed GBP cash | Requires ISIN and verified dealing fees from contract notes |
 | Interactive Investor | 11-column transactions with debit/credit and execution reference | Requires ISIN, wallet currency, price units and verified fees |
@@ -50,7 +50,7 @@ PSL Digital; support@cgttracker.com; not VAT-registered; retain £49/year, no VA
 - Real or anonymised broker exports covering historical/current variants, especially AJ Bell and IBKR sectioned statements; synthetic tests cannot establish 100% broker compatibility.
 - Independent UK tax review of engine, unsupported scope, rounding and report interpretation.
 - Final privacy/retention/consumer terms, business-address disclosure and cancellation/refund review. Owner asked to omit the address; UK online-selling guidance generally requires an address before sales. This is unresolved, not silently waived.
-- Hosted mailbox delivery to the support inbox, billing renewal/3DS/dispute/provider-recovery qualification, live legacy-customer reconciliation, monitoring and provider backup schedule/restore verification.
+- Billing renewal/3DS/dispute/provider-recovery qualification, monitoring and hosted encrypted backup schedule/restore verification. Support inbox delivery was confirmed by the owner on 17 November. Read-only live Stripe inspection returned no subscriptions or payment intents (both lists complete); this is scoped to the connected existing live account.
 - Production DNS, live Stripe enablement and launch approval.
 
 Sources: [UK online-selling guidance](https://www.gov.uk/online-and-distance-selling-for-businesses/online-selling), [consumer pre-contract information](https://www.legislation.gov.uk/uksi/2013/3134/schedule/2), [IBKR Flex trade semantics](https://www.ibkrguides.com/reportingreference/reportguide/tradesfq.htm). The implementation evidence and remaining gates must be reviewed together.

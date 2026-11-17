@@ -75,16 +75,45 @@ jobs:
       - run: npm run test:postgres
         env:
           POSTGRES_TEST_DATABASE_URL: postgresql://postgres:disposable-ci-owner-password@localhost:5432/cgt_qualification
-      - name: Rehearse PostgreSQL 18 backup restoration
+      - name: Build isolated backup worker
+        run: |
+          docker build --file Dockerfile.backup --tag cgt-backup:test .
+          test "$(docker run --rm --entrypoint id cgt-backup:test -u)" != "0"
+          docker run --rm cgt-backup:test 2>/tmp/cgt-backup-config-error && exit 1 || test "$?" = "1"
+          grep -q '"success":false' /tmp/cgt-backup-config-error
+      - name: Provision and check dedicated backup reader
+        env:
+          MIGRATION_DATABASE_URL: postgresql://postgres:disposable-ci-owner-password@localhost:5432/cgt_qualification
+          BACKUP_DATABASE_URL: postgresql://cgt_runtime_backup:disposable-ci-backup-password-123456@localhost:5432/cgt_qualification
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          node scripts/provision-backup-login.ts
+          node scripts/provision-backup-login.ts
+          if docker exec "$PG_CONTAINER" psql -U postgres -d cgt_qualification -v ON_ERROR_STOP=1 -c "SET ROLE cgt_backup; DELETE FROM cgt.transactions WHERE false;"; then exit 1; fi
+      - name: Rehearse PostgreSQL 18 encrypted backup restoration
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}
         run: |
-          docker exec "$PG_CONTAINER" pg_dump -U postgres -Fc cgt_qualification > /tmp/cgt-qualification.dump
-          docker exec "$PG_CONTAINER" createdb -U postgres cgt_restore_qualification
-          docker exec -i "$PG_CONTAINER" pg_restore -U postgres --exit-on-error -d cgt_restore_qualification < /tmp/cgt-qualification.dump
+          mkdir /tmp/cgt-archive
+          chmod 777 /tmp/cgt-archive
+          export BACKUP_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+          docker exec -e PGPASSWORD=disposable-ci-backup-password-123456 "$PG_CONTAINER" pg_dump -h 127.0.0.1 -U cgt_runtime_backup --role=cgt_backup --no-owner -Fc cgt_qualification | docker run --rm -i -e BACKUP_ENCRYPTION_KEY -v /tmp/cgt-archive:/archive cgt-backup:test --input-type=module -e 'import { encryptArchive, backupKey } from "./src/server/backup/archive.ts"; await encryptArchive(process.stdin, "/archive/backup.cgtenc", backupKey(process.env.BACKUP_ENCRYPTION_KEY));'
+          docker run --rm -e BACKUP_ENCRYPTION_KEY -v /tmp/cgt-archive:/archive cgt-backup:test scripts/decrypt-backup.mjs /archive/backup.cgtenc /archive/restored.dump
+          docker run --rm --entrypoint cat -v /tmp/cgt-archive:/archive cgt-backup:test /archive/restored.dump > /tmp/cgt-qualification.dump
+          docker run --detach --name cgt-isolated-restore -e POSTGRES_PASSWORD=disposable-restore-password -e POSTGRES_DB=cgt_restore_qualification postgres:18
+          trap 'docker rm --force cgt-isolated-restore >/dev/null' EXIT
+          for attempt in $(seq 1 30); do
+            if docker exec cgt-isolated-restore pg_isready -U postgres -d cgt_restore_qualification; then break; fi
+            sleep 1
+          done
+          docker exec cgt-isolated-restore psql -U postgres -d cgt_restore_qualification -v ON_ERROR_STOP=1 -c 'CREATE ROLE cgt_app NOLOGIN; CREATE ROLE cgt_auth NOLOGIN; CREATE ROLE cgt_billing NOLOGIN; CREATE ROLE cgt_maintenance NOLOGIN;'
+          docker exec -i cgt-isolated-restore pg_restore -U postgres --exit-on-error --single-transaction --no-owner -d cgt_restore_qualification < /tmp/cgt-qualification.dump
           for database in cgt_qualification cgt_restore_qualification; do
-            docker exec "$PG_CONTAINER" psql -U postgres -d "$database" -At -c "SELECT 'transactions',count(*),md5(coalesce(string_agg(row_to_json(t)::text,'' ORDER BY id),'')) FROM cgt.transactions t UNION ALL SELECT 'imports',count(*),md5(coalesce(string_agg(row_to_json(i)::text,'' ORDER BY id),'')) FROM cgt.imports i UNION ALL SELECT 'runs',count(*),md5(coalesce(string_agg(row_to_json(r)::text,'' ORDER BY id),'')) FROM cgt.calculation_runs r UNION ALL SELECT 'users',count(*),md5(coalesce(string_agg(row_to_json(u)::text,'' ORDER BY id),'')) FROM auth.\"user\" u;" > "/tmp/$database-check.txt"
+            database_container="$PG_CONTAINER"
+            if [ "$database" = cgt_restore_qualification ]; then database_container=cgt-isolated-restore; fi
+            docker exec "$database_container" psql -U postgres -d "$database" -At -c "SELECT 'transactions',count(*),md5(coalesce(string_agg(row_to_json(t)::text,'' ORDER BY id),'')) FROM cgt.transactions t UNION ALL SELECT 'imports',count(*),md5(coalesce(string_agg(row_to_json(i)::text,'' ORDER BY id),'')) FROM cgt.imports i UNION ALL SELECT 'runs',count(*),md5(coalesce(string_agg(row_to_json(r)::text,'' ORDER BY id),'')) FROM cgt.calculation_runs r UNION ALL SELECT 'users',count(*),md5(coalesce(string_agg(row_to_json(u)::text,'' ORDER BY id),'')) FROM auth.\"user\" u;" > "/tmp/$database-check.txt"
           done
           diff /tmp/cgt_qualification-check.txt /tmp/cgt_restore_qualification-check.txt
-          test "$(docker exec "$PG_CONTAINER" psql -U postgres -d cgt_restore_qualification -At -c 'SET ROLE cgt_app; SELECT count(*) FROM cgt.transactions;' | tail -1)" = "0"
+          test "$(docker exec cgt-isolated-restore psql -U postgres -d cgt_restore_qualification -At -c 'SET ROLE cgt_app; SELECT count(*) FROM cgt.transactions;' | tail -1)" = "0"
           rm /tmp/cgt-qualification.dump
+          docker run --rm --entrypoint rm -v /tmp/cgt-archive:/archive cgt-backup:test /archive/restored.dump /archive/backup.cgtenc

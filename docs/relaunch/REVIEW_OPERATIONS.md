@@ -55,3 +55,12 @@ On 17 November 2026 the staging Postgres Backups page displayed: “Upgrade to P
 Synthetic PDF/CSV samples are generated with `npx tsx scripts/review-report-samples.ts` under `.private/report-review/`, excluded from Git. The long-reference pagination fixture produces 18 A4 pages; its final page was rendered and visually checked for wrapping, readable pool details and footer separation. The 10,000-record local timing probe is a reproducible smoke benchmark, not a production capacity guarantee.
 
 See [review scope and external launch gates](REVIEW_READY.md) before claiming production readiness.
+
+
+## 17 November follow-up qualification
+
+- The owner confirmed the labelled support-form email arrived at `support@cgttracker.com`. This qualifies actual inbox delivery, beyond provider acceptance. The owner corrected further test mail to `parvinderlongani@gmail.com`; no further plus-alias emails should be sent. The new alias signup remains unverified; it is not evidence of completed verification.
+- Scheduled billing reconciliation ran at 12:18 UTC: checked 1, updated 1, failed 0, needsReview 1, finished true. The existing synthetic refund hold remained under review, as intended.
+- Read-only inspection of the connected existing Stripe live account returned complete empty lists for subscriptions and payment intents. No live mutations were made. This closes the observed subscription/payment-intent migration inventory, not every possible historical Stripe object.
+- Added the exact 33-column Trading 212 variant and synthetic £72.00 result, with foreign-fee and conflict tests. 252 core tests passed; TypeScript, ESLint and production build passed locally. Hosted deployment and qualification of this variant are still pending.
+- Prepared a separate encrypted R2 backup worker, provisioning script, tamper tests and an isolated PostgreSQL restore CI step. See [backup recovery](BACKUP_RECOVERY.md). Cloudflare R2 requires activation; no subscription or backup resources have been created.

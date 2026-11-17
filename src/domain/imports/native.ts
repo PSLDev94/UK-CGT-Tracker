@@ -22,6 +22,11 @@ export const TRADING212_HEADERS =
   "Action,Time,ISIN,Ticker,Name,No. of shares,Price / share,Currency (Price / share),Exchange rate,Result,Currency (Result),Total,Currency (Total),Withholding tax,Currency (Withholding tax),Transaction fee,Notes,ID,Currency conversion fee,Currency (Currency conversion fee),Currency (Transaction fee)".split(
     ",",
   );
+/** Publicly documented 2026 Invest export. Every added financial column is checked. */
+export const TRADING212_2026_HEADERS =
+  "Action,Time (UTC),ISIN,Ticker,Name,Notes,ID,No. of shares,Price / share,Currency (Price / share),Exchange rate,Result,Currency (Result),Total,Currency (Total),Withholding tax,Currency (Withholding tax),Stamp duty reserve tax,Currency (Stamp duty reserve tax),French transaction tax,Currency (French transaction tax),Transaction fee,Finra fee,Currency conversion from amount,Currency (Currency conversion from amount),Currency conversion to amount,Currency (Currency conversion to amount),Currency conversion fee,Currency (Currency conversion fee),Currency (Transaction fee),Currency (Finra fee),Merchant name,Merchant category".split(
+    ",",
+  );
 
 type Row = Record<string, string>;
 export interface NativeAdapter {
@@ -266,6 +271,75 @@ const trading212: NativeAdapter = {
     );
   },
 };
+const trading212Current: NativeAdapter = {
+  version: "trading212-invest-33-v1",
+  idColumn: "ID",
+  isTrade: trading212.isTrade,
+  normalize(r, supplied) {
+    if (!this.isTrade(r)) return trading212.normalize(r, supplied);
+    for (const field of [
+      "Currency conversion from amount",
+      "Currency (Currency conversion from amount)",
+      "Currency conversion to amount",
+      "Currency (Currency conversion to amount)",
+      "Merchant name",
+      "Merchant category",
+    ])
+      if (r[field])
+        throw new Error(
+          "Separate currency conversions or card activity on a trade require review.",
+        );
+    const currency = r["Currency (Price / share)"]!;
+    const foreign = !["GBP", "GBX"].includes(currency);
+    if (
+      foreign &&
+      (!supplied?.netAmountConfirmed ||
+        supplied.currency !== currency ||
+        supplied.isin !== r.ISIN)
+    )
+      throw new Error(
+        "Supply verified currency, ISIN, conversion and total dealing costs for this foreign trade.",
+      );
+    const rate = foreign
+      ? decimal(supplied!.gbpPerUnit, "GBP per unit")
+      : decimal("1", "Rate");
+    let fees = decimal("0", "Fees");
+    for (const name of [
+      "Transaction fee",
+      "Currency conversion fee",
+      "Stamp duty reserve tax",
+      "French transaction tax",
+      "Finra fee",
+    ]) {
+      const fee = decimal(r[name] || "0", name);
+      if (fee.isZero()) continue;
+      const denomination = r[`Currency (${name})`];
+      if (denomination === "GBP") fees = fees.plus(fee);
+      else if (denomination === "GBX") fees = fees.plus(fee.div(100));
+      else if (foreign && denomination === currency)
+        fees = fees.plus(fee.times(rate));
+      else
+        throw new Error(
+          `${name} currency cannot be reconciled to the verified trade conversion.`,
+        );
+    }
+    const timestamp = r["Time (UTC)"]!;
+    // Only documented UTC forms; never interpret a locale-dependent offset.
+    const time = timestamp.replace(/(?:Z|\+00:00)$/, "").replace("T", " ");
+    return trading212.normalize(
+      {
+        ...r,
+        Time: time,
+        "Exchange rate": r["Exchange rate"] || (foreign ? "" : "1"),
+        "Transaction fee": fees.toDP(2).toString(),
+        "Currency (Transaction fee)": "GBP",
+        "Currency conversion fee": "",
+        "Currency (Currency conversion fee)": "",
+      },
+      supplied,
+    );
+  },
+};
 export function nativeAdapter(
   broker: BrokerId,
   headers: string[],
@@ -281,12 +355,14 @@ export function nativeAdapter(
     return freetrade;
   if (broker === "trading212" && sameHeaders(headers, TRADING212_HEADERS))
     return trading212;
+  if (broker === "trading212" && sameHeaders(headers, TRADING212_2026_HEADERS))
+    return trading212Current;
 }
 export const NATIVE_GUIDANCE: Record<BrokerId, string> = {
   freetrade:
     "Use the Activity Feed CSV. The documented 29-column layout supports GBP trades and verified foreign trades with zero FX fees. Transfers and some corporate actions may be missing from the export; reconcile the complete history separately.",
   trading212:
-    "Use the Invest account History CSV with all activity categories. The documented 21-column layout supports GBP/GBX prices, separately identified GBP fees and verified foreign trades with GBP totals. Pie holdings and CFD exports cannot establish share acquisition history.",
+    "Use the Invest account History CSV with all activity categories. Documented 21- and 33-column layouts support GBP/GBX prices and verified foreign trades with GBP totals. The newer layout also reconciles separately denominated stamp duty, French transaction tax and FINRA fees. Pie holdings and CFD exports cannot establish share acquisition history.",
   hl: "HL Transaction Summary files need verified security identifiers and dealing-cost details from matching contract notes. Unit cost may be in pence. Supply these details in the preview; every trade must reconcile before saving.",
   ii: "Interactive Investor exports can identify securities by SEDOL and may omit the wallet currency. Confirm the security ISIN, wallet currency, execution amounts and fees in the supporting-details form beside each unresolved record.",
   ibkr: "IBKR Activity Statements, Flex Queries and Transaction History are different formats. A Flex Query must include execution IDs, ISINs, asset categories, currency, gross proceeds, commission and trade-date FX. Use the documented 16-column execution Flex layout; other sectioned layouts remain blocked.",

@@ -1,0 +1,16 @@
+FROM node:24-bookworm-slim AS dependencies
+WORKDIR /backup
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --omit=dev --no-audit --no-fund
+
+FROM postgres:18-bookworm
+RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=dependencies /usr/local/bin/node /usr/local/bin/node
+WORKDIR /backup
+COPY --from=dependencies /backup/node_modules ./node_modules
+COPY scripts/backup-database.mjs scripts/decrypt-backup.mjs ./scripts/
+COPY src/server/backup/archive.ts ./src/server/backup/archive.ts
+RUN node --version && pg_dump --version
+USER postgres
+ENTRYPOINT ["node"]
+CMD ["scripts/backup-database.mjs"]

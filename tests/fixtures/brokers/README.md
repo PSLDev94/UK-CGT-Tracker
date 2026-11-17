@@ -10,9 +10,9 @@ Created 2026-11-16. Every account, order, monetary amount and activity row here 
 | `trading212-gbp.csv` | Exact 21-column public Invest sample schema below. Synthetic fractional GBP buy/sell and cash interest. |
 | `trading212-foreign-review.csv` | Same schema; USD needs further FX qualification. |
 | `trading212-corporate-action-review.csv` | Same schema; split activity must block ordinary-trade import. |
-| `hl-contract-note-required.csv` | Public Transaction Summary preamble/header shape below, newly constructed values. Missing ISIN and separate charges require contract-note reconciliation. No import adapter enabled. |
+| `hl-contract-note-required.csv` | Public Transaction Summary preamble/header shape below, newly constructed values. Missing ISIN and separate charges require contract-note reconciliation. Supported through the assisted HL adapter; contract-note details remain required. |
 | `ibkr-transaction-history-review.csv` | Public sectioned Transaction History shape below. Not an Activity Statement or Flex Query. Missing execution ID/security classification is not inferred. |
-| `ii-wallet-review.csv` | Illustrative 11-column shape documented by another parser's author as experimental. This is weaker evidence, not a verified ii export. No importer enabled. |
+| `ii-wallet-review.csv` | Illustrative 11-column shape documented by another parser's author as experimental. This is weaker evidence, not a verified ii export. Supported through the assisted ii adapter with verified contract-note details. |
 | `ajbell-unverified-illustration.csv` | Illustrative six-column candidate from an import provider's own published interface (`date,description,type,quantity,price,amount`). NOT a verified AJ Bell layout; contradictory published layouts exist. Exercises the explicit unsupported recovery path only. |
 
 ## Sources and strength
@@ -42,3 +42,8 @@ Automated mutations cover amount mismatches, changed columns, classification, un
 `hl-assisted.csv`, `ii-assisted.csv`, `ajbell-assisted-candidate.csv` and `ibkr-flex-gbp.csv` contain synthetic purchases and disposals. `assisted-details.json` supplies explicitly synthetic contract-note evidence for the first three. HL/ii/AJ produce £70.88; IBKR produces £71.62 after the engine's disposal rounding. No fixture contains a customer's trades.
 
 HL/ii layouts extend the evidence described above. AJ Bell's six-column layout remains a candidate rather than a verified broker export. IBKR's configured fields and signed proceeds/net cash follow [IBKR Trades Flex documentation](https://www.ibkrguides.com/reportingreference/reportguide/tradesfq.htm); `ClientAccountID` and Flex field selection are corroborated by the [parser author's setup](https://github.com/tfiala/ibkr-flex-statement-rs) and [CSV integration author's setup](https://github.com/CoolONEOfficial/wealthfolio-ibkr-addon). The custom 16-column fixture is constructed, not downloaded from IBKR. General Activity Statements and extra financial columns remain blocked.
+
+
+## 33-column Trading 212 variant
+
+`trading212-2026-gbp.csv` contains newly invented trades, with £4 buy costs (including £2.50 stamp duty), £2 sale costs and a £72.00 independently calculated gain. Header source: [public 2026 fixture](https://github.com/cgt-calc/capital-gains-calculator/blob/1dd3c9073006fcebef17219f8c556bf2ae0dd9c5/tests/trading212/data/2026/inputs/transactions.csv), inspected 17 November 2026, blob `236a8a7921e91533e2111923552fff13d96e9ade`. No financial rows were copied. The existing MIT attribution applies. Tests mutate this fixture to cover foreign fees, unexplained fields, UTC boundaries and duplicate/conflicting execution IDs.
