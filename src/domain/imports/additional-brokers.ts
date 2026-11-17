@@ -14,6 +14,10 @@ export const II_HEADERS =
 export const AJ_HEADERS = "Date,Description,Type,Quantity,Price,Amount".split(
   ",",
 );
+// Column names documented in Sharesight's AJ Bell transaction-history guide.
+// Identity, execution reference and costs still require contract-note evidence.
+export const AJ_HISTORY_HEADERS =
+  "Date,Description,Transaction,Quantity,Price,Amount (GBP)".split(",");
 export const IBKR_HEADERS =
   "ClientAccountID,AssetClass,CurrencyPrimary,FXRateToBase,ISIN,TradeID,TradeDate,Buy/Sell,Quantity,TradePrice,Proceeds,IBCommission,IBCommissionCurrency,Taxes,NetCash,LevelOfDetail".split(
     ",",
@@ -197,6 +201,26 @@ export const ajbell: NativeAdapter = {
       r.Quantity!,
       r.Price!,
       r.Amount!,
+      d,
+    );
+  },
+};
+export const ajbellHistory: NativeAdapter = {
+  version: "ajbell-history-gbp-assisted-v1",
+  idColumn: "Transaction ID",
+  isTrade: (r) => ["Purchase", "Sale"].includes(r.Transaction ?? ""),
+  normalize(r, supplied) {
+    const d = details(supplied);
+    if (d.currency !== "GBP" || d.priceUnit !== "major")
+      throw new Error(
+        "This AJ Bell history layout requires GBP cash and a contract-note-confirmed price in pounds. Foreign prices and pence need a separately verified mapping.",
+      );
+    if (!this.isTrade(r))
+      throw new Error(
+        "AJ Bell activity is not a Purchase or Sale. Transfers, distributions and corporate actions require review.",
+      );
+    return ajbell.normalize(
+      { ...r, Type: r.Transaction!, Amount: r["Amount (GBP)"]! },
       d,
     );
   },

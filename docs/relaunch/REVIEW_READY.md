@@ -11,11 +11,11 @@ The review is a staging release, not a claim that all production launch gates ha
 | Broker | Implemented path | Important boundary |
 | --- | --- | --- |
 | Trading 212 | 21-column and 33-column Invest history; GBP and GBX prices, separately identified GBP fees; foreign trades with verified rate and GBP totals | Other headers, non-GBP cash totals and unexplained activity block the file |
-| Freetrade | 29-column Activity; GBP account; GBP trades and verified foreign trades | Non-zero FX fees, transfers/free shares and corporate actions block the file |
+| Freetrade | 29-column Activity including documented renamed amount columns; GBP account; GBP and verified foreign trades | FX fees/base/effective rates/net cash must reconcile; transfers/free shares and corporate actions block the file |
 | Hargreaves Lansdown | Transaction Summary including known preamble; pence prices and signed GBP cash | Requires ISIN and verified dealing fees from contract notes |
 | Interactive Investor | 11-column transactions with debit/credit and execution reference | Requires ISIN, wallet currency, price units and verified fees |
 | Interactive Brokers | Configured 16-column Flex executions with ISIN, signed proceeds, commission, taxes and net cash | One account per file; stock executions only; foreign conversion must be verified against a GBP-base statement. Regular sectioned Activity Statements remain unsupported |
-| AJ Bell | Assisted six-column candidate layout | No broker-issued schema has been verified. Requires contract-note execution ID, ISIN, currency, units, net-cash confirmation and fees. Do not advertise universal native support |
+| AJ Bell | Documented GBP transaction-history assisted layout plus six-column candidate | Requires contract-note execution ID, ISIN, currency, units, net-cash confirmation and fees. Representative broker-issued exports still need validation; no universal native-support claim |
 
 All examples are synthetic. Four new buy/sell fixtures derive independently checked £70.88 (HL/ii/AJ Bell) and £71.62 (IBKR) gains. Existing T212/Freetrade fixtures retain £5.25/£74.37 expected results. Unknown activity still blocks the entire file. No imported row is silently discarded to make a file pass.
 

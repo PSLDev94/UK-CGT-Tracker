@@ -6,6 +6,7 @@ import { BROKERS, type BrokerId } from "./brokers";
 import { nativeAdapter, NATIVE_GUIDANCE } from "./native";
 import {
   validateDetails,
+  fingerprintDetails,
   type ImportDetails,
   type SupportingDetails,
 } from "./supporting-details";
@@ -463,7 +464,9 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
                     .map((key) => [key, source[key]!]),
                 ),
                 ordinarySharesConfirmed: true as const,
-                ...(supportingDetails ? { supportingDetails } : {}),
+                ...(supportingDetails
+                  ? { supportingDetails: fingerprintDetails(supportingDetails) }
+                  : {}),
               },
             }
           : {}),

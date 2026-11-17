@@ -199,3 +199,35 @@ describe('PostgreSQL 18 deployment qualification',()=> {
     expect(run('scripts/provision-runtime-logins.ts')).toContain('verified')
   })
 })
+
+import { brokerCases, fixture, fixtureDetails } from '../tests/helpers/broker-corpus'
+import { fingerprintDetails } from '../src/domain/imports/supporting-details'
+import { createHash } from 'node:crypto'
+it.each(brokerCases)('qualifies $file import/report/retry using PostgreSQL 18 runtime roles',async c=>{
+  const s=await setup(`broker-pg-${c.file}`)
+  const account=await workspace.addAccount(s.user,{portfolioId:s.portfolio.id,broker:c.broker,label:`Synthetic ${c.file}`,accountType:'GIA'})
+  const prepare=()=>workspace.prepareImport(s.user,{accountId:account.id,csv:fixture(c),format:'native',ordinarySharesConfirmed:true})
+  let draft=await prepare()
+  for(const [record,details] of Object.entries(fixtureDetails(c))) {
+    const pgDetails=(await owner.query('SELECT $1::jsonb AS details',[JSON.stringify(details)])).rows[0].details
+    expect(JSON.stringify(fingerprintDetails(details))).toBe(JSON.stringify(pgDetails))
+    draft=await workspace.supplyImportDetails(s.user,draft.draftId,Number(record),details,draft.reviewVersion)
+    const row=draft.review.records.find(r=>r.record===Number(record))!
+    // Historical commits fingerprinted the JSONB-read supporting object.
+    const legacy={trade:row.trade,provenance:{...row.provenance,native:{...row.provenance!.native,supportingDetails:pgDetails}}}
+    expect(row.digest).toBe(createHash('sha256').update(JSON.stringify(legacy)).digest('hex'))
+  }
+  expect(draft.review.status).toBe('ready')
+  expect((await workspace.commitImport(s.user,draft.draftId,draft.revision,draft.reviewVersion)).outcome).toBe('committed')
+  const result=await workspace.calculate(s.user,{portfolioId:s.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',confirmedAccountIds:[s.account.id,account.id]})
+  expect(result.result.summary?.netGainGBP).toBe(c.gain)
+  expect((await workspace.reportSnapshot(s.user,result.runId)).result).toEqual(result.result)
+  let duplicate=await prepare()
+  for(const [record,details] of Object.entries(fixtureDetails(c)))
+    duplicate=await workspace.supplyImportDetails(s.user,duplicate.draftId,Number(record),details,duplicate.reviewVersion)
+  expect(duplicate.review.counts).toMatchObject({accepted:0,duplicate:2})
+  expect((await workspace.commitImport(s.user,duplicate.draftId,duplicate.revision,duplicate.reviewVersion)).outcome).toBe('needs_review')
+  await workspace.discardDraft(s.user,duplicate.draftId)
+  await workspace.reverseImport(s.user,draft.draftId,'Synthetic broker qualification complete')
+  await expect(workspace.reportSnapshot(s.user,result.runId)).rejects.toMatchObject({status:404})
+})

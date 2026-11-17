@@ -593,3 +593,102 @@ describe("report ownership and assisted draft concurrency", () => {
     });
   });
 });
+
+// Run the public application service and real schema for each supported native path.
+// This catches gaps hidden by pure-parser tests: evidence versions, persistence,
+// duplicate retries, published snapshots and audited reversals.
+import { brokerCases, fixture, fixtureDetails } from "./helpers/broker-corpus";
+it.each(brokerCases)(
+  "persists the complete $file upload-to-report journey",
+  async (c) => {
+    const user = await owner(`native-${c.file}`);
+    const { portfolio } = await workspace.overview(user);
+    const account = await workspace.addAccount(user, {
+      portfolioId: portfolio.id,
+      broker: c.broker,
+      label: `Synthetic ${c.file}`,
+      accountType: "GIA",
+    });
+    let draft = await workspace.prepareImport(user, {
+      accountId: account.id,
+      csv: fixture(c),
+      format: "native",
+      ordinarySharesConfirmed: true,
+    });
+    for (const [record, details] of Object.entries(fixtureDetails(c)))
+      draft = await workspace.supplyImportDetails(
+        user,
+        draft.draftId,
+        Number(record),
+        details,
+        draft.reviewVersion,
+      );
+    expect(draft.review.status, JSON.stringify(draft.review.issues)).toBe(
+      "ready",
+    );
+    expect(
+      (
+        await workspace.commitImport(
+          user,
+          draft.draftId,
+          draft.revision,
+          draft.reviewVersion,
+        )
+      ).outcome,
+    ).toBe("committed");
+    const run = await workspace.calculate(user, {
+      portfolioId: portfolio.id,
+      taxYear: "2024-25",
+      historyThrough: "2025-05-05",
+      confirmedAccountIds: [account.id],
+    });
+    expect(run.result.summary?.netGainGBP).toBe(c.gain);
+    expect((await workspace.reportSnapshot(user, run.runId)).result).toEqual(
+      run.result,
+    );
+    const duplicate = await workspace.prepareImport(user, {
+      accountId: account.id,
+      csv: fixture(c),
+      format: "native",
+      ordinarySharesConfirmed: true,
+    });
+    let reviewed = duplicate;
+    for (const [record, details] of Object.entries(fixtureDetails(c)))
+      reviewed = await workspace.supplyImportDetails(
+        user,
+        reviewed.draftId,
+        Number(record),
+        details,
+        reviewed.reviewVersion,
+      );
+    expect(reviewed.review.counts.duplicate).toBe(2);
+    expect(
+      (
+        await workspace.commitImport(
+          user,
+          reviewed.draftId,
+          reviewed.revision,
+          reviewed.reviewVersion,
+        )
+      ).outcome,
+    ).toBe("needs_review");
+    await workspace.discardDraft(user, duplicate.draftId);
+    expect((await workspace.overview(user)).imports).toHaveLength(1);
+    await workspace.reverseImport(
+      user,
+      draft.draftId,
+      "Synthetic broker qualification completed",
+    );
+    await expect(
+      workspace.reportSnapshot(user, run.runId),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      workspace.calculate(user, {
+        portfolioId: portfolio.id,
+        taxYear: "2024-25",
+        historyThrough: "2025-05-05",
+        confirmedAccountIds: [account.id],
+      }),
+    ).rejects.toMatchObject({ code: "NO_TRANSACTIONS" });
+  },
+);

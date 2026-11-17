@@ -27,8 +27,13 @@ Files for inspection: `src/domain/cgt/calculate.ts`, `src/domain/cgt/types.ts`, 
 
 ## Explicit scope exclusions
 
-Pre-1982 basis adjustments, employee share schemes, funds/ETFs with distributions or reporting-income adjustments, reorganisations/splits/rights issues, short positions, options and other derivatives, crypto, gifts/transfers requiring market valuation and specialist residency/capacity cases have not been certified. Unknown source activity blocks the file; removing an inconvenient row is not an approved repair. AJ Bell's candidate header remains unverified by a broker-issued export; configured IBKR Flex support does not cover arbitrary sectioned Activity Statements.
+Pre-1982 basis adjustments, employee share schemes, funds/ETFs with distributions or reporting-income adjustments, reorganisations/splits/rights issues, short positions, options and other derivatives, crypto, gifts/transfers requiring market valuation and specialist residency/capacity cases have not been certified. Unknown source activity blocks the file; removing an inconvenient row is not an approved repair. AJ Bell's documented assisted history and older candidate headers still require broker-issued export validation; configured IBKR Flex support does not cover arbitrary sectioned Activity Statements.
 
 ## Sign-off record (open)
 
 Record reviewer name/qualification, exact commit, source statements reviewed, independently calculated results, identified exceptions and release decision. No independent tax review has been obtained yet. Do not replace this with a test-suite pass or describe the product as HMRC-approved.
+
+
+## Additional independent arithmetic checks
+
+`tests/cgt-model.test.ts` compares 500 seeded generated histories against an independently written exact BigInt rational model that allocates individual quarter-share tokens. It covers competing purchases/disposals, same-day reservation, 30-day identification, pooled allocations, pre-year and post-year activity, fees, output rounding and export-order invariance. The broker corpus separately checks generated fractional acquisitions against integer-pence arithmetic and routes combined matching cases through each native reader. These are differential arithmetic tests within the existing scope, not independent professional tax sign-off.

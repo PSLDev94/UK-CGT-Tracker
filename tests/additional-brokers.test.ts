@@ -261,3 +261,42 @@ it.each([
     expect(result.summary?.netGainGBP).toBe(expected);
   },
 );
+
+it("requires GBP and major-unit contract-note evidence for the AJ Bell history variant", async () => {
+  const { readFileSync } = await import("node:fs");
+  const csv = readFileSync(
+    "tests/fixtures/brokers/ajbell-history-gbp.csv",
+    "utf8",
+  );
+  const base = JSON.parse(
+    readFileSync("tests/fixtures/brokers/assisted-details.json", "utf8"),
+  ) as Record<string, SupportingDetails>;
+  for (const d of Object.values(base)) d.priceUnit = "major";
+  expect(reviewCsv(csv, config("ajbell", base)).status).toBe("ready");
+  for (const changed of [
+    { currency: "USD" },
+    { priceUnit: "minor" as const },
+    { transactionId: "" },
+    { fees: "0" },
+  ])
+    expect(
+      reviewCsv(
+        csv,
+        config("ajbell", { ...base, "2": { ...base["2"]!, ...changed } }),
+      ).status,
+    ).not.toBe("ready");
+  expect(
+    reviewCsv(csv.replace("Purchase", "Stock split"), config("ajbell", base))
+      .status,
+  ).not.toBe("ready");
+  const reviewed = reviewCsv(csv, config("ajbell", base));
+  const reordered = Object.fromEntries(
+    Object.entries(base).map(([key, value]) => [
+      key,
+      Object.fromEntries(Object.entries(value).reverse()),
+    ]),
+  ) as Record<string, SupportingDetails>;
+  expect(
+    reviewCsv(csv, config("ajbell", reordered)).records.map((r) => r.digest),
+  ).toEqual(reviewed.records.map((r) => r.digest));
+});

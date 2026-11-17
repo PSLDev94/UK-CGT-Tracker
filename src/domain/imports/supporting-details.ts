@@ -10,6 +10,23 @@ export interface SupportingDetails {
   netAmountConfirmed: boolean;
 }
 export type ImportDetails = Record<string, SupportingDetails>;
+/**
+ * Stable order matching these fixed fields' PostgreSQL jsonb representation.
+ * Existing commits already hash details read back from jsonb. Preserve their
+ * fingerprints while making a just-edited preview independent of JS key order.
+ */
+export function fingerprintDetails(d: SupportingDetails): SupportingDetails {
+  return {
+    fees: d.fees,
+    isin: d.isin,
+    currency: d.currency,
+    priceUnit: d.priceUnit,
+    reference: d.reference,
+    gbpPerUnit: d.gbpPerUnit,
+    transactionId: d.transactionId,
+    netAmountConfirmed: d.netAmountConfirmed,
+  };
+}
 export function validateDetails(value: unknown): ImportDetails {
   if (
     !value ||
