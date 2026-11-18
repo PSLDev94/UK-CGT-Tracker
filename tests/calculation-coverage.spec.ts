@@ -259,3 +259,47 @@ test("missing purchase recovery preserves the year through upload, preview, save
     page.getByRole("heading", { name: "Illustrative Holding Scenarios" }),
   ).toBeVisible();
 });
+
+test("a rate-limited checkout return explains when to retry and restores the selected paid PDF", async ({
+  page,
+}) => {
+  await workspace(page, [purchase, sale], true);
+  let checks = 0;
+  await page.route("**/api/v2/billing", async (route) => {
+    expect(route.request().postDataJSON()).toEqual({ action: "report-access" });
+    checks++;
+    if (checks === 1)
+      return route.fulfill({
+        status: 429,
+        headers: { "Retry-After": "12" },
+        json: {},
+      });
+    return route.fulfill({
+      json: {
+        status: "active",
+        entitled: true,
+        periodEnd: null,
+        cancelAtPeriodEnd: false,
+        needsReview: false,
+        canManage: true,
+        testMode: true,
+      },
+    });
+  });
+  await page.goto(
+    "/dashboard/reports?year=2024-25&format=evidence&checkout=returned",
+  );
+  const evidence = page.locator("#report-evidence");
+  await expect(evidence.getByRole("status")).toContainText(
+    "Try again in 12 seconds",
+  );
+  await expect(evidence.getByText("Checking PDF access.")).toHaveCount(0);
+  await evidence.getByRole("button", { name: "Retry PDF access" }).click();
+  await expect(
+    evidence.getByText("Payment confirmed. Your PDF is ready."),
+  ).toBeVisible();
+  await expect(
+    evidence.getByRole("button", { name: "Download evidence PDF" }),
+  ).toBeEnabled();
+  expect(checks).toBe(2);
+});

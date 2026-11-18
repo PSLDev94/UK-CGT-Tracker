@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { FileText, Download } from "lucide-react";
-import { api, workspaceApi } from "./api";
+import { api, ApiError, workspaceApi } from "./api";
 import type { Overview } from "./workspace-types";
 import type { BillingStatus } from "@/server/billing";
 import { Notice, Button, SelectField, money } from "./primitives";
@@ -48,24 +48,28 @@ export function RestoredReports({
   const [year, setYear] = useState(requestedYear);
   const [error, setError] = useState("");
   const [entitlement, setEntitlement] = useState<BillingStatus | null>(null);
-  const [billingError, setBillingError] = useState(false);
+  const [billingError, setBillingError] = useState("");
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [busy, setBusy] = useState<ReportKind | null>(null);
   const request = useRef<AbortController | null>(null);
 
   const checkBilling = useCallback(
     (signal?: AbortSignal) =>
-      api<BillingStatus>("/api/v2/billing", { action: "status" }, signal)
+      api<BillingStatus>("/api/v2/billing", { action: "report-access" }, signal)
         .then((status) => {
           if (!signal?.aborted) {
             setEntitlement(status);
-            setBillingError(false);
+            setBillingError("");
           }
         })
-        .catch(() => {
+        .catch((error: unknown) => {
           if (!signal?.aborted) {
             setEntitlement(null);
-            setBillingError(true);
+            setBillingError(
+              error instanceof ApiError && error.status === 429
+                ? error.message
+                : "Check your connection and retry PDF access.",
+            );
           }
         }),
     [],
@@ -394,6 +398,7 @@ export function RestoredReports({
                     </p>
                     {requestedYear === year &&
                       requestedFormat === card.kind &&
+                      !(outcome === "returned" && billingError) &&
                       outcome && (
                         <Notice
                           tone={
@@ -429,12 +434,12 @@ export function RestoredReports({
                     ) : billingError ? (
                       <>
                         <Notice tone="warning">
-                          PDF access could not be confirmed.
+                          PDF access could not be confirmed. {billingError}
                         </Notice>
                         <Button
                           variant="secondary"
                           onClick={() => {
-                            setBillingError(false);
+                            setBillingError("");
                             void checkBilling();
                           }}
                         >

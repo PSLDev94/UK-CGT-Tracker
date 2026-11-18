@@ -8,6 +8,7 @@ import {
 } from "../src/server/billing";
 import { authenticate } from "../src/server/identity";
 import { query } from "../src/server/database";
+import { AppError } from "../src/server/errors";
 import {
   createBillingHandler,
   createStripeWebhookHandler,
@@ -77,6 +78,41 @@ afterAll(async () => {
 });
 
 describe("billing ownership, retries and reconciliation", () => {
+  it("checks paid report access locally across checkout returns without spending the provider budget", async () => {
+    const s = await setup();
+    const calls = { general: 0, billing: 0 };
+    const handler = createBillingHandler(s.billing, async () => ({
+      user: { id: s.identity.ownerId, emailVerified: true },
+      session: { expiresAt: new Date(Date.now() + 60000) },
+    }), config.origin, async (_identity, bucket) => {
+      if (++calls[bucket] > (bucket === "general" ? 60 : 10))
+        throw new AppError(429, "TOO_MANY_REQUESTS", "Wait one minute.");
+    });
+    const post = (action: string) => handler(new Request(config.origin + "/api/v2/billing", {
+      method: "POST", headers: { origin: config.origin, "content-type": "application/json" },
+      body: JSON.stringify({ action }),
+    }));
+    for (let i = 0; i < 12; i++) {
+      expect((await (await post("report-access")).json()).entitled).toBe(false);
+    }
+    expect(calls.billing).toBe(0);
+    expect((await post("checkout")).status).toBe(200);
+    s.state.subscriptions = [active()];
+    expect((await (await post("status")).json()).entitled).toBe(true);
+    for (let i = 0; i < 8; i++) expect((await post("portal")).status).toBe(200);
+    const limited = await post("status");
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBe("60");
+    vi.mocked(s.gateway.subscriptions).mockClear();
+    expect((await (await post("report-access")).json()).entitled).toBe(true);
+    expect(s.gateway.subscriptions).not.toHaveBeenCalled();
+    await query(database.db, "UPDATE cgt.billing_accounts SET current_period_end=now()-interval '1 second' WHERE owner_id=$1",[s.identity.ownerId]);
+    expect((await (await post("report-access")).json()).entitled).toBe(false);
+    await query(database.db, "UPDATE cgt.billing_accounts SET current_period_end=now()+interval '1 day',risk_hold=true,risk_reason='refund' WHERE owner_id=$1",[s.identity.ownerId]);
+    expect(await (await post("report-access")).json()).toMatchObject({entitled:false,needsReview:true});
+    while (calls.general < 60) expect((await post("report-access")).status).toBe(200);
+    expect((await post("report-access")).status).toBe(429);
+  });
   it("creates one customer, reuses open Checkout and never grants access from a redirect", async () => {
     const s = await setup();
     expect((await s.billing.status(s.identity)).entitled).toBe(false);

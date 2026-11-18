@@ -19,6 +19,7 @@ export function createBillingHandler(
   origin: string,
   consume: (
     identity: Awaited<ReturnType<typeof authenticate>>,
+    bucket: "general" | "billing",
   ) => Promise<void>,
 ) {
   return async (request: Request) => {
@@ -27,14 +28,16 @@ export function createBillingHandler(
         throw new AppError(405, "METHOD_NOT_ALLOWED", "Use POST.");
       assertSameOrigin(request, origin);
       const identity = await authenticate(request.headers, readSession);
-      await consume(identity);
+      await consume(identity, "general");
       const input = await jsonInput(request);
       // Checkout URLs are fixed server-side, even when an existing Stripe
       // session is reused. A tab-specific navigation cookie stays on our origin.
       const allowed =
-        input.action === "status"
-          ? ["action", "tab"]
-          : ["action", "tab", "year", "format"];
+        input.action === "report-access"
+          ? ["action"]
+          : input.action === "status"
+            ? ["action", "tab"]
+            : ["action", "tab", "year", "format"];
       const target = reportDestination(input.year, input.format);
       if (
         Object.keys(input).some((key) => !allowed.includes(key)) ||
@@ -48,6 +51,10 @@ export function createBillingHandler(
           "Choose a valid billing action and report.",
         );
       }
+      if (input.action === "report-access") {
+        return privateResponse(await billing.reportAccess(identity));
+      }
+      await consume(identity, "billing");
       const owner = createHash("sha256")
         .update(identity.ownerId)
         .digest("hex")
@@ -83,7 +90,11 @@ export function createBillingHandler(
         "Choose an available billing action.",
       );
     } catch (error) {
-      return errorResponse(error);
+      const response = errorResponse(error);
+      if (error instanceof AppError && error.code === "TOO_MANY_REQUESTS") {
+        response.headers.set("Retry-After", "60");
+      }
+      return response;
     }
   };
 }

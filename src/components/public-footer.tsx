@@ -169,7 +169,7 @@ export function PublicFooter() {
                   href="/signup"
                   className="text-gray-500 hover:text-gray-900 transition-colors"
                 >
-                  Try the Preview
+                  Create a free account
                 </Link>
               </li>
               <li>

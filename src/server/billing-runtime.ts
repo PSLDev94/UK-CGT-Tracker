@@ -73,7 +73,8 @@ async function initialise() {
         billing,
         (headers) => application.auth.api.getSession({ headers }),
         config.origin,
-        (identity) => application.workspace.consumeRequest(identity, "billing"),
+        (identity, bucket) =>
+          application.workspace.consumeRequest(identity, bucket),
       ),
       webhook: createStripeWebhookHandler(
         billing,

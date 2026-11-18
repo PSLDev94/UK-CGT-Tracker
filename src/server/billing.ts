@@ -65,7 +65,7 @@ export class Billing {
     private readonly config: BillingConfig,
   ) {}
 
-  private checkRow(row: BillingRow) {
+  private checkRow(row: Pick<BillingRow, "stripe_account_id" | "livemode">) {
     if (
       row.stripe_account_id !== this.config.accountId ||
       row.livemode !== this.config.livemode
@@ -221,6 +221,52 @@ export class Billing {
     };
   }
 
+  private noSubscription(): BillingStatus {
+    return {
+      status: "none",
+      entitled: false,
+      periodEnd: null,
+      cancelAtPeriodEnd: false,
+      needsReview: false,
+      canManage: false,
+      testMode: !this.config.livemode,
+    };
+  }
+
+  /** Display the last reconciliation on Reports. Downloads check Stripe separately. */
+  async reportAccess(identity: Identity): Promise<BillingStatus> {
+    assertIdentity(identity);
+    const [row] = await query<{
+      stripe_account_id: string;
+      livemode: boolean;
+      status: string;
+      entitled: boolean;
+      period_end: Date | string | null;
+      cancel_at_period_end: boolean;
+      needs_review: boolean;
+      can_manage: boolean;
+    }>(
+      this.db,
+      `SELECT stripe_account_id, livemode,
+      CASE WHEN risk_hold THEN 'needs_review' ELSE subscription_status END AS status,
+      (entitled AND NOT risk_hold AND subscription_status='active' AND coalesce(current_period_end > now(), false)) AS entitled,
+      current_period_end AS period_end, cancel_at_period_end, (risk_hold OR subscription_status='needs_review') AS needs_review,
+      (stripe_customer_id IS NOT NULL) AS can_manage FROM cgt.billing_accounts WHERE owner_id=$1`,
+      [identity.ownerId],
+    );
+    if (!row) return this.noSubscription();
+    this.checkRow(row);
+    return {
+      status: row.status,
+      entitled: row.entitled,
+      periodEnd: row.period_end ? new Date(row.period_end).toISOString() : null,
+      cancelAtPeriodEnd: row.cancel_at_period_end,
+      needsReview: row.needs_review,
+      canManage: row.can_manage,
+      testMode: !this.config.livemode,
+    };
+  }
+
   async status(identity: Identity): Promise<BillingStatus> {
     assertIdentity(identity);
     const rows = await query(
@@ -228,16 +274,7 @@ export class Billing {
       "SELECT owner_id FROM cgt.billing_accounts WHERE owner_id=$1",
       [identity.ownerId],
     );
-    if (!rows.length)
-      return {
-        status: "none",
-        entitled: false,
-        periodEnd: null,
-        cancelAtPeriodEnd: false,
-        needsReview: false,
-        canManage: false,
-        testMode: !this.config.livemode,
-      };
+    if (!rows.length) return this.noSubscription();
     return this.locked(
       identity.ownerId,
       async (tx, row) => (await this.reconcile(tx, row)).status,
