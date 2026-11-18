@@ -26,7 +26,14 @@ jobs:
       - run: npm run check:design
       - run: npm run db:generate-auth
       - run: git diff --exit-code -- db/migrations/0003_auth.generated.sql
-      - run: npm audit --omit=dev --audit-level=high
+      - name: Audit locked runtime dependencies
+        run: |
+          node scripts/prepare-runtime-manifest.mjs "$RUNNER_TEMP/cgt-runtime"
+          cd "$RUNNER_TEMP/cgt-runtime"
+          npm audit --audit-level=high
+      - name: Report development dependency advisories
+        continue-on-error: true
+        run: npm audit --include=dev --audit-level=high
       - run: npm run build
       - run: node scripts/check-job-bundle.mjs
       - run: npx playwright install --with-deps chromium
