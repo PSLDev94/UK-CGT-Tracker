@@ -1098,3 +1098,14 @@ test("HTML has fresh script nonces and blocks injected inline script", async ({
     page.getByRole("heading", { name: /Sign in to your account/i }),
   ).toBeVisible();
 });
+
+test("verification callback distinguishes success, expired links and ordinary sign-in", async ({ page }) => {
+  await page.goto("/account/sign-in?verification=complete");
+  await expect(page.getByText("Your email is verified. Sign in to continue.")).toBeVisible();
+  await page.goto("/account/sign-in?verification=complete&error=TOKEN_EXPIRED");
+  await expect(page.getByText("Your email is verified. Sign in to continue.")).toHaveCount(0);
+  await page.getByRole("link", { name: "Request a new verification email" }).click();
+  await expect(page).toHaveURL(/\/account\/verify$/);
+  await page.goto("/account/sign-in");
+  await expect(page.getByText("Your email is verified. Sign in to continue.")).toHaveCount(0);
+});

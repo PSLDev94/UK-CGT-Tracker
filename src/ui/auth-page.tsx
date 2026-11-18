@@ -1,6 +1,6 @@
 import { AuthForm, type AuthMode } from "./auth-form";
 import { CheckCircle } from "lucide-react";
-export function AuthPage({ mode, token }: { mode: AuthMode; token?: string }) {
+export function AuthPage({ mode, token, verificationNotice }: { mode: AuthMode; token?: string; verificationNotice?: "failed" | "complete" }) {
   return (
     <main
       id="main"
@@ -13,7 +13,7 @@ export function AuthPage({ mode, token }: { mode: AuthMode; token?: string }) {
             : "contents"
         }
       >
-        <AuthForm mode={mode} token={token} />
+        <AuthForm mode={mode} token={token} verificationNotice={verificationNotice} />
       </div>
       {mode === "sign-up" && (
         <aside className="hidden lg:block relative w-0 flex-1 bg-slate-900 overflow-hidden">

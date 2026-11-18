@@ -47,7 +47,7 @@ const copy: Record<
   },
 };
 
-export function AuthForm({ mode, token }: { mode: AuthMode; token?: string }) {
+export function AuthForm({ mode, token, verificationNotice }: { mode: AuthMode; token?: string; verificationNotice?: "failed" | "complete" }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -103,7 +103,7 @@ export function AuthForm({ mode, token }: { mode: AuthMode; token?: string }) {
           email,
           password,
           name,
-          callbackURL: `${location.origin}/account/sign-in`,
+          callbackURL: `${location.origin}/account/sign-in?verification=complete`,
         });
         form.reset();
         setMessage(
@@ -120,7 +120,7 @@ export function AuthForm({ mode, token }: { mode: AuthMode; token?: string }) {
       } else if (mode === "verify") {
         await authApi("send-verification-email", {
           email,
-          callbackURL: `${location.origin}/account/sign-in`,
+          callbackURL: `${location.origin}/account/sign-in?verification=complete`,
         });
         setMessage(
           "If verification is needed for this address, a new link is on its way. Check your inbox and spam folder.",
@@ -154,6 +154,8 @@ export function AuthForm({ mode, token }: { mode: AuthMode; token?: string }) {
       <Link href="/" className="text-sm text-blue-600 font-medium inline-block mb-4">← Back to home</Link>
       <h1>{copy[mode].title}</h1>
       <p className="muted">{copy[mode].description}</p>
+      {verificationNotice === "complete" && <Notice tone="success">Your email is verified. Sign in to continue.</Notice>}
+      {verificationNotice === "failed" && <Notice tone="error">This verification link could not be used. <Link href="/account/verify">Request a new verification email</Link>.</Notice>}
       {error && <Notice tone="error">{error}</Notice>}
       {message && <Notice tone="success">{message}</Notice>}
       <form
