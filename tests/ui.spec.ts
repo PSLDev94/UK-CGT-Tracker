@@ -1141,3 +1141,23 @@ test("verification callback distinguishes success, expired links and ordinary si
   await page.goto("/account/sign-in");
   await expect(page.getByText("Your email is verified. Sign in to continue.")).toHaveCount(0);
 });
+
+test("phone shows the focused next step after saving and calculating", async ({ page }) => {
+  await page.setViewportSize({ width:390, height:844 });
+  await mockWorkspace(page, {account:true});
+  await page.goto("/dashboard");
+  await uploadTemplate(page);
+  await page.getByRole("button", {name:"Save 2 transactions"}).click();
+  const saved = page.getByRole("heading", {name:"Transactions saved"});
+  await expect(saved).toBeFocused();
+  await expect(saved).toBeInViewport();
+  await page.getByRole("link", {name:"Calculate gains",exact:true}).click();
+  await page.getByLabel("Tax year", {exact:true}).selectOption("2024-25");
+  await page.getByLabel("History complete through").fill("2025-05-05");
+  await page.getByRole("checkbox", {name:"My Invest",exact:true}).check();
+  await page.getByRole("button", {name:"Calculate gains",exact:true}).click();
+  const result = page.getByRole("heading", {name:"2024-25 share gains"});
+  await expect(result).toBeFocused();
+  await expect(result).toBeInViewport();
+  await expect(page.locator(".net-gain").getByText("£391.00")).toBeInViewport();
+});

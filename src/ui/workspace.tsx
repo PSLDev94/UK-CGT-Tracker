@@ -78,6 +78,12 @@ function useModal(
   }, [open, ref]);
 }
 
+function focusHeading(heading: HTMLElement | null) {
+  if (!heading) return;
+  heading.focus({ preventScroll: true });
+  heading.scrollIntoView({ block: "start", behavior: "instant" });
+}
+
 export function WorkspaceScreen(props: { initialView?: WorkspaceView }) {
   return (
     <Suspense fallback={<p role="status">Loading workspace…</p>}>
@@ -97,9 +103,7 @@ function WorkspaceBody({
   );
   useEffect(() => {
     if (!focusRequest) return;
-    const heading = document.getElementById(focusRequest.heading);
-    heading?.focus({ preventScroll: true });
-    heading?.scrollIntoView({ block: "start", behavior: "instant" });
+    focusHeading(document.getElementById(focusRequest.heading));
   }, [focusRequest]);
   const [history, setHistory] = useState<History | null>(null);
   const [userName, setUserName] = useState("");
@@ -657,6 +661,7 @@ function WorkspaceBody({
                 {justSaved && !requestedDraft && (
                   <section className="panel">
                     <h2
+                      ref={focusHeading}
                       id="saved-import-heading"
                       tabIndex={-1}
                       className="scroll-mt-20"
@@ -944,7 +949,6 @@ function WorkspaceBody({
                         setPreview(null);
                         setPreviewFile(null);
                         await reload();
-                        setFocusRequest({ heading: "saved-import-heading" });
                         setMessage(
                           result.outcome === "already_committed"
                             ? "This import was already saved. No duplicate transactions were added."
