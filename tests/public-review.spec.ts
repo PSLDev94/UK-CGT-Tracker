@@ -109,3 +109,34 @@ test("a visitor can follow broker-specific instructions, pricing and guide conte
     }),
   ).toBeInViewport();
 });
+
+for (const [tool, label] of [
+  ["section-104-calculator", "Quantity — purchase 1"],
+  ["bed-and-breakfast-calculator", "Shares sold"],
+  ["cgt-allowance-checker", "Total gains so far"],
+] as const) {
+  test(`${tool} accepts the first edit only when the calculator is ready`, async ({
+    page,
+  }) => {
+    let releaseScripts!: () => void;
+    const scriptsPaused = new Promise<void>((resolve) => {
+      releaseScripts = resolve;
+    });
+    await page.route("**/_next/static/**/*.js", async (route) => {
+      await scriptsPaused;
+      await route.continue();
+    });
+    const field = page.getByLabel(label);
+    try {
+      await page.goto(`/tools/${tool}`, { waitUntil: "commit" });
+      await expect(field).toBeVisible();
+      await expect(field).toBeDisabled();
+    } finally {
+      releaseScripts();
+    }
+    await expect(field).toBeEnabled();
+    await field.fill("100");
+    await field.press("Tab");
+    await expect(field).toHaveValue("100");
+  });
+}

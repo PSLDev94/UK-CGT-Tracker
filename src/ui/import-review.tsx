@@ -94,9 +94,11 @@ export function ImportReviewPanel({
       ) : (
         <>
           <p>
-            {review.counts.total} source records · {review.counts.needsReview}{" "}
-            need attention. Nothing from this preview has been saved as
-            transactions.
+            {review.counts.total} source{" "}
+            {review.counts.total === 1 ? "record" : "records"} ·{" "}
+            {review.counts.needsReview}{" "}
+            {review.counts.needsReview === 1 ? "needs" : "need"} attention.
+            Nothing from this preview has been saved as transactions.
           </p>
           <div className="metrics">
             {[

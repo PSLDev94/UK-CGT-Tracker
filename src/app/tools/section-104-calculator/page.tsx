@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BarChart3, Plus, Trash2, ArrowRight, Calculator } from "lucide-react";
 import Decimal from "decimal.js";
 import { PublicNav } from "@/components/public-nav";
+import { CalculatorFields } from "@/components/calculator-fields";
 import { PublicFooter } from "@/components/public-footer";
 
 interface PurchaseRow {
@@ -168,7 +169,10 @@ export default function Section104CalculatorPage() {
         </p>
 
         {/* Purchase rows */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-8">
+        <CalculatorFields
+          label="Share purchases"
+          className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-8"
+        >
           <div className="h-1.5 bg-gradient-to-r from-blue-500 to-indigo-600" />
           <div className="p-6 sm:p-8">
             <h2 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
@@ -365,10 +369,13 @@ export default function Section104CalculatorPage() {
               </div>
             </div>
           )}
-        </div>
+        </CalculatorFields>
 
         {/* Disposal section */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-12">
+        <CalculatorFields
+          label="Share disposal"
+          className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-12"
+        >
           <div className="p-6 sm:p-8">
             <h2 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
               <Calculator className="w-5 h-5 text-red-600" /> Disposal
@@ -456,7 +463,7 @@ export default function Section104CalculatorPage() {
               </div>
             </div>
           )}
-        </div>
+        </CalculatorFields>
 
         {/* Explanatory content */}
         <div className="guide-article mb-12">

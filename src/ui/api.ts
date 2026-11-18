@@ -32,6 +32,14 @@ export async function api<T>(
       "CONNECTION_INTERRUPTED",
     );
   }
+  if (response.status === 429) {
+    const seconds = Number(response.headers.get("Retry-After"));
+    const message =
+      Number.isInteger(seconds) && seconds > 0 && seconds <= 3600
+        ? `Too many requests. Try again in ${seconds} ${seconds === 1 ? "second" : "seconds"}.`
+        : "Too many requests. Wait a moment, then try again.";
+    throw new ApiError(message, 429, "RATE_LIMITED");
+  }
   const data = await response.json().catch(() => null);
   if (!response.ok && !(response.status === 409 && data?.review)) {
     throw new ApiError(

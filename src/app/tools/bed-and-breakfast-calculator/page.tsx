@@ -5,6 +5,7 @@ import Decimal from "decimal.js";
 import Link from "next/link";
 import { Calculator, ArrowRight, AlertCircle, CheckCircle } from "lucide-react";
 import { PublicNav } from "@/components/public-nav";
+import { CalculatorFields } from "@/components/calculator-fields";
 import { PublicFooter } from "@/components/public-footer";
 
 export default function BedAndBreakfastCalculatorPage() {
@@ -130,7 +131,10 @@ export default function BedAndBreakfastCalculatorPage() {
         </p>
 
         {/* Calculator */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-12">
+        <CalculatorFields
+          label="30-day share matching"
+          className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-12"
+        >
           <div className="h-1.5 bg-gradient-to-r from-amber-400 to-orange-500" />
           <form
             noValidate
@@ -357,7 +361,7 @@ export default function BedAndBreakfastCalculatorPage() {
 
             <button
               type="submit"
-              className="mt-8 w-full bg-amber-700 text-white py-3.5 rounded-xl font-bold text-base hover:bg-amber-700 transition-all active:scale-[0.99] flex items-center justify-center gap-2 shadow-sm"
+              className="mt-8 w-full bg-amber-700 text-white py-3.5 rounded-xl font-bold text-base hover:bg-amber-800 transition-transform active:scale-[0.99] flex items-center justify-center gap-2 shadow-sm"
             >
               <Calculator className="w-5 h-5" /> Check B&amp;B Rule
             </button>
@@ -437,7 +441,7 @@ export default function BedAndBreakfastCalculatorPage() {
               )}
             </div>
           )}
-        </div>
+        </CalculatorFields>
 
         {/* Explanatory content */}
         <div className="guide-article">

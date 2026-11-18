@@ -92,6 +92,15 @@ function WorkspaceBody({
   initialView?: WorkspaceView;
 }) {
   const [data, setData] = useState<Overview | null>(null);
+  const [focusRequest, setFocusRequest] = useState<{ heading: string } | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!focusRequest) return;
+    const heading = document.getElementById(focusRequest.heading);
+    heading?.focus({ preventScroll: true });
+    heading?.scrollIntoView({ block: "start", behavior: "instant" });
+  }, [focusRequest]);
   const [history, setHistory] = useState<History | null>(null);
   const [userName, setUserName] = useState("");
   const view = initialView;
@@ -405,9 +414,7 @@ function WorkspaceBody({
       await reload();
       setDirty(false);
       setMessage("Calculation saved.");
-      requestAnimationFrame(() =>
-        document.querySelector<HTMLElement>("#calculation-summary")?.focus(),
-      );
+      setFocusRequest({ heading: "calculation-result-heading" });
     });
   }
 
@@ -499,11 +506,7 @@ function WorkspaceBody({
           </section>
         ) : !data ? (
           <section className="panel">
-            <h2>The workspace is not available yet.</h2>
-            <p>
-              Staging configuration is still being completed. No file has been
-              uploaded.
-            </p>
+            <h2>Your workspace couldn’t be loaded</h2>
             <Button
               variant="secondary"
               onClick={() => {
@@ -569,7 +572,7 @@ function WorkspaceBody({
                                 "/dashboard/upload?account=" +
                                 encodeURIComponent(a.id)
                               }
-                              aria-label={`Upload a CSV for ${a.label}`}
+                              aria-label={`Upload CSV for ${a.label}`}
                             >
                               Upload CSV{" "}
                               <ArrowUpRight size={14} aria-hidden="true" />
@@ -653,7 +656,13 @@ function WorkspaceBody({
               <section>
                 {justSaved && !requestedDraft && (
                   <section className="panel">
-                    <h2>Transactions saved</h2>
+                    <h2
+                      id="saved-import-heading"
+                      tabIndex={-1}
+                      className="scroll-mt-20"
+                    >
+                      Transactions saved
+                    </h2>
                     <p>
                       {justSaved.accepted_count} included in{" "}
                       {accountName(justSaved.account_id)}. Calculate again to
@@ -935,10 +944,11 @@ function WorkspaceBody({
                         setPreview(null);
                         setPreviewFile(null);
                         await reload();
+                        setFocusRequest({ heading: "saved-import-heading" });
                         setMessage(
                           result.outcome === "already_committed"
                             ? "This import was already saved. No duplicate transactions were added."
-                            : "Transactions saved. Your calculations must now be refreshed.",
+                            : "",
                         );
                       })
                     }

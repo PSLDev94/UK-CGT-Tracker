@@ -6,6 +6,7 @@ import Decimal from "decimal.js";
 import { money } from "@/ui/format";
 import { ArrowRight, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
 import { PublicNav } from "@/components/public-nav";
+import { CalculatorFields } from "@/components/calculator-fields";
 import { PublicFooter } from "@/components/public-footer";
 
 const EXEMPT_AMOUNT = 3000;
@@ -101,7 +102,10 @@ export default function CGTAllowanceCheckerPage() {
         </p>
 
         {/* Calculator */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-8">
+        <CalculatorFields
+          label="Allowance calculation"
+          className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-8"
+        >
           <div
             className={`h-1.5 bg-gradient-to-r ${hasInput ? lc.gradient : "from-green-400 to-emerald-500"}`}
           />
@@ -281,7 +285,7 @@ export default function CGTAllowanceCheckerPage() {
               </div>
             </div>
           )}
-        </div>
+        </CalculatorFields>
 
         {/* Explanatory content */}
         <div className="guide-article mb-12">
@@ -337,7 +341,8 @@ export default function CGTAllowanceCheckerPage() {
             Review the disposals behind your gains
           </h2>
           <p className="text-gray-600 mb-6">
-            Import supported broker records to calculate your share gains and losses.
+            Import supported broker records to calculate your share gains and
+            losses.
           </p>
           <Link
             href="/signup"

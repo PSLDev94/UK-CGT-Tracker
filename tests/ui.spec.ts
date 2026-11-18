@@ -479,6 +479,7 @@ test("account → review → conflict → commit → calculate → reverse", asy
   await expect(
     page.getByRole("heading", { name: "Review before saving" }),
   ).not.toBeVisible();
+  await expect(page.getByRole("heading", {name:"Transactions saved"})).toBeFocused();
   await navigateWorkspace(page, "Calculations");
   await page.getByLabel("Tax year", { exact: true }).selectOption("2024-25");
   await page.getByLabel("History complete through").fill("2025-05-05");
@@ -489,6 +490,9 @@ test("account → review → conflict → commit → calculate → reverse", asy
   await expect(
     page.locator(".net-gain").getByText("£391.00", { exact: true }),
   ).toBeVisible();
+  const resultHeading = page.getByRole("heading", {name: "2024-25 share gains"});
+  await expect(resultHeading).toBeFocused();
+  await expect(resultHeading).toBeInViewport();
   await page
     .getByText("2024-09-01 · US0378331005 · £391.00", { exact: true })
     .click();
@@ -701,9 +705,15 @@ test("session expiry and setup failures leave recoverable pages", async ({
   );
   await page.reload();
   await expect(
-    page.getByRole("heading", { name: "The workspace is not available yet." }),
+    page.getByRole("heading", { name: "Your workspace couldn’t be loaded" }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Try again" })).toBeEnabled();
+  await page.route("**/api/v2/auth/**", (route) =>
+    route.fulfill({ status: 429, headers: { "Retry-After": "12" }, json: {} }),
+  );
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Try again in 12 seconds" })).toBeVisible();
+  await expect(page.getByText("Staging configuration is still being completed.", {exact:false})).toHaveCount(0);
 });
 
 test("native import requires classification and shows incomplete-history guidance", async ({

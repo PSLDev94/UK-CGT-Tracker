@@ -17,12 +17,15 @@ export function CalculationResult({
   return (
     <section
       id="calculation-summary"
-      tabIndex={-1}
       aria-label="Calculation result"
       className="space-y-6 mb-8"
     >
       <div className="flex flex-wrap gap-3 justify-between items-center">
-        <h2 className="text-lg font-semibold text-gray-900">
+        <h2
+          id="calculation-result-heading"
+          tabIndex={-1}
+          className="scroll-mt-20 text-lg font-semibold text-gray-900"
+        >
           {result.taxYear} share gains
         </h2>
         <span className="tag">

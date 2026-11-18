@@ -51,10 +51,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       />
       <main id="main" className="workspace-main">
         {error ? (
-          <>
+          <section className="panel">
+            <h1>Your workspace couldn’t be loaded</h1>
             <Notice tone="error">{error}</Notice>
             <Button onClick={load}>Try again</Button>
-          </>
+          </section>
         ) : session === undefined ? (
           <Notice>Loading your workspace…</Notice>
         ) : session === null ? (
