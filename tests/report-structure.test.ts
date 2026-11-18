@@ -156,3 +156,27 @@ it("explains missing sale information in older snapshots without inferring a zer
     expect(text).not.toContain("Selling costs\n£0.00");
   }
 });
+
+it("keeps the pool history heading with its first movement at page boundaries", async () => {
+  for (const count of [1, 6, 12, 18, 24]) {
+    const pdf = await PDFDocument.load(
+      await reportPdf(
+        {
+          ...saved,
+          accounts: Array.from({ length: count }, (_, i) => ({
+            label: "Account " + i,
+            broker: "hl",
+            confirmed: true,
+          })),
+        },
+        true,
+      ),
+    );
+    const pages = pdf.getPages().map((_, index) => reportPageText(pdf, index));
+    const firstHistoryPage = pages.find((page) =>
+      page.split("\n").includes("Section 104 pool movements"),
+    );
+    expect(firstHistoryPage).toContain("Prior-year history · 1 April 2024");
+    expect(firstHistoryPage).toContain("Balance: 1 share · cost £62");
+  }
+});

@@ -79,3 +79,13 @@ Staging application commits `c154f6e` and `e58daf1` implement the assessment. Th
 | Use the workspace on a phone | The scenario price was visible without sideways scrolling at 320 and 390 pixels. Staying on Settings retained the edit and explicitly discarding it reached Billing. The review covered 35 routes and states per browser, with zero automated accessibility violations across the 70 scans. |
 
 The rounding example and professional sign-off field are in [the tax review pack](TAX_REVIEW.md). Broker exercises used synthetic statements. Production deployment and live payments still require a separate decision.
+
+## Selling fees, public guidance and report navigation
+
+Application commit `98bc0c1` includes gross proceeds, selling costs, cash proceeds and total allowable costs in the workspace, CSV and both PDFs. The pricing sample includes a £5 selling fee. Its tagged headings, tables and section bookmarks expose the evidence in reading order. The synthetic fee case in [the tax review pack](TAX_REVIEW.md) explains the expected £33 gain and the comparison to HMRC’s example.
+
+A fresh local release build passed 69 browser cases in desktop Chromium and the same 69 in mobile WebKit. The complete local application and report suite passed 407 tests, including five pool-history pagination layouts. Checks covered invalid signup, broker import and recovery, signed gains and losses, sandbox billing states, missing acquisition history, report selection and downloads. Some browser tests supply controlled network responses for exceptional states.
+
+The public browser walkthrough checked that a 5 April sale and a 20 April purchase both belong in the history supplied to the calculator. Both broker guides requested the original activity file. A sale of 200 shares with a single repurchase of 100 showed a £20 gain before fees on the 100 matched shares and identified the remaining 100. An oversell kept the entered values and explained the quantity available. The first input in each calculator fit the initial 390 × 664 phone viewport.
+
+The two-year workspace test confirmed that Overview, Calculations and Reports select the most recently saved year and respect an explicit year in a link. Keyboard order followed the displayed calculation and the year control preceded the result. Restoring a Settings history entry recovered the unsaved display name only in its original session. Password values stayed out of browser history and draft storage.
