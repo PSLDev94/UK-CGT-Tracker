@@ -268,15 +268,8 @@ function ReportContents({
     calculation?.coverage_confirmed && result?.status === "complete";
   const accounts = calculation?.coverage_accounts;
   return (
-    <div className="max-w-5xl space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">
-          Reports &amp; Exports
-        </h1>
-        <p className="text-gray-600 mt-1">
-          Review your saved share gains and download the evidence.
-        </p>
-      </div>
+    <div className="max-w-5xl space-y-4 sm:space-y-6">
+      <h1 className="text-3xl font-bold text-gray-900">Reports &amp; Exports</h1>
       {error && (
         <Notice tone="error">
           {error}{" "}
@@ -346,21 +339,22 @@ function ReportContents({
                   : "Total awaiting complete history"}
               </p>
               <p className="text-sm text-gray-600">Share gains and losses before personal allowances, reliefs and other gains.</p>
-              <Link className={linkClass} href={calculationPath}>View calculation for {year}</Link>
               {noDisposals && (
                 <p>
                   The saved history contains no share sales in {year}. Choose the year of your sale
                   or <Link className={linkClass} href={uploadPath}>upload a file containing sales</Link>.
                 </p>
               )}
-              <p>
+              <p className="text-sm">
                 {confirmed
-                  ? "Complete calculation with confirmed account coverage."
+                  ? "Account coverage confirmed."
                   : "Draft calculation. History or account coverage is incomplete."}{" "}
-                History through {displayDate(result.historyThrough)}.
+                History through {displayDate(result.historyThrough)}.{" "}
+                <Link className={linkClass} href={calculationPath}>View calculation for {year}</Link>
               </p>
               {!draft && (
                 <div id="report-csv">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <Button
                     variant="secondary"
                     disabled={!!busy}
@@ -372,9 +366,8 @@ function ReportContents({
                       ? "Preparing CSV…"
                       : "Download CSV evidence"}
                   </Button>
-                  <p className="mt-1 text-sm text-gray-600">
-                    Free spreadsheet of disposals, matches, pools and issues.
-                  </p>
+                  <span className="text-sm text-gray-600">Free</span>
+                  </div>
                   {downloadFeedback("csv")}
                 </div>
               )}
