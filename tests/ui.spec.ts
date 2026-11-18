@@ -7,7 +7,7 @@ import { reviewCsv, tradesFromReview } from "../src/domain/imports/review";
 import { pageForReviewIndex, reviewPage } from "../src/server/workspace-api";
 import { longFreetradeStatement, mixedFreetradeStatement } from "./helpers/freetrade-statement";
 import { calculateGains } from "../src/domain/cgt/calculate";
-import type { Overview, Preview } from "../src/ui/workspace-types";
+import type { HistoryImport, Overview, Preview } from "../src/ui/workspace-types";
 
 test("billing keeps test status explicit and recovers from interrupted requests", async ({
   page,
@@ -305,13 +305,15 @@ async function mockWorkspace(
         ];
         return route.fulfill({ json: { runId: "result-1", result } });
       }
-      case "reverse-import":
-        state.imports[0]!.status = "reversed";
-        state.imports[0]!.reversal_reason = body.reason;
+      case "reverse-import": {
+        const receipt = state.imports.find((item) => item.id === body.importId)!;
+        receipt.status = "reversed";
+        receipt.reversal_reason = body.reason;
         state.calculations = [];
         return route.fulfill({
-          json: { status: "reversed", importId: draftId },
+          json: { status: "reversed", importId: receipt.id },
         });
+      }
       default:
         return route.fulfill({
           status: 400,
@@ -336,6 +338,7 @@ async function uploadTemplate(page: Page) {
 }
 
 async function navigateWorkspace(page: Page, name: string) {
+  await expect(page.getByRole("complementary", { name: "Workspace navigation" })).toBeVisible();
   const button = page.getByRole("navigation", {name:"Dashboard", includeHidden:true}).getByRole("link", { name, exact: true });
   if (!(await button.isVisible()))
     await page.getByRole("button", { name: "Open sidebar menu" }).click();
@@ -450,7 +453,7 @@ test("account → review → conflict → commit → calculate → reverse", asy
   await page.getByRole("button", { name: "Add account", exact: true }).click();
   await expect(page).toHaveURL(/dashboard\/upload\?account=/);
   await navigateWorkspace(page, "Broker accounts");
-  await expect(page.getByLabel("Portfolio summary")).toContainText(
+  await expect(page.getByRole("group", { name: "Portfolio summary" })).toContainText(
     "Taxable accounts1",
   );
   await page.screenshot({
@@ -528,6 +531,43 @@ test("account → review → conflict → commit → calculate → reverse", asy
   await expect(
     page.getByRole("heading", { name: "2024-25 share gains" }),
   ).not.toBeVisible();
+});
+
+test("same-minute AJ Bell receipts identify the sale in history and in the reversal dialog", async ({ page }) => {
+  const { state, calls } = await mockWorkspace(page, { account: true });
+  state.accounts[0]!.label = "AJ Bell GIA";
+  state.accounts[0]!.broker = "ajbell";
+  const sides = ["BUY", "SELL"] as const;
+  const receipts = sides.map((side, i): HistoryImport => ({
+    id: i === 0 ? "cabd124a-0000-4000-8000-00000000a7b3" : "2598eae0-0000-4000-8000-00000000d81b",
+    account_id: accountId, status: "committed", record_count: 1, accepted_count: 1,
+    excluded_count: 0, duplicate_count: 0, created_at: "2026-11-18T12:30:00Z",
+    firstTrade: { side, quantity: "1", date: "2025-07-01", securityId: "US0378331005" },
+  }));
+  state.imports = receipts;
+  await page.goto("/dashboard/history");
+  const buy = page.getByRole("listitem").filter({ hasText: "Buy 1 share" });
+  const saleSummary = "Sell 1 share · US0378331005 · 1 July 2025";
+  const sell = page.getByRole("listitem").filter({ hasText: saleSummary });
+  await expect(buy.getByText("Receipt cabd124a…a7b3")).toBeVisible();
+  await expect(sell.getByText("Receipt 2598eae0…d81b")).toBeVisible();
+  await sell.getByText("View import details").click();
+  const reverse = sell.getByRole("button", { name: "Reverse import" });
+  await reverse.click();
+  const dialog = page.getByRole("dialog", { name: "Reverse this import?" });
+  await expect(dialog.getByText(saleSummary)).toBeVisible();
+  await expect(dialog.getByText("Receipt 2598eae0…d81b")).toBeVisible();
+  await expect(dialog).toHaveAccessibleDescription(/Sell 1 share.*Receipt 2598eae0…d81b.*exclude 1 transaction/);
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(dialog).toBeHidden();
+  await expect(reverse).toBeFocused();
+  expect(calls).not.toContain("reverse-import");
+  await reverse.click();
+  await dialog.getByLabel("Reason for reversing").fill("Correcting the sale");
+  await dialog.getByRole("button", { name: "Reverse import" }).click();
+  await expect(sell.getByText("Reversed", { exact: true })).toBeVisible();
+  await expect(buy.getByText("Saved", { exact: true })).toBeVisible();
 });
 
 test("unsupported files cannot be saved and can be discarded", async ({
@@ -632,7 +672,8 @@ test("narrow workspace, keyboard, unsaved navigation and reduced motion", async 
   await page
     .getByRole("button", { name: "Leave workspace", exact: true })
     .click();
-  await expect(page).toHaveURL(/\/supported-brokers$/);
+  const helpQuery = new URLSearchParams({ from: "/dashboard/upload?account=" + accountId });
+  await expect(page).toHaveURL("/supported-brokers?" + helpQuery);
   expect(nativeDialogs).toEqual([]);
 });
 

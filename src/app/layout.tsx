@@ -1,4 +1,6 @@
 import { connection } from "next/server";
+import { hasPublicSession } from "@/server/public-session";
+import { PublicAccountProvider } from "@/ui/public-account";
 import type { Metadata } from "next";
 import "@fontsource-variable/inter";
 import "./globals.css";
@@ -24,7 +26,9 @@ export default async function RootLayout({
         <a className="skip-link" href="#main">
           Skip to content
         </a>
-        {children}
+        <PublicAccountProvider signedIn={await hasPublicSession()}>
+          {children}
+        </PublicAccountProvider>
       </body>
     </html>
   );

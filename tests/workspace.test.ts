@@ -374,6 +374,36 @@ describe("authenticated PostgreSQL application workflow", () => {
     });
   });
 
+  it("identifies same-minute buy and sell receipts, including reversed and legacy trades", async () => {
+    const s = await setup("history-trade-identity");
+    const account = await workspace.addAccount(s.user, {
+      portfolioId: s.portfolio.id, broker: "ajbell", label: "AJ Bell", accountType: "GIA",
+    });
+    const [header] = csv.split("\n");
+    const save = async (side: "BUY" | "SELL") => {
+      const file = `${header}\nreceipt-${side},2025-07-01,${side},US0378331005,1,10,0,GBP,1,ORDINARY_SHARE\n`;
+      const draft = await prepare(s.user, account.id, file);
+      expect((await workspace.commitImport(s.user, draft.draftId, draft.revision)).outcome).toBe("committed");
+      return draft.draftId;
+    };
+    const buy = await save("BUY");
+    const sell = await save("SELL");
+    await new OwnedDatabase(database.db).run(s.user, async (tx) => {
+      await query(tx, "UPDATE cgt.imports SET created_at = '2026-11-18T12:30:00Z' WHERE account_id = $1", [account.id]);
+      await query(tx, "UPDATE cgt.imports SET record_receipts = '[]'::jsonb WHERE id = $1", [sell]);
+    });
+    const details = { date: "2025-07-01", securityId: "US0378331005", quantity: "1" };
+    const sale = { id: sell, account_id: account.id, firstTrade: { ...details, side: "SELL" } };
+    expect((await workspace.importHistory(s.user, 1)).imports).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: buy, firstTrade: { ...details, side: "BUY" } }),
+      expect.objectContaining({ ...sale, status: "committed" }),
+    ]));
+    await workspace.reverseImport(s.user, sell, "Synthetic receipt selection");
+    expect((await workspace.importHistory(s.user, 1)).imports).toContainEqual(
+      expect.objectContaining({ ...sale, status: "reversed" }),
+    );
+  });
+
   it("counts all imports in the Accounts summary beyond the recent receipts limit", async () => {
     const s = await setup("account-receipt-count");
     await new OwnedDatabase(database.db).run(s.user, (tx) =>
@@ -386,6 +416,7 @@ describe("authenticated PostgreSQL application workflow", () => {
     const overview = await workspace.overview(s.user, true);
     expect(overview.imports).toHaveLength(100);
     expect(overview.importCount).toBe(101);
+    expect((await workspace.importHistory(s.user, 1)).imports[0]).toMatchObject({ firstTrade: null });
     expect(await workspace.overview(s.user)).not.toHaveProperty("importCount");
   });
 

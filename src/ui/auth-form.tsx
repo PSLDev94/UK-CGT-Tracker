@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { authHref, safeReturnPath } from "./return-path";
+import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
 import { authApi, ApiError } from "./api";
 import {
   Button,
@@ -61,6 +62,7 @@ export function AuthForm({
 }) {
   const router = useRouter();
   const destination = safeReturnPath(nextPath);
+  const annualBilling = destination.split("?")[0] === "/billing";
   const href = (path: string) => authHref(path, destination);
   const [submittedAddress, setSubmittedAddress] = useState("");
   const confirmationHeading = useRef<HTMLHeadingElement>(null);
@@ -239,7 +241,11 @@ export function AuthForm({
         ← Back to home
       </Link>
       <h1>{copy[mode].title}</h1>
-      <p className="muted">{copy[mode].description}</p>
+      <p className="muted">
+        {annualBilling && (mode === "sign-in" || mode === "sign-up")
+          ? `Continue to billing for annual PDF reports (${ANNUAL_REPORT_PRICE} per year). You’ll review the subscription in checkout.`
+          : copy[mode].description}
+      </p>
       {verificationNotice === "complete" && (
         <Notice tone="success">
           Your email is verified. Sign in to continue.

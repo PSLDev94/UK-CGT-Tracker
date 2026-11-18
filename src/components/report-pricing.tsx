@@ -1,3 +1,7 @@
+"use client";
+
+import { usePublicAccount } from "@/ui/public-account";
+import { authHref } from "@/ui/return-path";
 import Link from "next/link";
 import { CheckCircle } from "lucide-react";
 import {
@@ -11,6 +15,7 @@ export function ReportPricing({
 }: {
   heading?: "h2" | "h3";
 }) {
+  const signedIn = usePublicAccount();
   return (
     <div className="grid gap-5 sm:grid-cols-2 text-left">
       {[
@@ -19,16 +24,18 @@ export function ReportPricing({
           name: "Free workspace",
           amount: "£0",
           features: FREE_FEATURES,
-          href: "/signup",
-          action: "Create a free account",
+          href: signedIn ? "/dashboard" : "/signup",
+          action: signedIn ? "Open my workspace" : "Create a free account",
         },
         {
           paid: true,
           name: "Annual PDF reports",
           amount: ANNUAL_REPORT_PRICE,
           features: PDF_FEATURES,
-          href: "/billing",
-          action: "View sandbox billing",
+          href: signedIn ? "/billing" : authHref("/signup", "/billing"),
+          action: signedIn
+            ? "View sandbox billing"
+            : "Create an account for annual reports",
         },
       ].map((plan) => (
         <div
@@ -87,6 +94,14 @@ export function ReportPricing({
           >
             {plan.action}
           </Link>
+          {plan.paid && !signedIn && (
+            <Link
+              className="mt-2 py-2 text-center text-sm text-blue-700 underline"
+              href={authHref("/login", "/billing")}
+            >
+              Already have an account? Sign in
+            </Link>
+          )}
         </div>
       ))}
     </div>

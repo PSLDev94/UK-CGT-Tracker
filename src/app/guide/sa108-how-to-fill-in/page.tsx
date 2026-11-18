@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Metadata } from "next";
+import { sa108Edition } from "@/domain/reports/filing-guidance";
 import { GuideLayout } from "@/components/guide-layout";
 import { CgtReportingGuidance } from "@/components/cgt-reporting-guidance";
 
@@ -13,12 +14,13 @@ export const metadata: Metadata = {
 };
 
 export default function SA108GuidePage() {
+  const edition = sa108Edition("2025-26")!;
   return (
     <GuideLayout
       slug="sa108-how-to-fill-in"
       edition="Tax year 2025–26"
       lastUpdated="November 2026"
-      nextStep={{ href: "/dashboard/reports", title: "View your saved reports" }}
+      nextStep={{ href: "/dashboard/reports?year=2025-26", title: "Back to your 2025–26 report" }}
       title="How to Fill in SA108 for Shares and Investments"
       breadcrumb="SA108 Guide"
       relatedGuides={[
@@ -78,9 +80,8 @@ export default function SA108GuidePage() {
         is not a completed return.
       </p>
       <p>
-        <a href="https://www.gov.uk/government/publications/self-assessment-capital-gains-summary-sa108">
-          Download the official SA108 form and year-specific notes
-        </a>
+        Use HMRC’s <a href={edition.form}>2025–26 SA108 form</a> and{" "}
+        <a href={edition.notes}>2025–26 SA108 notes</a>
         .
       </p>
       <h2>The 31 January Deadline</h2>

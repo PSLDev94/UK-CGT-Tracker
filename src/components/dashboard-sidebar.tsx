@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Calculator,
   ChartNoAxesCombined,
@@ -48,22 +48,28 @@ export function DashboardSidebar({
   userEmail,
   onSignOut,
   busy = false,
+  brokerSupportHref = "/supported-brokers",
 }: {
   userEmail: string;
   onSignOut: () => void;
   busy?: boolean;
+  brokerSupportHref?: string;
 }) {
   const menuButton = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  useEffect(() => {
+    if (!open) return;
+    function closeMenu(event: KeyboardEvent) {
+      if (event.key !== "Escape" || event.defaultPrevented || document.querySelector("dialog[open]")) return;
+      setOpen(false);
+      menuButton.current?.focus();
+    }
+    document.addEventListener("keydown", closeMenu);
+    return () => document.removeEventListener("keydown", closeMenu);
+  }, [open]);
   return (
     <aside
-      onKeyDown={(event) => {
-        if (open && event.key === "Escape") {
-          setOpen(false);
-          menuButton.current?.focus();
-        }
-      }}
       aria-label="Workspace navigation"
       className="bg-white border-r border-gray-200 flex flex-col"
     >
@@ -125,7 +131,7 @@ export function DashboardSidebar({
             </div>
           ))}
           <Link
-            href="/supported-brokers"
+            href={brokerSupportHref}
             className="block px-4 py-3 text-sm text-gray-600 hover:bg-gray-50 rounded-md"
           >
             Broker support

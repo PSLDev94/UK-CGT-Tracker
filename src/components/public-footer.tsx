@@ -1,7 +1,11 @@
+"use client";
+
+import { usePublicAccount } from "@/ui/public-account";
 import Link from "next/link";
 import { PieChart } from "lucide-react";
 
 export function PublicFooter() {
+  const signedIn = usePublicAccount();
   return (
     <footer className="border-t py-16 bg-white">
       <div className="max-w-7xl mx-auto px-4">
@@ -156,6 +160,14 @@ export function PublicFooter() {
                   Contact Us
                 </Link>
               </li>
+              {signedIn ? (
+                <li>
+                  <Link href="/dashboard" className="text-gray-500 hover:text-gray-900">
+                    My workspace
+                  </Link>
+                </li>
+              ) : (
+                <>
               <li>
                 <Link
                   href="/login"
@@ -172,6 +184,8 @@ export function PublicFooter() {
                   Create a free account
                 </Link>
               </li>
+                </>
+              )}
               <li>
                 <Link
                   className="text-gray-500 hover:text-gray-900"

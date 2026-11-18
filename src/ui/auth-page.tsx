@@ -1,6 +1,10 @@
 import { AuthForm, type AuthMode } from "./auth-form";
 import { CheckCircle } from "lucide-react";
-export function AuthPage({
+import { redirect } from "next/navigation";
+import { hasPublicSession } from "@/server/public-session";
+import { safeReturnPath } from "./return-path";
+
+export async function AuthPage({
   mode,
   token,
   next,
@@ -11,6 +15,13 @@ export function AuthPage({
   token?: string;
   verificationNotice?: "failed" | "complete";
 }) {
+  if (
+    (mode === "sign-in" || mode === "sign-up") &&
+    !verificationNotice &&
+    (await hasPublicSession())
+  ) {
+    redirect(safeReturnPath(next));
+  }
   return (
     <main
       id="main"

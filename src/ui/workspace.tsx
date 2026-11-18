@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { authHref } from "./return-path";
+import { WorkspaceEntry } from "./workspace-entry";
+import { safeReturnPath } from "./return-path";
 import { latestCalculation } from "./latest-calculation";
 import { PortfolioOverview } from "./portfolio-overview";
 import {
@@ -34,14 +35,14 @@ import {
   Notice,
   focusFirstError,
 } from "./primitives";
-import { ImportHistoryDetail } from "./import-history-detail";
+import { ImportHistoryDetail, ImportReceiptIdentity } from "./import-history-detail";
 import { ImportReviewPanel } from "./import-review";
 import { CalculationResult } from "./calculation-result";
 import { useModal, useNavigationGuard, LeaveDialog } from "./navigation-guard";
-import type { Overview, Preview, SavedImport } from "./workspace-types";
+import type { HistoryImport, Overview, Preview } from "./workspace-types";
 
 type History = {
-  imports: SavedImport[];
+  imports: HistoryImport[];
   total: number;
   page: number;
   pageSize: number;
@@ -95,20 +96,25 @@ function WorkspaceBody({
   }, [focusRequest]);
   const [history, setHistory] = useState<History | null>(null);
   const historyPage = useRef(1);
-  const [userName, setUserName] = useState("");
+  const [userName, setUserName] = useState<string | null>(null);
   const view = initialView;
   const params = useSearchParams();
   const router = useRouter();
   const requestedDraft = view === "imports" ? params.get("draft") : null;
-  const [accountChoice, setAccountChoice] = useState<string | null>(null);
-  const accountId =
-    accountChoice ??
-    params.get("account") ??
+  const accountId = params.get("account") ??
     (data?.accounts.length === 1 ? data.accounts[0].id : "");
-  const selectedAccount = data?.accounts.find(
-    (account) => account.id === accountId,
-  );
-  const [format, setFormat] = useState("native");
+  const selectedAccount = data?.accounts.find((account) => account.id === accountId);
+  const format = params.get("format") === "canonical-v1" ? "canonical-v1" : "native";
+  function chooseUploadOption(key: "account" | "format", value: string) {
+    const url = new URL(window.location.href);
+    url.searchParams.set(key, value);
+    window.history.replaceState({ cgtPendingFile: Boolean(file) }, "", url);
+    setOrdinarySharesConfirmed(false);
+  }
+  const uploadParams = new URLSearchParams(params);
+  if (selectedAccount) uploadParams.set("account", selectedAccount.id);
+  const uploadLocation = "/dashboard/upload" + (uploadParams.size ? "?" + uploadParams : "");
+  const brokerHelp = "/supported-brokers?" + new URLSearchParams({ from: safeReturnPath(uploadLocation) });
   const savedImportId = params.get("saved");
   const justSaved =
     savedImportId &&
@@ -163,8 +169,9 @@ function WorkspaceBody({
   }
   const [formDirty, setDirty] = useState(false);
   const [detailsDirty, setDetailsDirty] = useState(false);
-  const dirty = formDirty || detailsDirty || (view === "calculations" && settingsEdited);
-  const [reverse, setReverse] = useState<SavedImport | null>(null);
+  const dirty = formDirty || detailsDirty || (view === "imports" && ordinarySharesConfirmed && !preview) ||
+    (view === "calculations" && settingsEdited);
+  const [reverse, setReverse] = useState<HistoryImport | null>(null);
   const navigation = useNavigationGuard(dirty || !!file, busy);
   const reverseDialog = useRef<HTMLDialogElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -409,6 +416,7 @@ function WorkspaceBody({
       setFile(null);
       setDirty(false);
       setAuthRequired(true);
+      router.refresh();
       setMessage("You have been signed out.");
     });
   const accountName = (id: string) =>
@@ -420,10 +428,28 @@ function WorkspaceBody({
       timeZone: "Europe/London",
     }).format(new Date(date));
 
+  if (authRequired) {
+    return <WorkspaceEntry next={window.location.pathname + window.location.search} message={message} />;
+  }
+  if (userName === null) {
+    return (
+      <main id="main" className="classic-auth">
+        {loading ? <Notice>Loading your workspace…</Notice> : (
+          <section className="auth-wrap panel">
+            <h1>Your workspace couldn’t be loaded</h1>
+            {error && <Notice tone="error">{error}</Notice>}
+            <Button onClick={() => { setLoading(true); setError(""); void initialise(); }}>Try again</Button>
+          </section>
+        )}
+      </main>
+    );
+  }
+
   return (
     <div className="workspace">
       <DashboardSidebar
         userEmail={userName}
+        brokerSupportHref={view === "imports" ? brokerHelp : undefined}
         busy={busy}
         onSignOut={() => navigation.request(signOut)}
       />
@@ -455,33 +481,6 @@ function WorkspaceBody({
         </div>
         {loading ? (
           <Notice>Loading your workspace…</Notice>
-        ) : authRequired ? (
-          <section className="panel">
-            <h2>Sign in to your workspace.</h2>
-            <p>
-              Your financial records are available only after you sign in and
-              verify your email.
-            </p>
-            <div className="actions">
-              <Link
-                className="button primary"
-                href={authHref(
-                  "/account/sign-in",
-                  window.location.pathname + window.location.search,
-                )}
-              >
-                Sign in
-              </Link>
-              <Link
-                href={authHref(
-                  "/account/sign-up",
-                  window.location.pathname + window.location.search,
-                )}
-              >
-                Create account
-              </Link>
-            </div>
-          </section>
         ) : !data ? (
           <section className="panel">
             <h2>Your workspace couldn’t be loaded</h2>
@@ -506,6 +505,7 @@ function WorkspaceBody({
                 {data.accounts.length > 0 && (
                   <div
                     className="portfolio-summary"
+                    role="group"
                     aria-label="Portfolio summary"
                   >
                     <div>
@@ -711,16 +711,6 @@ function WorkspaceBody({
                       <form
                         noValidate
                         onSubmit={upload}
-                        onChange={(event) => {
-                          setDirty(true);
-                          const target = event.target;
-                          if (
-                            target instanceof HTMLSelectElement &&
-                            (target.name === "accountId" ||
-                              target.name === "format")
-                          )
-                            setOrdinarySharesConfirmed(false);
-                        }}
                         className="form-stack"
                       >
                         <div className="form-columns">
@@ -730,7 +720,7 @@ function WorkspaceBody({
                             label="Broker account"
                             error={errors.accountId}
                             value={selectedAccount?.id ?? ""}
-                            onChange={(e) => setAccountChoice(e.target.value)}
+                            onChange={(e) => chooseUploadOption("account", e.target.value)}
                           >
                             <option value="">Choose account</option>
                             {data.accounts.map((a) => (
@@ -744,7 +734,7 @@ function WorkspaceBody({
                             name="format"
                             label="File format"
                             value={format}
-                            onChange={(e) => setFormat(e.target.value)}
+                            onChange={(e) => chooseUploadOption("format", e.target.value)}
                           >
                             <option value="native">
                               Original broker export
@@ -761,13 +751,13 @@ function WorkspaceBody({
                                 {uploadGuidance[selectedAccount.broker]}{" "}
                                 <Link
                                   className="underline underline-offset-2"
-                                  href={`/supported-brokers#${selectedAccount.broker}`}
+                                  href={`${brokerHelp}#${selectedAccount.broker}`}
                                 >
                                   See export instructions
                                 </Link>
                               </>
                             ) : (
-                              <Link href="/supported-brokers#template">
+                              <Link href={`${brokerHelp}#template`}>
                                 Check the reviewed CSV template columns
                               </Link>
                             )}
@@ -1110,6 +1100,7 @@ function WorkspaceBody({
                                   ? "Saved"
                                   : "Reversed"}
                               </span>
+                              <ImportReceiptIdentity item={item} />
                               <p>
                                 {item.accepted_count} included ·{" "}
                                 {item.excluded_count} excluded ·{" "}
@@ -1183,18 +1174,23 @@ function WorkspaceBody({
       <dialog
         ref={reverseDialog}
         aria-labelledby="reverse-title"
+        aria-describedby={reverse ? "reverse-identity reverse-consequence" : undefined}
         onCancel={(e) => {
           if (busy) e.preventDefault();
           else setReverse(null);
         }}
       >
         <h2 id="reverse-title">Reverse this import?</h2>
-        <p>
-          This removes {reverse?.accepted_count} transactions from{" "}
-          {reverse ? accountName(reverse.account_id) : "this account"} from
-          future calculations. Current results will be invalidated. The original
-          records stay in the history.
-        </p>
+        {reverse && (
+          <>
+            <div id="reverse-identity"><ImportReceiptIdentity item={reverse} /></div>
+            <p id="reverse-consequence">
+              Future calculations for {accountName(reverse.account_id)} will exclude{" "}
+              {reverse.accepted_count} {reverse.accepted_count === 1 ? "transaction" : "transactions"}.
+              Current results will be invalidated. The original records stay in the history.
+            </p>
+          </>
+        )}
         <form
           noValidate
           onSubmit={(event) => {

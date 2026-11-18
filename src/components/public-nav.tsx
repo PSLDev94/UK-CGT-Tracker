@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { usePublicAccount } from "@/ui/public-account";
 import { usePathname } from "next/navigation";
 import { PieChart, ChevronDown, Menu, X } from "lucide-react";
 
@@ -30,7 +31,8 @@ const NAV_LINKS = [
   { href: "/contact", label: "Contact" },
 ];
 
-export function PublicNav() {
+export function PublicNav({ backToUpload }: { backToUpload?: string } = {}) {
+  const signedIn = usePublicAccount();
   const pathname = usePathname();
   const [open, setOpen] = useState(false); // desktop tools dropdown
   const [mobileOpen, setMobileOpen] = useState(false); // mobile hamburger
@@ -149,20 +151,25 @@ export function PublicNav() {
               </Link>
             ))}
 
-            {/* Desktop-only Log in */}
-            <Link
-              href="/login"
-              className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2 transition-colors hidden lg:inline"
-            >
-              Log in
-            </Link>
+            {!signedIn && (
+              <Link
+                href="/login"
+                className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2 transition-colors hidden lg:inline"
+              >
+                Log in
+              </Link>
+            )}
 
             {/* Sign up free — always visible */}
             <Link
-              href="/signup"
+              href={signedIn ? (backToUpload ?? "/dashboard") : "/signup"}
               className="min-h-11 inline-flex items-center text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium transition-all shadow-sm hover:shadow active:scale-95"
             >
-              Sign up free
+              {signedIn
+                ? backToUpload
+                  ? "Back to upload"
+                  : "My workspace"
+                : "Sign up free"}
             </Link>
 
             {/* Mobile hamburger button — rightmost on mobile */}
@@ -236,26 +243,27 @@ export function PublicNav() {
                 ))}
               </div>
 
-              {/* Divider */}
-              <div className="border-t border-gray-200 my-3" />
-
-              {/* Auth links */}
-              <Link
-                href="/login"
-                className={`block px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
-                  pathname === "/login"
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-gray-900 hover:bg-gray-50"
-                }`}
-              >
-                Log in
-              </Link>
-              <Link
-                href="/signup"
-                className="block mt-2 text-center bg-blue-600 text-white px-4 py-3 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-              >
-                Sign up free
-              </Link>
+              {!signedIn && (
+                <>
+                  <div className="border-t border-gray-200 my-3" />
+                  <Link
+                    href="/login"
+                    className={`block px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
+                      pathname === "/login"
+                        ? "bg-blue-50 text-blue-700"
+                        : "text-gray-900 hover:bg-gray-50"
+                    }`}
+                  >
+                    Log in
+                  </Link>
+                  <Link
+                    href="/signup"
+                    className="block mt-2 text-center bg-blue-600 text-white px-4 py-3 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                  >
+                    Sign up free
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </>

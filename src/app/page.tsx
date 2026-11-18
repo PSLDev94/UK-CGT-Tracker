@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { hasPublicSession } from "@/server/public-session";
+import { sampleReport } from "@/domain/reports/sample";
+import { money, netOutcome } from "@/ui/format";
 import { ReportPricing } from "@/components/report-pricing";
 import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
 import { BROKERS, IMPORT_PATH_LABEL, type BrokerId } from "@/domain/imports/brokers";
@@ -44,7 +47,21 @@ const ACCENTS: Record<BrokerId, string> = {
   ajbell: "from-green-600 to-green-400",
 };
 
-export default function LandingPage() {
+const sampleRules = {
+  SAME_DAY: { label: "Same-day rule", style: "bg-purple-50 text-purple-700 border-purple-100" },
+  THIRTY_DAY: { label: "30-day rule", style: "bg-blue-50 text-blue-700 border-blue-100" },
+  SECTION_104: { label: "Section 104 pool", style: "bg-gray-100 text-gray-700 border-gray-200" },
+};
+const sampleDate = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit", month: "short", year: "numeric", timeZone: "UTC",
+});
+
+export default async function LandingPage() {
+  const signedIn = await hasPublicSession();
+  const workspaceLink = signedIn ? "/dashboard" : "/signup";
+  const workspaceAction = signedIn ? "Open my workspace" : "Create a free account";
+  const { result, sources } = sampleReport;
+  const summary = result.summary!;
   return (
     <div className="min-h-screen bg-white font-sans text-gray-900 selection:bg-blue-100 selection:text-blue-900">
       {/* JSON-LD Structured Data */}
@@ -86,10 +103,10 @@ export default function LandingPage() {
 
             <div className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-6 mb-6">
               <Link
-                href="/signup"
+                href={workspaceLink}
                 className="group bg-blue-600 text-white px-8 py-4 rounded-xl text-lg font-semibold hover:bg-blue-700 transition-all flex items-center justify-center shadow-xl shadow-blue-600/20 hover:shadow-blue-600/30"
               >
-                Create a free account
+                {workspaceAction}
                 <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </Link>
               <Link
@@ -108,23 +125,23 @@ export default function LandingPage() {
           {/* Mock Dashboard UI Preview */}
           <div
             id="preview"
-            className="mt-10 sm:mt-16 max-w-5xl mx-auto relative z-20 group perspective-1000"
+            className="scroll-mt-24 mt-10 sm:mt-16 max-w-5xl mx-auto relative z-20 group perspective-1000"
           >
             <div className="absolute inset-0 bg-gradient-to-b from-blue-600/10 to-transparent rounded-2xl blur-xl scale-105 opacity-50 z-0"></div>
 
             <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden relative z-10 ring-1 ring-black/5 transform transition-transform duration-500 hover:scale-[1.01]">
               {/* Mac-style Window header */}
               <div className="bg-gray-50 border-b px-6 py-4 flex justify-between items-center">
-                <div className="flex space-x-2">
+                <div aria-hidden="true" className="hidden shrink-0 space-x-2 sm:flex">
                   <div className="w-3 h-3 rounded-full bg-red-400"></div>
                   <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
                   <div className="w-3 h-3 rounded-full bg-green-400"></div>
                 </div>
                 <div className="text-sm font-semibold text-gray-600 flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4" />
-                  Illustrative Tax Year 2025-26 Overview
+                  <BarChart3 aria-hidden="true" className="w-4 h-4 shrink-0" />
+                  Illustrative Tax Year {result.taxYear} Overview
                 </div>
-                <div className="w-10"></div> {/* Spacer for symmetry */}
+                <div aria-hidden="true" className="hidden w-10 sm:block" />
               </div>
 
               {/* Dashboard Content */}
@@ -136,7 +153,7 @@ export default function LandingPage() {
                       Total Gains
                     </div>
                     <div className="text-lg sm:text-2xl font-bold text-green-700">
-                      £2,350.00
+                      {money(summary.gainsGBP)}
                     </div>
                   </div>
                   <div className="bg-white border border-gray-100 rounded-xl p-3 sm:p-5 shadow-sm hover:border-gray-200 transition-colors">
@@ -144,24 +161,23 @@ export default function LandingPage() {
                       Total Losses
                     </div>
                     <div className="text-lg sm:text-2xl font-bold text-red-600">
-                      £500.00
+                      {money(summary.lossesGBP)}
                     </div>
                   </div>
                   <div className="bg-white border border-gray-100 rounded-xl p-3 sm:p-5 shadow-sm hover:border-gray-200 transition-colors">
                     <div className="text-sm text-gray-500 mb-1 font-medium">
-                      Allowable costs
+                      Total allowable costs
                     </div>
                     <div className="text-lg sm:text-2xl font-bold text-gray-900">
-                      £11,950.00
+                      {money(result.saleBreakdown!.totalAllowableCostsGBP)}
                     </div>
-
                   </div>
                   <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl p-3 sm:p-5 shadow-sm">
                     <div className="text-sm text-blue-800 font-semibold mb-1">
-                      Net gain
+                      {netOutcome(summary.netGainGBP)}
                     </div>
                     <div className="text-lg sm:text-2xl font-extrabold text-blue-900">
-                      £1,850.00
+                      {money(summary.netGainGBP.replace(/^-/, ""))}
                     </div>
                   </div>
                 </div>
@@ -172,6 +188,7 @@ export default function LandingPage() {
                     <FileText className="w-4 h-4 text-gray-500" />
                     Matched Disposals
                   </h2>
+                  <p className="mb-2 text-sm text-gray-600 md:hidden">Scroll across the table for proceeds, costs and matching rules.</p>
                   <div tabIndex={0} role="region" aria-label="Illustrative matched disposals" className="overflow-x-auto rounded-lg border border-gray-100 shadow-sm">
                     <table className="w-full text-sm text-left whitespace-nowrap">
                       <thead className="bg-gray-50 text-gray-600 border-b border-gray-100">
@@ -179,10 +196,10 @@ export default function LandingPage() {
                           <th className="px-4 py-3.5 font-medium">Date</th>
                           <th className="px-4 py-3.5 font-medium">Asset</th>
                           <th className="px-4 py-3.5 font-medium text-right">
-                            Proceeds
+                            Gross disposal proceeds
                           </th>
                           <th className="px-4 py-3.5 font-medium text-right">
-                            Allowable Cost
+                            Total allowable costs
                           </th>
                           <th className="px-4 py-3.5 font-medium text-right">
                             Gain/Loss
@@ -193,68 +210,40 @@ export default function LandingPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50 bg-white">
-                        <tr className="hover:bg-gray-50/50 transition-colors">
-                          <td className="px-4 py-4 text-gray-600">
-                            15 Oct 2025
-                          </td>
-                          <td className="px-4 py-4 font-semibold text-gray-900">
-                            AAPL
-                          </td>
-                          <td className="px-4 py-4 text-right">£8,500.00</td>
-                          <td className="px-4 py-4 text-right text-gray-500">
-                            £6,200.00
-                          </td>
-                          <td className="px-4 py-4 text-right text-green-700 font-bold">
-                            +£2,300.00
-                          </td>
-                          <td className="px-4 py-4">
-                            <span className="bg-gray-100 text-gray-600 px-2.5 py-1 rounded-md text-xs font-medium border border-gray-200">
-                              Section 104 Pool
-                            </span>
-                          </td>
-                        </tr>
-                        <tr className="hover:bg-gray-50/50 transition-colors">
-                          <td className="px-4 py-4 text-gray-600">
-                            02 Nov 2025
-                          </td>
-                          <td className="px-4 py-4 font-semibold text-gray-900">
-                            TSLA
-                          </td>
-                          <td className="px-4 py-4 text-right">£4,100.00</td>
-                          <td className="px-4 py-4 text-right text-gray-500">
-                            £4,600.00
-                          </td>
-                          <td className="px-4 py-4 text-right text-red-600 font-bold">
-                            -£500.00
-                          </td>
-                          <td className="px-4 py-4">
-                            <span className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md text-xs font-medium border border-blue-100">
-                              Bed & Breakfast
-                            </span>
-                          </td>
-                        </tr>
-                        <tr className="hover:bg-gray-50/50 transition-colors">
-                          <td className="px-4 py-4 text-gray-600">
-                            10 Mar 2026
-                          </td>
-                          <td className="px-4 py-4 font-semibold text-gray-900">
-                            LLOY
-                          </td>
-                          <td className="px-4 py-4 text-right">£1,200.00</td>
-                          <td className="px-4 py-4 text-right text-gray-500">
-                            £1,150.00
-                          </td>
-                          <td className="px-4 py-4 text-right text-green-700 font-bold">
-                            +£50.00
-                          </td>
-                          <td className="px-4 py-4">
-                            <span className="bg-purple-50 text-purple-700 px-2.5 py-1 rounded-md text-xs font-medium border border-purple-100">
-                              Same-Day Rule
-                            </span>
-                          </td>
-                        </tr>
+                        {result.disposals.map((disposal) => {
+                          const sale = disposal.saleBreakdown!;
+                          const name = sources?.find((s) => s.key === disposal.sourceIds[0])?.instrument;
+                          const hasFee = sale.sellingCostsGBP !== "0.00";
+                          const loss = disposal.gainGBP!.startsWith("-");
+                          return (
+                            <tr key={disposal.sourceIds[0]} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="px-4 py-4 text-gray-600">{sampleDate.format(new Date(disposal.date))}</td>
+                              <th scope="row" className="px-4 py-4 font-semibold text-gray-900">{name || disposal.securityId}</th>
+                              <td className="px-4 py-4 text-right">
+                                {money(sale.grossProceedsGBP)}
+                                {hasFee && <p className="mt-1 text-xs text-gray-600">Net sale proceeds {money(disposal.proceedsGBP)}</p>}
+                              </td>
+                              <td className="px-4 py-4 text-right">
+                                {money(sale.totalAllowableCostsGBP)}
+                                {hasFee && <p className="mt-1 text-xs text-gray-600">Includes {money(sale.sellingCostsGBP)} selling costs</p>}
+                              </td>
+                              <td className={`px-4 py-4 text-right font-bold ${loss ? "text-red-600" : "text-green-700"}`}>{money(disposal.gainGBP)}</td>
+                              <td className="px-4 py-4">
+                                {Array.from(new Set(disposal.matches.map((match) => match.rule))).map((rule) => (
+                                  <span key={rule} className={`inline-block rounded-md border px-2.5 py-1 text-xs font-medium ${sampleRules[rule].style}`}>
+                                    {sampleRules[rule].label}
+                                  </span>
+                                ))}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-x-5 text-sm">
+                    <a className="inline-flex min-h-11 items-center text-blue-700 underline" href="/samples/cgt-summary.pdf">Download this sample summary PDF</a>
+                    <a className="inline-flex min-h-11 items-center text-blue-700 underline" href="/samples/cgt-evidence.pdf">Download this sample evidence PDF</a>
                   </div>
                 </div>
               </div>
@@ -641,10 +630,10 @@ export default function LandingPage() {
               evidence.
             </p>
             <Link
-              href="/signup"
+              href={workspaceLink}
               className="inline-flex items-center bg-white text-blue-600 px-10 py-4 rounded-xl text-xl font-bold hover:bg-blue-50 transition-all hover:scale-105 active:scale-95 shadow-xl shadow-blue-900/30"
             >
-              Create a free account <ArrowRight className="ml-3 w-6 h-6" />
+              {workspaceAction} <ArrowRight className="ml-3 w-6 h-6" />
             </Link>
           </div>
         </section>

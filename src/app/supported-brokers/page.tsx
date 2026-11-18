@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PublicFooter } from "@/components/public-footer";
+import { safeReturnPath } from "@/ui/return-path";
 import { Header } from "@/ui/header";
 import {
   BROKERS,
@@ -71,10 +72,17 @@ const FILE_EXAMPLES: Record<
   },
 };
 
-export default function BrokerSupport() {
+export default async function BrokerSupport({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string | string[] }>;
+}) {
+  const { from } = await searchParams;
+  const destination = safeReturnPath(typeof from === "string" ? from : undefined);
+  const backToUpload = destination.split("?")[0] === "/dashboard/upload" ? destination : undefined;
   return (
     <>
-      <Header />
+      <Header backToUpload={backToUpload} />
       <main id="main" className="public-main broker-directory">
         <section className="principles">
           <h1>Find your broker’s CSV export</h1>

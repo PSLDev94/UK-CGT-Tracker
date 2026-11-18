@@ -16,6 +16,12 @@ function statementAmount(value: string, currency: string) {
   );
 }
 
+export function tradeSummary(trade: Pick<ImportTradeDetail, "date" | "side" | "quantity" | "securityId">) {
+  const action = trade.side === "BUY" ? "Buy" : "Sell";
+  const shares = trade.quantity === "1" ? "share" : "shares";
+  return `${action} ${trade.quantity} ${shares} · ${trade.securityId} · ${displayDate(trade.date)}`;
+}
+
 export function ImportTradeDetails({
   record,
   trade,
@@ -26,8 +32,7 @@ export function ImportTradeDetails({
   return (
     <div>
       <p className="caption">
-        {displayDate(trade.date)} · {trade.side === "BUY" ? "Buy" : "Sell"} ·{" "}
-        {trade.quantity} shares · {trade.securityId}
+        {tradeSummary(trade)}
       </p>
       <details className="my-2">
         <summary>Trade details for record {record}</summary>

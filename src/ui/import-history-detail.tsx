@@ -3,8 +3,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { workspaceApi } from "./api";
 import { Button } from "./primitives";
-import { ImportTradeDetails } from "./import-trade-detail";
+import { ImportTradeDetails, tradeSummary } from "./import-trade-detail";
 import type { ImportTradeDetail } from "../domain/imports/trade-detail";
+import type { HistoryImport } from "./workspace-types";
 
 type Receipt = {
   page: number;
@@ -24,6 +25,19 @@ const labels = {
   excluded: "Excluded",
   duplicate: "Duplicate",
 };
+
+export function ImportReceiptIdentity({ item }: { item: HistoryImport }) {
+  return (
+    <>
+      <p className="font-medium">
+        {item.firstTrade ? (
+          <>{item.accepted_count > 1 && "First included trade · "}{tradeSummary(item.firstTrade)}</>
+        ) : item.accepted_count ? "Trade summary unavailable" : "No trades included"}
+      </p>
+      <p className="caption">Receipt {item.id.slice(0, 8)}…{item.id.slice(-4)}</p>
+    </>
+  );
+}
 
 export function ImportHistoryDetail({
   importId,

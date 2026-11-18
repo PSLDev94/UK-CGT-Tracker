@@ -237,8 +237,17 @@ export class Workspace {
       )[0]!.count;
       const imports = await query(
         tx,
-        `SELECT id,account_id,status,record_count,accepted_count,excluded_count,duplicate_count,
-        created_at,reversed_at,reversal_reason FROM cgt.imports ORDER BY created_at DESC,id DESC LIMIT 25 OFFSET $1`,
+        `SELECT i.*, (
+          SELECT jsonb_build_object('date', t.trade_date::text, 'side', t.side,
+            'securityId', t.security_id, 'quantity', trim_scale(t.quantity)::text)
+          FROM cgt.transactions t WHERE t.import_id = i.id
+          ORDER BY t.source_record LIMIT 1
+        ) AS "firstTrade"
+        FROM (
+          SELECT id,account_id,status,record_count,accepted_count,excluded_count,duplicate_count,
+            created_at,reversed_at,reversal_reason FROM cgt.imports
+          ORDER BY created_at DESC,id DESC LIMIT 25 OFFSET $1
+        ) i ORDER BY i.created_at DESC,i.id DESC`,
         [(page - 1) * 25],
       );
       return { imports, total, page, pageSize: 25 };

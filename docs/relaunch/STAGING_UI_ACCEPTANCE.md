@@ -89,3 +89,13 @@ A fresh local release build passed 69 browser cases in desktop Chromium and the 
 The public browser walkthrough checked that a 5 April sale and a 20 April purchase both belong in the history supplied to the calculator. Both broker guides requested the original activity file. A sale of 200 shares with a single repurchase of 100 showed a £20 gain before fees on the 100 matched shares and identified the remaining 100. An oversell kept the entered values and explained the quantity available. The first input in each calculator fit the initial 390 × 664 phone viewport.
 
 The two-year workspace test confirmed that Overview, Calculations and Reports select the most recently saved year and respect an explicit year in a link. Keyboard order followed the displayed calculation and the year control preceded the result. Restoring a Settings history entry recovered the unsaved display name only in its original session. Password values stayed out of browser history and draft storage.
+
+## Import identity, public examples and filing guidance
+
+To check a reversal, compare the two single-trade AJ Bell imports saved in the same minute in the synthetic review account. Each history row and its confirmation must identify the same receipt, trade direction, quantity, security and trade date. Cancel must receive focus. Cancel both and verify that the original trades and reports remain available.
+
+For the Section 104 calculator, enter one share bought for £60 with a £2 buying fee. A £100 sale with a £5 selling fee gives £95 net proceeds, £67 total allowable costs and a £33 gain. Clearing the selling fee gives a £38 gain. A sale for £60 with the £5 fee gives a £7 loss. In the allowance checker, £1,000 of gains leaves £2,000 of the £3,000 allowance. Entering £500 of gains and £900 of losses shows a £400 net loss and zero taxable gain. Neither example needs an income figure.
+
+The [homepage and filing regression](../../tests/sample-and-filing.spec.ts) reconciles the homepage to both downloadable PDFs and checks the sample jump on a narrow screen. The example's £11,955 total allowable costs include £11,950 of matched acquisition costs and a £5 selling fee. The evidence PDF identifies the Apple sale at £8,505 gross and £8,500 net. Regenerate both samples with `npx tsx scripts/generate-sample-reports.ts` after changing the fictional trades or PDF layout.
+
+From Reports, check the selected year beside each SA108 link. The 2021–22 edition is served by the UK Government Web Archive. The 2025–26 guide links back to that year's report. For 2026–27, the link opens HMRC's publication collection until the edition is available. [HMRC SA108 forms and notes](https://www.gov.uk/government/publications/self-assessment-capital-gains-summary-sa108)

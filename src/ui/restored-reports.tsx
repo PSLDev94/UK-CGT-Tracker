@@ -13,6 +13,7 @@ import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
 import { billingUrl, type PdfFormat } from "../domain/reports/destination";
 import { displayDate, netOutcome } from "./format";
 import type { ReportKind } from "../domain/reports/report";
+import { sa108Collection, sa108Edition } from "@/domain/reports/filing-guidance";
 import { SaleAmounts } from "./sale-amounts";
 
 const cards = [
@@ -38,6 +39,26 @@ interface Feedback {
   code?: string;
 }
 const linkClass = "text-blue-700 underline";
+
+function FilingGuidance({ year }: { year: string }) {
+  const label = year.replace("-", "–");
+  if (year === "2025-26") {
+    return <Link className={linkClass} href="/guide/sa108-how-to-fill-in">Read the {label} SA108 filing guide</Link>;
+  }
+  const edition = sa108Edition(year);
+  if (!edition) {
+    return <a className={linkClass} href={sa108Collection} target="_blank" rel="noopener noreferrer">Check HMRC for the {label} SA108 form and notes (opens in a new tab)</a>;
+  }
+  return (
+    <div>
+      <p>HMRC filing documents for {label} (PDFs open in a new tab)</p>
+      <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+        <li><a className={linkClass} href={edition.form} target="_blank" rel="noopener noreferrer">{label} SA108 form</a></li>
+        <li><a className={linkClass} href={edition.notes} target="_blank" rel="noopener noreferrer">{label} SA108 notes</a></li>
+      </ul>
+    </div>
+  );
+}
 
 export function RestoredReports({
   requestedYear = "",
@@ -385,20 +406,19 @@ export function RestoredReports({
                 </div>
               )}
               {accounts?.length ? (
-                <p className="text-sm text-gray-600">
-                  Confirmed accounts:{" "}
-                  {data.accounts
-                    .filter((a) => accounts.includes(a.id))
-                    .map((a) => a.label)
-                    .join(", ")}
-                </p>
+                <div className="text-sm text-gray-600">
+                  <p id="report-confirmed-accounts" className="font-medium">Confirmed accounts</p>
+                  <ul aria-labelledby="report-confirmed-accounts" className="mt-1 max-w-prose list-disc space-y-1 pl-5">
+                    {data.accounts.filter((a) => accounts.includes(a.id)).map((a) => (
+                      <li className="break-words" key={a.id}>{a.label}</li>
+                    ))}
+                  </ul>
+                </div>
               ) : null}
-              <p className="text-sm text-gray-600">
-                Personal allowances, reliefs and other gains are excluded.{" "}
-                <Link className={linkClass} href="/guide/sa108-how-to-fill-in">
-                  SA108 filing guide
-                </Link>
-              </p>
+              <div className="space-y-1 text-sm text-gray-600">
+                <p>Personal allowances, reliefs and other gains are excluded.</p>
+                <FilingGuidance year={year} />
+              </div>
             </section>
           )}
           {calculation && !draft && (

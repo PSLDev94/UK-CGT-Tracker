@@ -18,6 +18,9 @@ export interface SavedImport {
   created_at: string;
   reversal_reason?: string;
 }
+export interface HistoryImport extends SavedImport {
+  firstTrade: Pick<ImportTradeDetail, "date" | "side" | "quantity" | "securityId"> | null;
+}
 export interface Overview {
   portfolio: { id: string; name: string; revision: number };
   accounts: BrokerAccount[];

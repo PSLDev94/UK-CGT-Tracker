@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import Decimal from "decimal.js";
+import { Money } from "@/domain/values";
 import { money } from "@/ui/format";
 import { ArrowRight, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
 import { PublicNav } from "@/components/public-nav";
@@ -21,36 +21,36 @@ export default function CGTAllowanceCheckerPage() {
 
   const [taxableIncome, setTaxableIncome] = useState("");
   const valid = (v: string) => /^\d{1,12}(\.\d{1,8})?$/.test(v);
-  const totalGains = new Decimal(valid(gains) ? gains : 0);
-  const totalLosses = new Decimal(valid(losses) ? losses : 0);
-  const netGain = Decimal.max(0, totalGains.minus(totalLosses));
-  const exemptionRemaining = Decimal.max(
-    0,
-    new Decimal(EXEMPT_AMOUNT).minus(netGain),
-  );
-  const taxableGain = Decimal.max(0, netGain.minus(EXEMPT_AMOUNT));
-  const basicBandRemaining =
-    taxBand === "basic"
-      ? Decimal.max(
-          0,
-          new Decimal(37700).minus(valid(taxableIncome) ? taxableIncome : 0),
-        )
-      : new Decimal(0);
-  const basicPortion = Decimal.min(taxableGain, basicBandRemaining);
-  const taxOwed = basicPortion
-    .mul(BASIC_RATE)
-    .plus(taxableGain.minus(basicPortion).mul(HIGHER_RATE));
+  const gainsInvalid = gains !== "" && !valid(gains);
+  const lossesInvalid = losses !== "" && !valid(losses);
   const hasInput =
-    (gains !== "" || losses !== "") &&
-    (!gains || valid(gains)) &&
-    (!losses || valid(losses)) &&
-    (taxBand !== "basic" || valid(taxableIncome));
+    (gains !== "" || losses !== "") && !gainsInvalid && !lossesInvalid;
+  const netGain = new Money(gainsInvalid ? 0 : gains || 0).minus(
+    lossesInvalid ? 0 : losses || 0,
+  );
+  const allowanceUsed = Money.clamp(netGain, 0, EXEMPT_AMOUNT);
+  const exemptionRemaining = new Money(EXEMPT_AMOUNT).minus(allowanceUsed);
+  const taxableGain = Money.max(0, netGain.minus(EXEMPT_AMOUNT));
+  const needTaxBand = hasInput && taxableGain.gt(0);
+  const needIncome = needTaxBand && taxBand === "basic";
+  const incomeInvalid =
+    needIncome && taxableIncome !== "" && !valid(taxableIncome);
+  let taxOwed = null;
+  if (!needIncome || valid(taxableIncome)) {
+    const basicBandRemaining = needIncome
+      ? Money.max(0, new Money(37700).minus(taxableIncome))
+      : 0;
+    const basicPortion = Money.min(taxableGain, basicBandRemaining);
+    taxOwed = basicPortion
+      .mul(BASIC_RATE)
+      .plus(taxableGain.minus(basicPortion).mul(HIGHER_RATE));
+  }
   const light: "green" | "amber" | "red" = netGain.gt(EXEMPT_AMOUNT)
     ? "red"
     : netGain.gte(2500)
       ? "amber"
       : "green";
-  const pctUsed = netGain.div(EXEMPT_AMOUNT).toNumber();
+  const pctUsed = allowanceUsed.div(EXEMPT_AMOUNT).times(100).toNumber();
   const lightConfig = {
     green: {
       icon: CheckCircle,
@@ -58,7 +58,7 @@ export default function CGTAllowanceCheckerPage() {
       border: "border-green-200",
       text: "text-green-700",
       iconColor: "text-green-700",
-      label: "Well within your allowance",
+      label: netGain.lte(0) ? "No allowance used" : "Well within your allowance",
       gradient: "from-green-400 to-emerald-500",
     },
     amber: {
@@ -67,7 +67,7 @@ export default function CGTAllowanceCheckerPage() {
       border: "border-amber-200",
       text: "text-amber-700",
       iconColor: "text-amber-600",
-      label: "Approaching allowance limit",
+      label: netGain.eq(EXEMPT_AMOUNT) ? "Allowance fully used" : "Approaching allowance limit",
       gradient: "from-amber-400 to-orange-500",
     },
     red: {
@@ -123,9 +123,10 @@ export default function CGTAllowanceCheckerPage() {
               </label>
               <input
                 id="gains"
-                type="number"
-                step="any"
-                min="0"
+                type="text"
+                inputMode="decimal"
+                aria-invalid={gainsInvalid}
+                aria-describedby={gainsInvalid ? "allowance-input-error" : undefined}
                 placeholder="e.g. 5000"
                 value={gains}
                 onChange={(e) => setGains(e.target.value)}
@@ -141,51 +142,54 @@ export default function CGTAllowanceCheckerPage() {
               </label>
               <input
                 id="losses"
-                type="number"
-                step="any"
-                min="0"
+                type="text"
+                inputMode="decimal"
+                aria-invalid={lossesInvalid}
+                aria-describedby={lossesInvalid ? "allowance-input-error" : undefined}
                 placeholder="e.g. 1000"
                 value={losses}
                 onChange={(e) => setLosses(e.target.value)}
                 className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
               />
             </div>
-            <div>
-              <p className="block text-sm font-semibold text-gray-700 mb-2">
-                Are you a basic or higher rate taxpayer?
-              </p>
-              <div className="flex gap-4">
-                <label
-                  className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${taxBand === "basic" ? "border-green-500 bg-green-50 text-green-800" : "border-gray-200 hover:border-gray-300"}`}
-                >
-                  <input
-                    type="radio"
-                    name="tax-band"
-                    value="basic"
-                    checked={taxBand === "basic"}
-                    onChange={() => setTaxBand("basic")}
-                    className="sr-only"
-                  />
-                  <span className="text-sm font-medium">Basic rate (18%)</span>
-                </label>
-                <label
-                  className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${taxBand === "higher" ? "border-green-500 bg-green-50 text-green-800" : "border-gray-200 hover:border-gray-300"}`}
-                >
-                  <input
-                    type="radio"
-                    name="tax-band"
-                    value="higher"
-                    checked={taxBand === "higher"}
-                    onChange={() => setTaxBand("higher")}
-                    className="sr-only"
-                  />
-                  <span className="text-sm font-medium">Higher rate (24%)</span>
-                </label>
-              </div>
-            </div>
+            {needTaxBand && (
+              <fieldset>
+                <legend className="block text-sm font-semibold text-gray-700 mb-2">
+                  Are you a basic or higher rate taxpayer?
+                </legend>
+                <div className="flex gap-4">
+                  <label
+                    className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-green-700 ${taxBand === "basic" ? "border-green-500 bg-green-50 text-green-800" : "border-gray-200 hover:border-gray-300"}`}
+                  >
+                    <input
+                      type="radio"
+                      name="tax-band"
+                      value="basic"
+                      checked={taxBand === "basic"}
+                      onChange={() => setTaxBand("basic")}
+                      className="sr-only"
+                    />
+                    <span className="text-sm font-medium">Basic rate (18%)</span>
+                  </label>
+                  <label
+                    className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-green-700 ${taxBand === "higher" ? "border-green-500 bg-green-50 text-green-800" : "border-gray-200 hover:border-gray-300"}`}
+                  >
+                    <input
+                      type="radio"
+                      name="tax-band"
+                      value="higher"
+                      checked={taxBand === "higher"}
+                      onChange={() => setTaxBand("higher")}
+                      className="sr-only"
+                    />
+                    <span className="text-sm font-medium">Higher rate (24%)</span>
+                  </label>
+                </div>
+              </fieldset>
+            )}
           </div>
 
-          {taxBand === "basic" && (
+          {needIncome && (
             <div className="px-6 pb-6">
               <label
                 htmlFor="taxable-income"
@@ -196,24 +200,21 @@ export default function CGTAllowanceCheckerPage() {
               <input
                 id="taxable-income"
                 inputMode="decimal"
+                aria-invalid={incomeInvalid}
+                aria-describedby={incomeInvalid ? "income-hint allowance-input-error" : "income-hint"}
                 value={taxableIncome}
                 onChange={(e) => setTaxableIncome(e.target.value)}
                 className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm"
               />
-              <p className="text-sm text-gray-600 mt-2">
-                Required to split gains between the 18% and 24% bands. This
-                illustration assumes the standard £37,700 basic-rate band and
-                £3,000 exemption for 2025–26; other gains, reliefs and band
-                extensions are excluded.
+              <p id="income-hint" className="text-sm text-gray-600 mt-2">
+                Enter your taxable income to split the gain between the 18% and
+                24% rates. This estimate uses the standard £37,700 basic-rate
+                band for 2025–26 and excludes other gains, reliefs and band extensions.
               </p>
             </div>
           )}
-          {((gains && !valid(gains)) ||
-            (losses && !valid(losses)) ||
-            (taxBand === "basic" &&
-              taxableIncome &&
-              !valid(taxableIncome))) && (
-            <p role="alert" className="px-6 pb-6 text-red-700">
+          {(gainsInvalid || lossesInvalid || incomeInvalid) && (
+            <p id="allowance-input-error" role="alert" className="px-6 pb-6 text-red-700">
               Enter non-negative amounts with up to 12 whole digits and 8
               decimal places.
             </p>
@@ -225,14 +226,14 @@ export default function CGTAllowanceCheckerPage() {
               <div
                 className={`flex items-center gap-3 p-4 rounded-xl border mb-6 ${lc.bg} ${lc.border}`}
               >
-                <Icon className={`w-6 h-6 ${lc.iconColor} flex-shrink-0`} />
+                <Icon aria-hidden="true" className={`w-6 h-6 ${lc.iconColor} flex-shrink-0`} />
                 <span className={`font-semibold ${lc.text}`}>{lc.label}</span>
               </div>
 
-              <div className="grid sm:grid-cols-2 gap-4">
+              <div className="grid sm:grid-cols-2 gap-4 tabular-nums [overflow-wrap:anywhere]">
                 <div className="bg-white rounded-xl p-4 border text-center">
                   <p className="text-xs text-gray-500 uppercase mb-1">
-                    Net Gain
+                    {netGain.lt(0) ? "Net loss" : netGain.gt(0) ? "Net gain" : "Break-even"}
                   </p>
                   <p className="text-2xl font-bold text-gray-900">
                     {money(netGain.toString())}
@@ -258,18 +259,30 @@ export default function CGTAllowanceCheckerPage() {
                   <p className="text-xs text-gray-500 uppercase mb-1">
                     Estimated Tax Owed
                   </p>
-                  <p
-                    className={`text-2xl font-bold ${taxOwed.gt(0) ? "text-red-600" : "text-green-700"}`}
-                  >
-                    {money(taxOwed.toString())}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {taxBand === "basic"
-                      ? "18% within the remaining basic-rate band; 24% above it"
-                      : "24% higher rate"}
-                  </p>
+                  {taxOwed ? (
+                    <p className={`text-2xl font-bold ${taxOwed.gt(0) ? "text-red-700" : "text-green-700"}`}>
+                      {money(taxOwed.toString())}
+                    </p>
+                  ) : (
+                    <p className="text-sm font-medium text-gray-700">Enter your taxable income for an estimate.</p>
+                  )}
+                  {needTaxBand && taxOwed && (
+                    <p className="text-xs text-gray-600 mt-1">
+                      {taxBand === "basic"
+                        ? "18% within the remaining basic-rate band and 24% above it"
+                        : "24% higher rate"}
+                    </p>
+                  )}
                 </div>
               </div>
+              {netGain.lt(0) && (
+                <p className="mt-4 text-sm text-gray-700">
+                  You may be able to carry the unused loss forward if you claim it.{" "}
+                  <a className="text-blue-700 underline" href="https://www.gov.uk/capital-gains-tax/losses">
+                    How to claim an allowable loss
+                  </a>.
+                </p>
+              )}
 
               {/* Progress bar */}
               <div className="mt-6">
@@ -280,11 +293,11 @@ export default function CGTAllowanceCheckerPage() {
                 <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${light === "green" ? "bg-green-500" : light === "amber" ? "bg-amber-500" : "bg-red-500"}`}
-                    style={{ width: `${Math.min(100, pctUsed * 100)}%` }}
+                    style={{ width: `${pctUsed}%` }}
                   />
                 </div>
                 <p className="text-xs text-gray-500 mt-1.5 text-right">
-                  {Math.min(100, Math.round(pctUsed * 100))}% of allowance used
+                  {pctUsed > 0 && pctUsed < 1 ? "<1" : Math.floor(pctUsed)}% of allowance used
                 </p>
               </div>
             </div>

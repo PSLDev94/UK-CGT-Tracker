@@ -3,7 +3,10 @@
 import { useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { BarChart3, Plus, Trash2, ArrowRight, Calculator } from "lucide-react";
-import Decimal from "decimal.js";
+import type Decimal from "decimal.js";
+import { Money } from "@/domain/values";
+import { money } from "@/ui/format";
+import { SaleAmounts } from "@/ui/sale-amounts";
 import { PublicNav } from "@/components/public-nav";
 import { CalculatorFields } from "@/components/calculator-fields";
 import { PublicFooter } from "@/components/public-footer";
@@ -22,6 +25,7 @@ export default function Section104CalculatorPage() {
   ]);
   const [sellQty, setSellQty] = useState("");
   const [sellPrice, setSellPrice] = useState("");
+  const [sellingFees, setSellingFees] = useState("");
   const [nextId, setNextId] = useState(2);
 
   const rowFocus = useRef<number | null>(null);
@@ -55,7 +59,7 @@ export default function Section104CalculatorPage() {
   );
   function missingFields(row: PurchaseRow) {
     const fields: string[] = [];
-    if (!validDecimal(row.quantity) || !new Decimal(row.quantity).gt(0))
+    if (!validDecimal(row.quantity) || !new Money(row.quantity).gt(0))
       fields.push("a positive quantity");
     if (!validDecimal(row.pricePerShare))
       fields.push("a valid price per share");
@@ -64,9 +68,9 @@ export default function Section104CalculatorPage() {
   }
   const incomplete = activeRows.some((row) => missingFields(row).length > 0);
   const poolRows = (incomplete ? [] : activeRows).map((r) => {
-    const qty = new Decimal(r.quantity || 0);
-    const price = new Decimal(r.pricePerShare || 0);
-    const fees = new Decimal(r.fees || 0);
+    const qty = new Money(r.quantity || 0);
+    const price = new Money(r.pricePerShare || 0);
+    const fees = new Money(r.fees || 0);
     const cost = qty.mul(price).plus(fees);
     return { ...r, decQty: qty, decCost: cost };
   });
@@ -88,10 +92,10 @@ export default function Section104CalculatorPage() {
     }[]
   >((states, r) => {
     const previous = states.at(-1);
-    const totalShares = (previous?.totalShares ?? new Decimal(0)).plus(
+    const totalShares = (previous?.totalShares ?? new Money(0)).plus(
       r.decQty,
     );
-    const totalCost = (previous?.totalCost ?? new Decimal(0)).plus(r.decCost);
+    const totalCost = (previous?.totalCost ?? new Money(0)).plus(r.decCost);
     return [
       ...states,
       {
@@ -101,51 +105,57 @@ export default function Section104CalculatorPage() {
         totalShares,
         totalCost,
         avgCost: totalShares.isZero()
-          ? new Decimal(0)
+          ? new Money(0)
           : totalCost.div(totalShares),
       },
     ];
   }, []);
-  const totalPoolShares = poolState.at(-1)?.totalShares ?? new Decimal(0);
-  const totalPoolCost = poolState.at(-1)?.totalCost ?? new Decimal(0);
+  const totalPoolShares = poolState.at(-1)?.totalShares ?? new Money(0);
+  const totalPoolCost = poolState.at(-1)?.totalCost ?? new Money(0);
   const avgCostPerShare = totalPoolShares.isZero()
-    ? new Decimal(0)
+    ? new Money(0)
     : totalPoolCost.div(totalPoolShares);
 
   let quantityError = "";
   if (sellQty) {
-    if (!validDecimal(sellQty) || new Decimal(sellQty).lte(0))
+    if (!validDecimal(sellQty) || new Money(sellQty).lte(0))
       quantityError = "Enter a positive quantity with up to 8 decimal places.";
-    else if (!incomplete && !totalPoolShares.isZero() && new Decimal(sellQty).gt(totalPoolShares))
+    else if (!incomplete && !totalPoolShares.isZero() && new Money(sellQty).gt(totalPoolShares))
       quantityError = "Reduce the quantity to the available holding or add the missing purchase.";
   }
   const priceError = sellPrice && !validDecimal(sellPrice)
     ? "Enter a price of zero or more with up to 8 decimal places."
     : "";
-  let disposalResult: null | {
-    qty: Decimal;
-    proceeds: Decimal;
-    allowableCost: Decimal;
-    gainLoss: Decimal;
-    remainingShares: Decimal;
-    remainingCost: Decimal;
-  } = null;
+  const feeError = sellingFees && !validDecimal(sellingFees)
+    ? "Enter selling fees of zero or more with up to 12 whole digits and 8 decimal places."
+    : "";
+  let disposalResult = null;
+  if (sellQty && sellPrice && !quantityError && !priceError && !feeError && totalPoolShares.gt(0)) {
+    const quantity = new Money(sellQty);
+    const gross = quantity.mul(sellPrice);
+    const fees = new Money(sellingFees || 0);
+    const matched = quantity.eq(totalPoolShares)
+      ? totalPoolCost
+      : totalPoolCost.mul(quantity).div(totalPoolShares);
 
-  if (sellQty && sellPrice && !quantityError && !priceError && totalPoolShares.gt(0)) {
-    const sQty = new Decimal(sellQty);
-    const sPrice = new Decimal(sellPrice);
-    const proceeds = sQty.mul(sPrice);
-    const allowableCost = sQty.div(totalPoolShares).mul(totalPoolCost);
-    const gainLoss = proceeds.minus(allowableCost);
-    const remainingShares = totalPoolShares.minus(sQty);
-    const remainingCost = totalPoolCost.minus(allowableCost);
+    // The pool keeps full precision. The saved report reconciles net proceeds
+    // and matched cost at the penny, including any sub-penny fee adjustment.
+    const net = gross.minus(fees).toDP(2);
+    const grossPence = gross.toDP(2);
+    const feePence = fees.toDP(2);
+    const matchedPence = matched.toDP(2);
     disposalResult = {
-      qty: sQty,
-      proceeds,
-      allowableCost,
-      gainLoss,
-      remainingShares,
-      remainingCost,
+      net: net.toFixed(2),
+      matched: matchedPence.toFixed(2),
+      breakdown: {
+        grossProceedsGBP: grossPence.toFixed(2),
+        sellingCostsGBP: feePence.toFixed(2),
+        totalAllowableCostsGBP: matchedPence.plus(feePence).toFixed(2),
+        proceedsRoundingAdjustmentGBP: net.minus(grossPence.minus(feePence)).toFixed(2),
+      },
+      gainLoss: net.minus(matchedPence),
+      remainingShares: totalPoolShares.minus(quantity),
+      remainingCost: totalPoolCost.minus(matched),
     };
   }
 
@@ -292,7 +302,12 @@ export default function Section104CalculatorPage() {
                   Undated purchases appear last, in the order you entered them.
                 </p>
               )}
-              <div className="overflow-x-auto mb-6 not-prose">
+              <div
+                role="region"
+                aria-label="Purchase history and running pool balance"
+                tabIndex={0}
+                className="overflow-x-auto mb-6 not-prose rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+              >
                 <table className="w-full text-sm border bg-white rounded-lg overflow-hidden">
                   <thead>
                     <tr className="bg-gray-50 border-b">
@@ -379,7 +394,7 @@ export default function Section104CalculatorPage() {
             <h2 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
               <Calculator className="w-5 h-5 text-red-600" /> Disposal
             </h2>
-            <div className="grid sm:grid-cols-2 gap-4">
+            <div className="grid sm:grid-cols-3 gap-4">
               <div>
                 <label
                   htmlFor="sell-qty"
@@ -396,7 +411,7 @@ export default function Section104CalculatorPage() {
                   aria-describedby={quantityError ? "sell-holding sell-qty-error" : "sell-holding"}
                   value={sellQty}
                   onChange={(e) => setSellQty(e.target.value)}
-                  className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
+                  className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-600 focus:border-blue-600 aria-invalid:border-red-700 aria-invalid:focus:ring-red-700 outline-none"
                 />
                 <p id="sell-holding" className="mt-1 text-sm text-gray-600">
                   {totalPoolShares.gt(0)
@@ -420,47 +435,57 @@ export default function Section104CalculatorPage() {
                   inputMode="decimal"
                   placeholder="e.g. 4.20"
                   aria-invalid={Boolean(priceError)}
-                  aria-describedby={priceError ? "sell-price-error" : undefined}
+                  aria-describedby={priceError ? "sell-price-hint sell-price-error" : "sell-price-hint"}
                   value={sellPrice}
                   onChange={(e) => setSellPrice(e.target.value)}
-                  className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
+                  className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-600 focus:border-blue-600 aria-invalid:border-red-700 aria-invalid:focus:ring-red-700 outline-none"
                 />
+                <p id="sell-price-hint" className="mt-1 text-sm text-gray-600">
+                  Use the price before selling fees.
+                </p>
                 <p id="sell-price-error" aria-live="polite" className="text-sm text-red-700">
                   {priceError}
+                </p>
+              </div>
+              <div>
+                <label htmlFor="sell-fees" className="block text-sm font-medium text-gray-700 mb-1">
+                  Selling fees (£, optional)
+                </label>
+                <input
+                  id="sell-fees"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={sellingFees}
+                  onChange={(e) => setSellingFees(e.target.value)}
+                  aria-invalid={Boolean(feeError)}
+                  aria-describedby={feeError ? "sell-fees-error" : undefined}
+                  className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-600 focus:border-blue-600 aria-invalid:border-red-700 aria-invalid:focus:ring-red-700 outline-none"
+                />
+                <p id="sell-fees-error" aria-live="polite" className="text-sm text-red-700">
+                  {feeError}
                 </p>
               </div>
             </div>
           </div>
 
           {disposalResult && (
-            <div className="bg-gray-50 border-t p-6 sm:p-8">
+            <div className="bg-gray-50 border-t p-6 sm:p-8 [overflow-wrap:anywhere]">
               <h3 className="font-bold text-gray-900 mb-4">Disposal Result</h3>
+              <div className="bg-white rounded-xl p-4 border mb-4">
+                <SaleAmounts
+                  breakdown={disposalResult.breakdown}
+                  net={disposalResult.net}
+                  matched={disposalResult.matched}
+                />
+              </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="bg-white rounded-xl p-4 border">
                   <p className="text-xs text-gray-500 uppercase mb-1">
-                    Proceeds
+                    {disposalResult.gainLoss.gt(0) ? "Gain" : disposalResult.gainLoss.lt(0) ? "Loss" : "Break-even"}
                   </p>
-                  <p className="text-xl font-bold text-gray-900">
-                    £{disposalResult.proceeds.toFixed(2)}
-                  </p>
-                </div>
-                <div className="bg-white rounded-xl p-4 border">
-                  <p className="text-xs text-gray-500 uppercase mb-1">
-                    Allowable Cost
-                  </p>
-                  <p className="text-xl font-bold text-gray-900">
-                    £{disposalResult.allowableCost.toFixed(2)}
-                  </p>
-                </div>
-                <div className="bg-white rounded-xl p-4 border">
-                  <p className="text-xs text-gray-500 uppercase mb-1">
-                    {disposalResult.gainLoss.gte(0) ? "Gain" : "Loss"}
-                  </p>
-                  <p
-                    className={`text-xl font-bold ${disposalResult.gainLoss.gte(0) ? "text-green-700" : "text-red-600"}`}
-                  >
-                    {disposalResult.gainLoss.gte(0) ? "+" : ""}£
-                    {disposalResult.gainLoss.toFixed(2)}
+                  <p className={`text-xl font-bold tabular-nums ${disposalResult.gainLoss.gt(0) ? "text-green-700" : disposalResult.gainLoss.lt(0) ? "text-red-700" : "text-gray-900"}`}>
+                    {disposalResult.gainLoss.gt(0) ? "+" : ""}{money(disposalResult.gainLoss.toString())}
                   </p>
                 </div>
                 <div className="bg-white rounded-xl p-4 border">
@@ -490,31 +515,23 @@ export default function Section104CalculatorPage() {
             average cost per share is recalculated after each addition.
           </p>
           <p>
-            When you enter a disposal, the calculator deducts the proportional
-            cost from the pool. The allowable cost for the disposal is: (shares
-            sold ÷ total pool shares) × total pool cost. The gain or loss is
-            simply the proceeds minus this allowable cost.
+            Purchase fees are part of the pool cost. The matched acquisition cost
+            is the proportion of that pool cost belonging to the shares sold.
+            Selling fees reduce the sale proceeds and leave the remaining pool
+            cost unchanged.
           </p>
 
           <h3>Worked Example</h3>
           <p>
-            Imagine you bought 100 shares at £2.00 (cost: £200) and later 50
-            shares at £3.00 (cost: £150). Your pool is: 150 shares, £350 total
-            cost, £2.3333 average. If you sell 60 shares at £4.00:
+            You buy 10 shares at £6 each and pay a £2 purchase fee. The pool
+            holds 10 shares at a total cost of £62. You then sell all 10 at £10
+            each and pay a £5 selling fee.
           </p>
           <ul>
-            <li>
-              <strong>Proceeds:</strong> 60 × £4.00 = £240
-            </li>
-            <li>
-              <strong>Allowable cost:</strong> (60 ÷ 150) × £350 = £140
-            </li>
-            <li>
-              <strong>Gain:</strong> £240 − £140 = <strong>£100</strong>
-            </li>
-            <li>
-              <strong>Remaining pool:</strong> 90 shares, £210 cost
-            </li>
+            <li>Gross disposal proceeds are 10 × £10 = £100.</li>
+            <li>Net sale proceeds are £100 − £5 = £95.</li>
+            <li>Total allowable costs are £62 matched acquisition cost + £5 selling fees = £67.</li>
+            <li>Your gain is £95 − £62 = <strong>£33</strong>. With no selling fee, the gain would be £38.</li>
           </ul>
           <p>
             For the full rules on how the Section 104 pool interacts with

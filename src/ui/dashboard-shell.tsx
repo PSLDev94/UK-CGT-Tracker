@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { authHref } from "./return-path";
+import { WorkspaceEntry } from "./workspace-entry";
 import { useRouter } from "next/navigation";
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { authApi } from "./api";
@@ -54,6 +53,28 @@ export function DashboardShell({
       setBusy(false);
     }
   }
+  if (!session) {
+    if (session === null && !error) {
+      return (
+        <WorkspaceEntry
+          next={window.location.pathname + window.location.search}
+        />
+      );
+    }
+    return (
+      <main id="main" className="classic-auth">
+        {error ? (
+          <section className="auth-wrap panel">
+            <h1>Your workspace couldn’t be loaded</h1>
+            <Notice tone="error">{error}</Notice>
+            <Button onClick={load}>Try again</Button>
+          </section>
+        ) : (
+          <Notice>Loading your workspace…</Notice>
+        )}
+      </main>
+    );
+  }
   return (
     <div className="workspace">
       <DashboardSidebar
@@ -69,23 +90,6 @@ export function DashboardShell({
             <h1>Your workspace couldn’t be loaded</h1>
             <Notice tone="error">{error}</Notice>
             <Button onClick={load}>Try again</Button>
-          </section>
-        ) : session === undefined ? (
-          <Notice>Loading your workspace…</Notice>
-        ) : session === null ? (
-          <section className="panel">
-            <h1>Sign in to your account</h1>
-            <Link
-              className="button primary"
-              href={authHref(
-                "/login",
-                typeof window === "undefined"
-                  ? undefined
-                  : window.location.pathname + window.location.search,
-              )}
-            >
-              Sign in
-            </Link>
           </section>
         ) : typeof children === "function" ? (
           children(session.user, session.session?.id)

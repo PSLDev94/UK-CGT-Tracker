@@ -392,6 +392,7 @@ test("same-tab history restores the profile edit only for its session and clears
     json: { session: { id: session }, user: { name: "Investor", email: "investor@example.test" } },
   }));
   await page.goto("/dashboard/accounts");
+  await expect(page.getByRole("complementary", { name: "Workspace navigation" })).toBeVisible();
   const menu = page.getByRole("button", { name: "Open sidebar menu" });
   if (await menu.isVisible()) await menu.click();
   await page.getByRole("navigation", { name: "Dashboard" }).getByRole("link", { name: "Settings" }).click();
