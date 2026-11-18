@@ -242,8 +242,8 @@ export default async function LandingPage() {
                     </table>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-x-5 text-sm">
-                    <a className="inline-flex min-h-11 items-center text-blue-700 underline" href="/samples/cgt-summary.pdf">Download this sample summary PDF</a>
-                    <a className="inline-flex min-h-11 items-center text-blue-700 underline" href="/samples/cgt-evidence.pdf">Download this sample evidence PDF</a>
+                    <a className="inline-flex min-h-11 items-center text-blue-700 underline" download href="/samples/cgt-summary.pdf">Download this sample summary PDF</a>
+                    <a className="inline-flex min-h-11 items-center text-blue-700 underline" download href="/samples/cgt-evidence.pdf">Download this sample evidence PDF</a>
                   </div>
                 </div>
               </div>

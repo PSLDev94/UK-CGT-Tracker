@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import { PDFDocument } from "pdf-lib";
 import { reportPageText } from "./helpers/pdf-text";
 import { sampleReport } from "../src/domain/reports/sample";
@@ -6,7 +7,6 @@ import { sa108Edition } from "../src/domain/reports/filing-guidance";
 
 test("homepage jump and fee-bearing example reconcile with both downloadable samples", async ({
   page,
-  request,
 }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "See a sample calculation" }).click();
@@ -45,9 +45,11 @@ test("homepage jump and fee-bearing example reconcile with both downloadable sam
   for (const kind of ["summary", "evidence"]) {
     const link = preview.getByRole("link", { name: `Download this sample ${kind} PDF` });
     await expect(link).toHaveAttribute("href", `/samples/cgt-${kind}.pdf`);
-    const response = await request.get((await link.getAttribute("href"))!);
-    expect(response.ok()).toBe(true);
-    const text = reportPageText(await PDFDocument.load(await response.body()));
+    const [download] = await Promise.all([page.waitForEvent("download"), link.click()]);
+    expect(download.suggestedFilename()).toBe(`cgt-${kind}.pdf`);
+    const path = await download.path();
+    if (!path) throw new Error("The browser did not save the sample PDF");
+    const text = reportPageText(await PDFDocument.load(await readFile(path)));
     expect(text).toContain("Net gain  £1850.00");
     expect(text).toContain(
       "Matched acquisition cost\n£11950.00\nTotal allowable costs\n£11955.00",
