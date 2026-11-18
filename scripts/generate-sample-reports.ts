@@ -7,10 +7,10 @@ import { reportPdf } from "../src/domain/reports/pdf";
 import type { ReportSnapshot } from "../src/domain/reports/report";
 
 // The same fictional disposals shown in the public homepage example.
-const examples: [string, string, string, Trade["side"], string, string][] = [
+const examples: [string, string, string, Trade["side"], string, string, string?][] = [
   ["Apple", "US0378331005", "2025-06-02", "BUY", "40", "6200"],
   ["Tesla", "US88160R1014", "2025-06-03", "BUY", "20", "4000"],
-  ["Apple", "US0378331005", "2025-10-15", "SELL", "40", "8500"],
+  ["Apple", "US0378331005", "2025-10-15", "SELL", "40", "8505", "5"],
   ["Tesla", "US88160R1014", "2025-11-02", "SELL", "20", "4100"],
   ["Tesla", "US88160R1014", "2025-11-12", "BUY", "20", "4600"],
   ["Lloyds Banking Group", "GB0008706128", "2026-03-10", "BUY", "1000", "1150"],
@@ -33,19 +33,20 @@ const sources = examples.map(([instrument], index) => ({
   key: hash(`sample-trade-${index + 1}`),
   ...account,
   record: index + 2,
+  importReference: "sample-ajbell-history",
   instrument,
   reference: `SAMPLE-DEAL-${index + 1}`,
   statementReference: `Sample contract note ${index + 1}`,
 }));
 const trades: Trade[] = examples.map(
-  ([, securityId, date, side, quantity, considerationGBP], index) => ({
+  ([, securityId, date, side, quantity, considerationGBP, feesGBP = "0"], index) => ({
     id: sources[index]!.key,
     securityId,
     date,
     side,
     quantity,
     considerationGBP,
-    feesGBP: "0",
+    feesGBP,
   }),
 );
 const snapshot: ReportSnapshot = {

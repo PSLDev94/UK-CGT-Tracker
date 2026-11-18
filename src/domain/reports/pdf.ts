@@ -1,6 +1,8 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { roundingDifferences } from "./rounding";
-import { netOutcome } from "../values";
+import { Money, netOutcome } from "../values";
+import { reportStructure } from "./pdf-structure";
+import { saleBreakdownUnavailable, type SaleBreakdown } from "../cgt/types";
 import { BROKERS } from "../imports/brokers";
 import {
   reportIssueMessage,
@@ -16,7 +18,15 @@ const date = (value: string | Date) => humanDate.format(new Date(value));
 const pounds = (value: string) =>
   value.startsWith("-") ? "-£" + value.slice(1) : "£" + value;
 const shares = (quantity: string) =>
-  `${quantity} ${quantity === "1" ? "share" : "shares"}`;
+  `${quantity} ${quantity === "1" || quantity === "-1" ? "share" : "shares"}`;
+// Only narrative values are shortened. The CSV retains the full matching ledger.
+function narrativeCost(value: string) {
+  const amount = new Money(value);
+  if (amount.decimalPlaces() <= 2) return pounds(value);
+  if (amount.abs().lessThan("0.01"))
+    return amount.isNegative() ? "between -£0.01 and £0" : "less than £0.01";
+  return pounds(amount.toFixed(2));
+}
 const rules = {
   SAME_DAY: "Same day",
   THIRTY_DAY: "30-day rule",
@@ -31,6 +41,7 @@ export async function reportPdf(
 ): Promise<Uint8Array> {
   const r = snapshot.result;
   const doc = await PDFDocument.create();
+  const tags = reportStructure(doc);
   const regular = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const glyphs = new Set(regular.getCharacterSet());
@@ -41,6 +52,7 @@ export async function reportPdf(
   const title = evidence ? "Calculation evidence" : "Capital gains summary";
   doc.setTitle(
     `CGT Tracker - ${sample ? "Synthetic sample - " : ""}${title} ${r.taxYear}`,
+    { showInWindowTitleBar: true },
   );
   if (sample) {
     doc.setCreationDate(new Date(snapshot.created_at));
@@ -54,6 +66,7 @@ export async function reportPdf(
     border = rgb(0.84, 0.87, 0.9);
   let page = doc.addPage([595.28, 841.89]);
   let y = 0;
+  let continuedSection = "";
   const left = 44,
     right = 551;
   function header() {
@@ -80,14 +93,26 @@ export async function reportPdf(
     });
     y = 762;
   }
-  header();
+  tags.artifact(page, header);
   const sources = new Map(
     snapshot.sources?.map((source) => [source.key, source]),
   );
   function space(height: number) {
     if (y - height < 50) {
       page = doc.addPage([595.28, 841.89]);
-      header();
+      tags.artifact(page, () => {
+        header();
+        if (continuedSection) {
+          page.drawText(continuedSection + " (continued)", {
+            x: left,
+            y,
+            size: 10,
+            font: bold,
+            color: muted,
+          });
+          y -= 22;
+        }
+      });
     }
   }
   function wrap(text: string, font: typeof regular, size: number) {
@@ -119,11 +144,20 @@ export async function reportPdf(
     if (buffer) flush();
     return lines;
   }
-  function line(text: string, strong = false, size = 10, color = ink) {
+  function line(
+    text: string,
+    strong = false,
+    size = 10,
+    color = ink,
+    role: "P" | "H1" | "H2" | "H3" = "P",
+  ) {
     const font = strong ? bold : regular;
+    const item = tags.element(role, tags.document);
     for (const content of wrap(text, font, size)) {
       space(size + 5);
-      page.drawText(content, { x: left, y, size, font, color });
+      tags.mark(page, item, () =>
+        page.drawText(content, { x: left, y, size, font, color }),
+      );
       y -= size + 5;
     }
   }
@@ -159,6 +193,11 @@ export async function reportPdf(
           text: `Statement reference: ${source.statementReference}`,
           size: 9,
         });
+      if (source.importReference)
+        entries.push({
+          text: `Import reference: ${source.importReference}`,
+          size: 8,
+        });
       entries.push({ text: `Trace reference: ${key}`, size: 8 });
     } else {
       entries.push({
@@ -175,46 +214,102 @@ export async function reportPdf(
     for (const entry of entries) line(entry.text, false, entry.size);
     y -= 3;
   }
-  function heading(text: string) {
-    space(48);
+  function heading(text: string, reserve = 48) {
+    continuedSection = "";
+    space(reserve);
     y -= 8;
-    line(text, true, 13);
+    tags.bookmark(text, page, y + 16);
+    line(text, true, 13, ink, "H2");
+    continuedSection = text;
   }
   function amounts(labels: string[], values: string[]) {
     const col = (right - left) / labels.length;
     space(41);
-    page.drawRectangle({
-      x: left,
-      y: y - 24,
-      width: right - left,
-      height: 37,
-      color: rgb(0.96, 0.97, 0.98),
-    });
+    tags.artifact(page, () =>
+      page.drawRectangle({
+        x: left,
+        y: y - 24,
+        width: right - left,
+        height: 37,
+        color: rgb(0.96, 0.97, 0.98),
+      }),
+    );
+    const table = tags.element("Table", tags.document);
+    const labelRow = tags.element("TR", table);
+    const dataRow = tags.element("TR", table);
     labels.forEach((label, i) => {
       const edge = left + (i + 1) * col - 7;
-      page.drawText(label, {
-        x: edge - regular.widthOfTextAtSize(label, 9),
-        y,
-        size: 9,
-        font: regular,
-        color: muted,
-      });
+      tags.mark(page, tags.element("TH", labelRow), () =>
+        page.drawText(label, {
+          x: edge - regular.widthOfTextAtSize(label, 9),
+          y,
+          size: 9,
+          font: regular,
+          color: muted,
+        }),
+      );
       const value = values[i]!;
       const size = Math.min(
         12,
         (12 * (col - 14)) / bold.widthOfTextAtSize(value, 12),
       );
-      page.drawText(value, {
-        x: edge - bold.widthOfTextAtSize(value, size),
-        y: y - 17,
-        size,
-        font: bold,
-        color: ink,
-      });
+      tags.mark(page, tags.element("TD", dataRow), () =>
+        page.drawText(value, {
+          x: edge - bold.widthOfTextAtSize(value, size),
+          y: y - 17,
+          size,
+          font: bold,
+          color: ink,
+        }),
+      );
     });
     y -= 42;
   }
-  line(`${r.taxYear}  ${title}`, true, 19);
+  function saleAmounts(
+    basis: SaleBreakdown | undefined,
+    net: string,
+    matched: string | null,
+    outcomes: [string, string][],
+  ) {
+    const value = (amount: string | null) =>
+      amount === null ? "Unresolved" : pounds(amount);
+    if (basis) {
+      amounts(
+        ["Gross disposal proceeds", "Selling costs", "Net sale proceeds"],
+        [basis.grossProceedsGBP, basis.sellingCostsGBP, net].map(pounds),
+      );
+      amounts(
+        [
+          "Matched acquisition cost",
+          "Total allowable costs",
+          ...outcomes.map(([label]) => label),
+        ],
+        [
+          value(matched),
+          value(basis.totalAllowableCostsGBP),
+          ...outcomes.map(([, amount]) => amount),
+        ],
+      );
+      if (!new Money(basis.proceedsRoundingAdjustmentGBP).isZero())
+        line(
+          `Rounding adjustment to net sale proceeds: ${pounds(basis.proceedsRoundingAdjustmentGBP)}.`,
+          false,
+          9,
+        );
+    } else {
+      amounts(
+        [
+          "Net sale proceeds",
+          "Matched acquisition cost",
+          ...outcomes.map(([label]) => label),
+        ],
+        [pounds(net), value(matched), ...outcomes.map(([, amount]) => amount)],
+      );
+      line(saleBreakdownUnavailable, false, 9, muted);
+    }
+  }
+
+  line(`${r.taxYear}  ${title}`, true, 19, ink, "H1");
   if (r.summary) {
     const net = r.summary.netGainGBP;
     line(`${netOutcome(net)}  ${pounds(net.replace(/^-/, ""))}`, true, 22);
@@ -231,14 +326,14 @@ export async function reportPdf(
     );
   y -= 4;
   if (r.summary) {
-    amounts(
-      ["Net proceeds", "Allowable costs", "Gains", "Losses"],
+    saleAmounts(
+      r.saleBreakdown,
+      r.summary.proceedsGBP,
+      r.summary.allowableCostsGBP,
       [
-        r.summary.proceedsGBP,
-        r.summary.allowableCostsGBP,
-        r.summary.gainsGBP,
-        r.summary.lossesGBP,
-      ].map(pounds),
+        ["Gains", pounds(r.summary.gainsGBP)],
+        ["Losses", pounds(r.summary.lossesGBP)],
+      ],
     );
   } else {
     line("Resolve missing acquisition history before relying on totals.");
@@ -258,32 +353,27 @@ export async function reportPdf(
     );
   }
   if (evidence) {
-    heading("Disposals and share matching");
+    heading("Disposals and share matching", r.disposals.length ? 220 : 48);
     if (!r.disposals.length) line("No disposals in this tax year.");
     for (const [index, d] of r.disposals.entries()) {
-      space(85);
+      space(160);
       line(
         `D${index + 1}   ${date(d.date)}   ·   ${d.securityId}   ·   ${shares(d.quantity)} · sale ${sourceIds(d.sourceIds, "Sale")}`,
         true,
         11,
+        ink,
+        "H3",
       );
       const instrument = d.sourceIds
         .map((id) => sources.get(id)?.instrument)
         .find(Boolean);
       if (instrument) line(instrument, false, 10, muted);
-      amounts(
-        ["Net proceeds", "Allowable costs", "Gain / loss"],
-        [
-          pounds(d.proceedsGBP),
-          d.allowableCostGBP === null
-            ? "Unresolved"
-            : pounds(d.allowableCostGBP),
-          d.gainGBP === null ? "Unresolved" : pounds(d.gainGBP),
-        ],
-      );
+      saleAmounts(d.saleBreakdown, d.proceedsGBP, d.allowableCostGBP, [
+        ["Gain / loss", d.gainGBP === null ? "Unresolved" : pounds(d.gainGBP)],
+      ]);
       for (const m of d.matches)
         line(
-          `${rules[m.rule]} · ${shares(m.quantity)} · cost ${pounds(m.costGBP)}${m.acquisitionDate ? " · acquired " + date(m.acquisitionDate) : ""}${m.acquisitionIds?.length ? " · " + sourceIds(m.acquisitionIds, rules[m.rule] + " acquisition") : ""}`,
+          `${rules[m.rule]} · ${shares(m.quantity)} · cost ${narrativeCost(m.costGBP)}${m.acquisitionDate ? " · acquired " + date(m.acquisitionDate) : ""}${m.acquisitionIds?.length ? " · " + sourceIds(m.acquisitionIds, rules[m.rule] + " acquisition") : ""}`,
           false,
           10,
         );
@@ -292,9 +382,9 @@ export async function reportPdf(
       y -= 6;
     }
     if (r.poolMovements?.length) {
-      heading("Section 104 pool movements");
+      heading("Section 104 pool movements", 150);
       line(
-        "Each entry shows the part added to or removed from the pool after same-day and 30-day matching. Look up each T reference in the transaction list.",
+        "Earlier entries explain the balance carried into this tax year. Each T reference identifies a transaction in the list below.",
         false,
         9,
         muted,
@@ -306,18 +396,22 @@ export async function reportPdf(
           acquisition: "Acquisition into pool",
           disposal: "Disposal from pool",
         }[movement.kind];
+        const period =
+          movement.date < r.taxYear.slice(0, 4) + "-04-06"
+            ? "Prior-year history · "
+            : "";
         line(
-          `${date(movement.date)} · ${movement.securityId} · ${label}${movement.sourceIds.length ? " · " + sourceIds(movement.sourceIds, "Pool " + movement.kind) : ""}`,
+          `${period}${date(movement.date)} · ${movement.securityId} · ${label}${movement.sourceIds.length ? " · " + sourceIds(movement.sourceIds, "Pool " + movement.kind) : ""}`,
           true,
           10,
         );
         line(
-          `Change: ${shares(movement.quantityChange)} · cost ${pounds(movement.costChangeGBP)}`,
+          `Change: ${shares(movement.quantityChange)} · cost ${narrativeCost(movement.costChangeGBP)}`,
           false,
           9,
         );
         line(
-          `Balance: ${shares(movement.quantityAfter)} · cost ${pounds(movement.costAfterGBP)}`,
+          `Balance: ${shares(movement.quantityAfter)} · cost ${narrativeCost(movement.costAfterGBP)}`,
           false,
           9,
         );
@@ -327,7 +421,7 @@ export async function reportPdf(
     if (!r.pools.length) line("No remaining pool balances.");
     for (const p of r.pools)
       line(
-        `${p.securityId} · ${shares(p.quantity)} · total cost ${pounds(p.costGBP)}`,
+        `${p.securityId} · ${shares(p.quantity)} · total cost ${narrativeCost(p.costGBP)}`,
       );
   }
   const differences = roundingDifferences(r);
@@ -358,13 +452,12 @@ export async function reportPdf(
       );
   }
   // Keep this fixed filing note together when a disposal table ends near the footer.
-  space(114);
-  heading("Before using these figures");
+  heading("Before using these figures", 125);
   line(
     "These are ordinary-share gains and losses for the accounts included. Check account coverage, acquisitions and corporate actions before filing. This calculation does not determine personal tax owed or complete an HMRC return.",
   );
   line(
-    "Allowances, losses brought forward, other assets, income bands and reliefs are excluded. Same-day disposals may be grouped. Disposal totals are rounded to pence. Matching and pool costs retain calculation precision.",
+    "Allowances, losses brought forward, other assets, income bands and reliefs are excluded. Same-day disposals may be grouped. Disposal totals are rounded to pence. The CSV retains full precision for matching and pool costs.",
     false,
     9,
     muted,
@@ -378,15 +471,18 @@ export async function reportPdf(
   line(`Calculation reference: ${snapshot.id}`, false, 8);
   line(`Input fingerprint: ${snapshot.input_digest}`, false, 8);
   if (evidence && references.size) {
-    heading("Transaction references");
+    heading("Transaction references", 150);
     for (const [key, { id, role }] of references) sourceLine(key, id, role);
   }
   const pages = doc.getPages();
   pages.forEach((p, index) =>
-    p.drawText(
-      `CGT Tracker  |  ${r.taxYear}  |  Page ${index + 1} of ${pages.length}`,
-      { x: left, y: 29, size: 9, font: regular, color: muted },
+    tags.artifact(p, () =>
+      p.drawText(
+        `CGT Tracker  |  ${r.taxYear}  |  Page ${index + 1} of ${pages.length}`,
+        { x: left, y: 29, size: 9, font: regular, color: muted },
+      ),
     ),
   );
+  tags.finish();
   return doc.save();
 }

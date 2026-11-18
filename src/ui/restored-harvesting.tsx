@@ -1,4 +1,5 @@
 "use client";
+import { latestCalculation } from "./latest-calculation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Decimal from "decimal.js";
@@ -19,7 +20,7 @@ export function RestoredHarvesting() {
       .then((d) => {
         if (active) {
           setData(d);
-          setYear(d.calculations[0]?.tax_year ?? "");
+          setYear(latestCalculation(d.calculations)?.tax_year ?? "");
         }
       })
       .catch((e) => {

@@ -92,7 +92,7 @@ export default function BedAndBreakfastCalculatorPage() {
         name: "What is the 30-day bed and breakfast rule?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "If you sell shares and repurchase the same shares within 30 calendar days, HMRC matches the disposal against the new purchase cost rather than your Section 104 pool cost. This prevents investors from crystallising artificial losses.",
+          text: "Match same-day purchases first, then eligible purchases of the same class in the same company in the next 30 days, taking the earliest first. Use the Section 104 pool for shares still unmatched where a holding is available.",
         },
       },
       {
@@ -105,10 +105,10 @@ export default function BedAndBreakfastCalculatorPage() {
       },
       {
         "@type": "Question",
-        name: "How do I avoid triggering the bed and breakfast rule?",
+        name: "Does this calculator include dealing fees or other purchases?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "Wait at least 31 calendar days before repurchasing. Alternatively, use bed-and-ISA or bed-and-spouse strategies which are legitimate under HMRC rules.",
+          text: "It illustrates one sale and one repurchase before fees. Check your full trade history and dealing costs when calculating the gain or loss on the whole disposal.",
         },
       },
     ],
@@ -122,22 +122,13 @@ export default function BedAndBreakfastCalculatorPage() {
       />
       <PublicNav />
 
-      <main id="main" className="max-w-4xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
+      <main id="main" className="max-w-4xl mx-auto px-4 py-8 sm:py-16 sm:px-6 lg:px-8">
         <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-4">
           Bed &amp; Breakfast Rule Calculator
         </h1>
-        <p className="text-lg text-gray-600 mb-2 max-w-3xl leading-relaxed">
-          HMRC&apos;s 30-day bed and breakfast rule prevents investors from
-          selling shares to crystallise a loss and immediately buying them back.
-          If you sell shares and repurchase the{" "}
-          <strong>same security within 30 calendar days</strong>, the disposal
-          is matched against the repurchase — not your Section 104 pool. This
-          often reduces or eliminates the tax loss you were trying to claim.
-        </p>
-        <p className="text-gray-600 mb-8 max-w-3xl leading-relaxed">
-          Use this free calculator to check if a specific sell-and-rebuy
-          transaction triggers the B&amp;B rule. Enter the details below to see
-          your actual gain or loss based on the matched repurchase cost.
+        <p className="text-lg text-gray-600 mb-6 max-w-prose leading-relaxed">
+          Enter one sale and one repurchase of the same ordinary shares.
+          See the gain or loss before fees on the shares they match.
         </p>
 
         {/* Calculator */}
@@ -405,9 +396,14 @@ export default function BedAndBreakfastCalculatorPage() {
                       : result.daysBetween === 0
                         ? "Same-day matching takes priority — this is not a 30-day match"
                         : result.daysBetween < 0
-                          ? "Purchase is before the sale — check the Section 104 pool"
+                          ? "Purchase is before the sale, outside the 30-day window"
                           : `No B&B Match — ${result.daysBetween} days apart (outside 30-day window)`}
                   </h3>
+                  <p className="mt-1 text-sm text-gray-700">
+                    {result.isMatch
+                      ? "This illustration assumes these shares are available to match after any same-day trades."
+                      : "Check other purchases on the sale date and in the following 30 days before matching any remaining shares to the pool."}
+                  </p>
                 </div>
               </div>
               {result.isMatch && (
@@ -417,7 +413,10 @@ export default function BedAndBreakfastCalculatorPage() {
                       Matched Quantity
                     </p>
                     <p className="text-xl font-bold text-gray-900">
-                      {result.matchedQty.toFixed()} shares
+                      {result.matchedQty.toFixed()} {result.matchedQty.eq(1) ? "share" : "shares"}
+                    </p>
+                    <p className="mt-1 text-sm text-gray-700">
+                      {result.remainingSaleQty.toFixed()} still to match
                     </p>
                   </div>
                   <div className="bg-white rounded-xl p-4 border">
@@ -430,7 +429,7 @@ export default function BedAndBreakfastCalculatorPage() {
                   </div>
                   <div className="bg-white rounded-xl p-4 border">
                     <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-                      Allowable Cost (B&amp;B)
+                      Matched purchase cost before fees
                     </p>
                     <p className="text-xl font-bold text-gray-900">
                       £{result.cost.toFixed(2)}
@@ -438,7 +437,7 @@ export default function BedAndBreakfastCalculatorPage() {
                   </div>
                   <div className="bg-white rounded-xl p-4 border">
                     <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-                      {result.gainLoss.gte(0) ? "Gain" : "Loss"}
+                      {result.gainLoss.gte(0) ? "Gain" : "Loss"} on matched shares before fees
                     </p>
                     <p
                       className={`text-xl font-bold ${result.gainLoss.gte(0) ? "text-green-700" : "text-red-600"}`}
@@ -449,10 +448,10 @@ export default function BedAndBreakfastCalculatorPage() {
                   </div>
                   {result.remainingSaleQty.gt(0) && (
                     <p className="sm:col-span-2 text-sm text-gray-700">
-                      The result covers the matched shares only. For the
-                      remaining {result.remainingSaleQty.toFixed()}{" "}
+                      For the remaining {result.remainingSaleQty.toFixed()}{" "}
                       {result.remainingSaleQty.eq(1) ? "share" : "shares"} sold,
-                      check other eligible purchases and the Section 104 pool.
+                      check same-day purchases and all other eligible purchases
+                      in the following 30 days before using the Section 104 pool.
                     </p>
                   )}
                 </div>
@@ -465,40 +464,50 @@ export default function BedAndBreakfastCalculatorPage() {
         <div className="guide-article">
           <h2>How to Interpret the Result</h2>
           <p>
-            If the calculator shows{" "}
-            <strong>&ldquo;B&amp;B Rule Triggered&rdquo;</strong>, it means the
-            disposal is matched against the repurchase under HMRC&apos;s 30-day
-            rule. The allowable cost used to calculate your gain or loss is the
-            cost of the repurchased shares — not the original cost from your{" "}
-            <Link href="/guide/section-104-pool">Section 104 pool</Link>.
+            This illustration assumes you were UK resident when you repurchased
+            the shares and that both trades were in taxable accounts. It compares
+            the two share prices before fees and assumes the entered shares
+            are available to match.
           </p>
           <p>
-            If the repurchase quantity is less than the sale quantity, only the
-            repurchased quantity is B&amp;B matched. The remainder of the
-            disposal falls through to the Section 104 pool as normal.
+            For the full disposal, match same-day purchases first. Then work
+            through eligible purchases in the following 30 days, earliest first.
+            Match any shares still outstanding against your{" "}
+            <Link href="/guide/section-104-pool">Section 104 pool</Link> where
+            you have a holding. Include allowable dealing costs in the final
+            calculation.{" "}
+            <a href="https://www.gov.uk/government/publications/shares-and-capital-gains-tax-hs284-self-assessment-helpsheet/hs284-shares-and-capital-gains-tax-2026">
+              HMRC’s share-matching examples
+            </a>
           </p>
 
           <h3>Worked Example</h3>
           <p>
             You sell 200 shares of TSCO at £3.00 per share on 1 June (proceeds:
-            £600). On 20 June (19 days later), you buy 200 shares at £2.80 per
-            share (cost: £560). The B&amp;B rule applies because the repurchase
-            is within 30 days.
+            £600). On 20 June, 19 days later, you buy 100 shares at £2.80 each.
+            Assume there were no same-day purchases.
           </p>
           <ul>
             <li>
-              <strong>Proceeds:</strong> 200 × £3.00 = £600
+              <strong>Proceeds on 100 matched shares</strong> are 100 × £3.00 = £300.
             </li>
             <li>
-              <strong>Cost (B&amp;B matched):</strong> 200 × £2.80 = £560
+              <strong>Matched purchase cost</strong> is 100 × £2.80 = £280.
             </li>
             <li>
-              <strong>Gain:</strong> £600 − £560 = <strong>£40</strong>
+              <strong>Gain before fees on these shares</strong> is £300 − £280 = £20.
             </li>
           </ul>
           <p>
-            Without the B&amp;B rule, the cost would have come from the Section
-            104 pool, which might have been significantly higher or lower.
+            There are 100 shares still to match. A further purchase of 40 shares
+            on 25 June could match another 40, leaving 60 to check against
+            later eligible purchases and then the pool.
+          </p>
+          <p>
+            If selling all 200 shares cost £2, the 100 matched shares take £1
+            of that fee. A £1 purchase fee on the 100-share repurchase would
+            bring their gain down from £20 to £18. The calculator uses prices
+            before fees.
           </p>
 
           <p>

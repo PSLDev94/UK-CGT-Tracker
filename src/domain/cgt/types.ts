@@ -24,6 +24,17 @@ export interface Match {
   acquisitionIds?: string[]
 }
 
+/** Reporting amounts after rounding each same-day disposal group to pence. */
+export interface SaleBreakdown {
+  grossProceedsGBP: string
+  sellingCostsGBP: string
+  totalAllowableCostsGBP: string | null
+  // Gross less selling costs can differ by a penny from the independently rounded net.
+  proceedsRoundingAdjustmentGBP: string
+}
+
+export const saleBreakdownUnavailable = 'Gross disposal proceeds, selling costs and total allowable costs are unavailable for this saved calculation. Recalculate this year to include them.'
+
 export interface Disposal {
   securityId: string
   date: string
@@ -31,6 +42,7 @@ export interface Disposal {
   quantity: string
   proceedsGBP: string
   allowableCostGBP: string | null
+  saleBreakdown?: SaleBreakdown
   gainGBP: string | null
   unmatchedQuantity: string
   matches: Match[]
@@ -79,4 +91,5 @@ export interface Calculation {
   annualBeforeDisposalRounding?: AnnualAmounts
   issues: CalculationIssue[]
   summary: AnnualAmounts | null
+  saleBreakdown?: SaleBreakdown
 }

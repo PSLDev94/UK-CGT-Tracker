@@ -30,12 +30,9 @@ export default function FreetradeCGTPage() {
       ]}
     >
       <p>
-        Freetrade is a popular UK investment app offering commission-free
-        trading with a clean, modern interface. Like other brokers, Freetrade
-        does not calculate your Capital Gains Tax — that responsibility falls on
-        you. If you trade in a Freetrade General Investment Account (GIA), every
-        disposal is a potential CGT event that must be tracked and, if
-        applicable, reported to HMRC.
+        Use the Activity Feed CSV from your Freetrade General Investment Account
+        to review ordinary-share trades. Have your contract notes to hand for
+        any fees or currency conversions the preview asks you to check.
       </p>
 
       <h2>How to Export from Freetrade</h2>
@@ -47,11 +44,13 @@ export default function FreetradeCGTPage() {
         <li>Open the Freetrade app and select your taxable account.</li>
         <li>Open <strong>Activity</strong> and tap the arrow at the top right.</li>
         <li>Choose <strong>All Activity</strong> and save the CSV to your device.</li>
+        <li>Upload the original, unfiltered CSV. Keep every row, including stock splits.</li>
       </ol>
       <p>
         Check the export against transfers and corporate actions in your records.
-        The Activity Feed can omit these events. To finish matching for 2025–26,
-        include purchases through 5 May 2026.{" "}
+        The Activity Feed can omit these events. Include the purchases that
+        established your holding, even in earlier years. For a sale on
+        5 April 2026, include purchases through 5 May 2026.{" "}
         <a href="https://help.freetrade.io/en/articles/6627908-how-do-i-download-a-csv-export-of-my-activity-feed">
           Freetrade’s download instructions
         </a>
@@ -89,7 +88,7 @@ export default function FreetradeCGTPage() {
               </td>
             </tr>
             <tr>
-              <td className="px-4 py-2 font-medium">Side</td>
+              <td className="px-4 py-2 font-medium">Buy / Sell</td>
               <td className="px-4 py-2">
                 &ldquo;BUY&rdquo; or &ldquo;SELL&rdquo; (only present on ORDER
                 rows)
@@ -98,8 +97,7 @@ export default function FreetradeCGTPage() {
             <tr>
               <td className="px-4 py-2 font-medium">Ticker</td>
               <td className="px-4 py-2">
-                The stock ticker symbol (e.g., &ldquo;TSCO&rdquo;,
-                &ldquo;VUSA&rdquo;)
+                The stock ticker symbol (for example, TSCO)
               </td>
             </tr>
             <tr>
@@ -122,10 +120,10 @@ export default function FreetradeCGTPage() {
         </table>
       </div>
 
-      <h3>ORDER vs DIVIDEND Rows</h3>
+      <h3>Reading a copy of your statement</h3>
       <p>
-        The most important distinction in the Freetrade CSV is between{" "}
-        <strong>ORDER</strong> rows and <strong>DIVIDEND</strong> rows:
+        If you want to check the file in a spreadsheet, open a separate copy.
+        The activity type tells you what each row records.
       </p>
       <ul>
         <li>
@@ -133,36 +131,34 @@ export default function FreetradeCGTPage() {
           these are relevant for CGT calculations.
         </li>
         <li>
-          <strong>DIVIDEND</strong> rows represent dividend payments — these
-          should be <em>excluded</em> from CGT calculations as dividends are
-          taxed under separate income tax rules.
+          <strong>DIVIDEND</strong> rows record cash income. The preview counts
+          these separately from ordinary-share trades.
         </li>
       </ul>
       <p>
-        When processing the CSV, filter for ORDER rows only and use the
-        &ldquo;Side&rdquo; column to determine whether each transaction is a BUY
-        or SELL.
+        For an order, read the <strong>Buy / Sell</strong> column to check its direction.
+        A stock split can affect the share count. Keeping it in the original
+        upload lets the preview flag the event before you save.
       </p>
 
       <h2>Common Scenario: Shares Bought in Multiple Orders</h2>
       <p>
-        A common pattern on Freetrade is building a position gradually. For
-        example, you might buy Vanguard S&amp;P 500 ETF (VUSA) in three separate
-        orders over several months:
+        Suppose you buy ordinary shares in the same company on three dates.
+        These example trades have no fees or other matching purchases.
       </p>
 
       <div className="bg-gray-50 border rounded-lg p-6 my-6 not-prose">
         <ul className="space-y-2 text-gray-700 text-sm">
           <li>
-            • <strong>January 2025:</strong> Buy 10 shares of VUSA at £72.50 =
+            • <strong>January 2025:</strong> Buy 10 shares at £72.50 =
             £725.00
           </li>
           <li>
-            • <strong>April 2025:</strong> Buy 15 shares of VUSA at £75.20 =
+            • <strong>April 2025:</strong> Buy 15 shares at £75.20 =
             £1,128.00
           </li>
           <li>
-            • <strong>August 2025:</strong> Buy 5 shares of VUSA at £78.00 =
+            • <strong>August 2025:</strong> Buy 5 shares at £78.00 =
             £390.00
           </li>
           <li>
@@ -182,7 +178,7 @@ export default function FreetradeCGTPage() {
             • <strong>Proceeds:</strong> 20 × £80.00 = £1,600.00
           </li>
           <li>
-            • <strong>Allowable cost:</strong> 20 × £74.77 = £1,495.33
+            • <strong>Allowable cost:</strong> 20 ÷ 30 × £2,243.00 = £1,495.33
           </li>
           <li>
             • <strong>Gain:</strong> £1,600.00 − £1,495.33 ={" "}
@@ -197,15 +193,13 @@ export default function FreetradeCGTPage() {
       <h2>Freetrade-Specific Tips</h2>
       <ul>
         <li>
-          <strong>Commission-free doesn&apos;t mean tax-free:</strong> While
-          Freetrade charges no commission on basic trades, you still owe CGT on
-          any gains outside your ISA.
+          <strong>Taxable accounts.</strong> Include ordinary-share sales
+          from your General Investment Account when working out gains and losses.
         </li>
         <li>
-          <strong>FX charges:</strong> Freetrade charges a currency conversion
-          fee (typically 0.45% for free users, 0.15% for Plus subscribers) on US
-          and EU share trades. This FX cost is included in the total transaction
-          value and is an allowable cost for CGT.
+          <strong>FX charges.</strong> Check the trade-date exchange rate and
+          charges against your contract note. The preview asks for supporting
+          details where it cannot reconcile the GBP amounts.
         </li>
         <li>
           <strong>Fractional shares:</strong> Freetrade supports fractional

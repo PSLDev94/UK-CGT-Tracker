@@ -673,6 +673,8 @@ test("interrupted upload retains the file; pending retry prevents duplicate subm
   await expect(
     page.getByRole("button", { name: "Reviewing…", exact: true }),
   ).toBeDisabled();
+  const menu = page.getByRole("button", { name: "Open sidebar menu" });
+  if (await menu.isVisible()) await menu.click();
   await expect(
     page.getByRole("link", { name: "Broker accounts", exact: true }),
   ).toBeDisabled();
@@ -987,6 +989,7 @@ test("restored reports export saved evidence and settings retain edits after fai
 });
 
 test("original menus restore keyboard focus on Escape", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
   await page.getByRole("button", { name: "Free Tools" }).click();
   await page

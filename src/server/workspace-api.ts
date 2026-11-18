@@ -92,7 +92,10 @@ export function createWorkspaceHandler(
             await workspace.importHistory(identity, Number(input.page ?? 1)),
           );
         case "overview": {
-          const overview = await workspace.overview(identity, input.surface === "accounts", input.surface === "reports");
+          const overview = await workspace.overview(
+            identity, input.surface === "accounts",
+            input.surface === "reports" || input.surface === "calculations",
+          );
           if (input.surface === "reports") recordJourney("reports_opened");
           return privateResponse(overview);
         }

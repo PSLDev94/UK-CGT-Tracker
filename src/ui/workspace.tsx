@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { authHref } from "./return-path";
+import { latestCalculation } from "./latest-calculation";
 import { PortfolioOverview } from "./portfolio-overview";
 import {
   DashboardSidebar,
@@ -132,15 +133,7 @@ function WorkspaceBody({
   const [ordinarySharesConfirmed, setOrdinarySharesConfirmed] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const requestedYear = params.get("year") ?? "";
-  const latestRun = data?.calculations.reduce<
-    Overview["calculations"][number] | undefined
-  >(
-    (latest, run) =>
-      !latest || (run.created_at ?? "") > (latest.created_at ?? "")
-        ? run
-        : latest,
-    undefined,
-  );
+  const latestRun = latestCalculation(data?.calculations ?? []);
   const taxYear = (
     Object.hasOwn(TAX_YEARS, requestedYear)
       ? requestedYear
@@ -982,6 +975,43 @@ function WorkspaceBody({
             {view === "calculations" && (
               <section>
                 <div className="calculation-layout">
+                  <div className="calculation-year">
+                    <SelectField
+                      id="taxYear"
+                      name="taxYear"
+                      label="Tax year"
+                      value={taxYear}
+                      disabled={busy}
+                      onChange={(e) => {
+                        setCalculationDraft(null);
+                        setErrors({});
+                        setError("");
+                        setMessage("");
+                        window.history.replaceState(
+                          null,
+                          "",
+                          "/dashboard/calculations?year=" +
+                            encodeURIComponent(e.target.value),
+                        );
+                      }}
+                    >
+                      {Object.keys(TAX_YEARS)
+                        .reverse()
+                        .map((year) => (
+                          <option key={year} value={year}>
+                            {year}
+                          </option>
+                        ))}
+                    </SelectField>
+                  </div>
+                  {currentCalculation && (
+                    <CalculationResult
+                      result={currentCalculation.result}
+                      coverage={currentCalculation.coverage_confirmed}
+                      confirmedAccounts={savedAccounts.map(accountName)}
+                      settingsEdited={settingsEdited}
+                    />
+                  )}
                   <section className="panel">
                     <h2>Calculation settings</h2>
                     <p>
@@ -994,34 +1024,7 @@ function WorkspaceBody({
                       onSubmit={calculate}
                       className="form-stack"
                     >
-                      <div className="form-columns">
-                        <SelectField
-                          id="taxYear"
-                          name="taxYear"
-                          label="Tax year"
-                          value={taxYear}
-                          disabled={busy}
-                          onChange={(e) => {
-                            setCalculationDraft(null);
-                            setErrors({});
-                            setError("");
-                            setMessage("");
-                            window.history.replaceState(
-                              null,
-                              "",
-                              "/dashboard/calculations?year=" +
-                                encodeURIComponent(e.target.value),
-                            );
-                          }}
-                        >
-                          {Object.keys(TAX_YEARS)
-                            .reverse()
-                            .map((year) => (
-                              <option key={year} value={year}>
-                                {year}
-                              </option>
-                            ))}
-                        </SelectField>
+                      <div className="calculation-cutoff">
                         <Field
                           id="historyThrough"
                           name="historyThrough"
@@ -1077,14 +1080,6 @@ function WorkspaceBody({
                       </div>
                     </form>
                   </section>
-                  {currentCalculation && (
-                    <CalculationResult
-                      result={currentCalculation.result}
-                      coverage={currentCalculation.coverage_confirmed}
-                      confirmedAccounts={savedAccounts.map(accountName)}
-                      settingsEdited={settingsEdited}
-                    />
-                  )}
                 </div>
               </section>
             )}

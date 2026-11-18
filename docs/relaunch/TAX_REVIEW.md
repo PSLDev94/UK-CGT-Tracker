@@ -43,6 +43,14 @@ Buy three shares for £10 in one purchase. After the 30-day window, sell one sha
 
 The reviewer should record which figure the investor should use for UK reporting, the authority for that treatment and any required change to the annual or per-disposal presentation. Review the same decision for losses, partial disposals and transactions spanning a tax-year boundary. HMRC's worked example illustrates how to carry the remaining pooled cost forward after a partial disposal. [HMRC HS284, example 3](https://assets.publishing.service.gov.uk/media/69c14ad87e02b81c0d1c7669/HS284-Example-3-2026.pdf)
 
+## Selling costs and the accountant’s report
+
+Buy one ordinary share for £60 with £2 in allowable dealing costs. Sell it for £100 with a £5 selling cost. Gross disposal proceeds are £100, cash after selling costs is £95, matched acquisition cost is £62, total allowable costs are £67 and the gain is £33. The reports show the components separately. For a sale at £55 with zero selling costs against the same £62 acquisition cost, the loss is £7.
+
+The 2025–26 listed-share section of SA108 separates disposal proceeds and allowable costs. HMRC’s worked example deducts selling costs alongside the matched acquisition cost. The synthetic examples above use the same presentation. [2025–26 SA108](https://assets.publishing.service.gov.uk/media/69bd8990cfa346b9d47049e4/SA108-2026.pdf) · [HMRC worked example](https://assets.publishing.service.gov.uk/media/69c14ad87e02b81c0d1c7669/HS284-Example-3-2026.pdf)
+
+For fractional cash values, check the separately disclosed adjustment between the rounded net proceeds and gross proceeds less selling costs. For a historic calculation, check that reconstructed evidence agrees with the original input fingerprint and saved result. Where that comparison cannot be made, the reader is told which figures are unavailable and can recalculate the year.
+
 ## Sign-off record (open)
 
 Record reviewer name/qualification, exact commit, source statements reviewed, independently calculated results, identified exceptions and release decision. No independent tax review has been obtained yet. Do not replace this with a test-suite pass or describe the product as HMRC-approved.

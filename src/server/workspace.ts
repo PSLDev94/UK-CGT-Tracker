@@ -89,11 +89,13 @@ function calculationTrades(
   );
 }
 
-// A legacy report may acquire an evidence schedule only from its original, verified inputs.
-// Keep the stored disposal and annual amounts, including their original rounding.
+// Reconstruct missing evidence only from the original inputs. Published amounts stay immutable.
 async function enrichReportHistory(tx: Connection, run: EvidenceRun) {
   const saved = run.result;
-  if (saved.poolMovements || saved.engineVersion !== "2.0.0-alpha.1") return;
+  if (
+    (saved.poolMovements && saved.saleBreakdown) ||
+    !["2.0.0-alpha.1", "2.0.0-alpha.2"].includes(saved.engineVersion)
+  ) return;
   const trades = await calculationTrades(
     tx,
     run.portfolio_id,
@@ -113,14 +115,21 @@ async function enrichReportHistory(tx: Connection, run: EvidenceRun) {
     taxYear: saved.taxYear as keyof typeof TAX_YEARS,
     historyThrough: saved.historyThrough,
   });
-  if (
-    !isDeepStrictEqual(rebuilt.disposals, saved.disposals) ||
-    !isDeepStrictEqual(rebuilt.pools, saved.pools) ||
-    !isDeepStrictEqual(rebuilt.summary, saved.summary)
-  )
-    return;
-  saved.poolMovements = rebuilt.poolMovements;
-  saved.annualBeforeDisposalRounding = rebuilt.annualBeforeDisposalRounding;
+  if (rebuilt.disposals.length !== saved.disposals.length ||
+      !isDeepStrictEqual(rebuilt.pools, saved.pools) ||
+      !isDeepStrictEqual(rebuilt.summary, saved.summary)) return;
+  for (const [index, disposal] of rebuilt.disposals.entries()) {
+    const { saleBreakdown, ...originalFields } = disposal;
+    const { saleBreakdown: previous, ...publishedFields } = saved.disposals[index]!;
+    if (!isDeepStrictEqual(originalFields, publishedFields) ||
+        (previous && !isDeepStrictEqual(previous, saleBreakdown))) return;
+  }
+  saved.disposals.forEach((disposal, index) => {
+    disposal.saleBreakdown ??= rebuilt.disposals[index]!.saleBreakdown;
+  });
+  saved.saleBreakdown ??= rebuilt.saleBreakdown;
+  saved.poolMovements ??= rebuilt.poolMovements;
+  saved.annualBeforeDisposalRounding ??= rebuilt.annualBeforeDisposalRounding;
 }
 
 async function account(tx: Connection, id: string): Promise<Account> {
@@ -410,7 +419,7 @@ export class Workspace {
       query<ReportSource>(
         tx,
         `
-      SELECT t.source_key AS key, a.label, a.broker, t.source_record AS record,
+      SELECT t.source_key AS key, a.label, a.broker, t.source_record AS record, t.import_id::text AS "importReference",
         left(coalesce(nullif(f.fields->>'Name',''), nullif(f.fields->>'Stock name',''),
                       nullif(f.fields->>'Ticker',''), nullif(f.fields->>'Symbol',''),
                       nullif(f.fields->>'Description','')),120) AS instrument,

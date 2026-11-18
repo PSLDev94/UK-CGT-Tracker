@@ -2,8 +2,8 @@ import type { AnnualAmounts, Calculation } from "../cgt/types";
 import { Money } from "../values";
 
 const fields: Record<keyof AnnualAmounts, string> = {
-  proceedsGBP: "Net proceeds",
-  allowableCostsGBP: "Allowable costs",
+  proceedsGBP: "Net sale proceeds",
+  allowableCostsGBP: "Matched acquisition cost",
   gainsGBP: "Gains",
   lossesGBP: "Losses",
   netGainGBP: "Net gain or loss",

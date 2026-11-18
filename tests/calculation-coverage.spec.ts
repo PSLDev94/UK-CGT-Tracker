@@ -54,7 +54,7 @@ async function workspace(page: Page, trades: Trade[], confirmed: boolean) {
   let preview: Preview | null = null;
   await page.route("**/api/v2/auth/**", (route) =>
     route.fulfill({
-      json: { user: { name: "Test investor", emailVerified: true } },
+      json: { session: { id: "test-session" }, user: { name: "Test investor", email: "investor@example.test", emailVerified: true } },
     }),
   );
   await page.route("**/api/v2/workspace", async (route) => {
@@ -351,4 +351,99 @@ test("unsaved settings survive staying, and leaving or saving releases the guard
   await billing.click();
   await dialog.getByRole("button", { name: "Discard changes and leave" }).click();
   await expect(page).toHaveURL(/\/billing$/);
+});
+
+test("all report entry points prefer the latest save and the calculation year precedes its evidence", async ({ page, browserName }) => {
+  const { state } = await workspace(page, [purchase, sale], true);
+  const latest = state.calculations[0]!;
+  latest.created_at = "2026-11-18T09:00:00Z";
+  state.calculations.unshift({
+    ...latest, id: "older-save", tax_year: "2025-26", created_at: "2026-11-17T12:00:00Z",
+    result: calculateGains([purchase, sale], { taxYear: "2025-26", historyThrough: "2026-05-05" }),
+  });
+  await page.route("**/api/v2/billing", (route) =>
+    route.fulfill({ json: { status: "active", entitled: true } }),
+  );
+  await page.goto("/dashboard");
+  await expect(page.getByRole("link", {name: "Open latest report"})).toHaveAttribute("href", /year=2024-25/);
+  await page.goto("/dashboard/reports");
+  await expect(page.getByLabel("Tax year")).toHaveValue("2024-25");
+  await page.goto("/dashboard/reports?year=2025-26");
+  await expect(page.getByLabel("Tax year")).toHaveValue("2025-26");
+  await page.setViewportSize({ width: 390, height: 664 });
+  await page.goto("/dashboard/calculations");
+  const year = page.getByLabel("Tax year");
+  await expect(year).toHaveValue("2024-25");
+  expect((await year.boundingBox())!.y).toBeLessThan(400);
+  const report = page.getByRole("link", { name: "View reports for 2024-25" });
+  const cutoff = page.getByLabel("History complete through");
+  expect(await year.evaluate((el) => !!(el.compareDocumentPosition(document.querySelector("#historyThrough")!) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
+  expect((await report.boundingBox())!.y).toBeLessThan((await cutoff.boundingBox())!.y);
+  await year.focus();
+  // WebKit uses Option-Tab to include links in its default keyboard traversal.
+  await page.keyboard.press(browserName === "webkit" ? "Alt+Tab" : "Tab");
+  await expect(report).toBeFocused();
+});
+
+test("same-tab history restores the profile edit only for its session and clears an explicit discard", async ({ page }) => {
+  await workspace(page, [], false);
+  let session = "first-session";
+  await page.route("**/api/v2/auth/get-session", route => route.fulfill({
+    json: { session: { id: session }, user: { name: "Investor", email: "investor@example.test" } },
+  }));
+  await page.goto("/dashboard/accounts");
+  const menu = page.getByRole("button", { name: "Open sidebar menu" });
+  if (await menu.isVisible()) await menu.click();
+  await page.getByRole("navigation", { name: "Dashboard" }).getByRole("link", { name: "Settings" }).click();
+  const name = page.getByLabel("Full name");
+  await name.fill("Unsaved profile edit");
+  await page.getByLabel("New password", {exact: true}).fill("temporary example passphrase");
+  expect(await page.evaluate(() => JSON.stringify(history.state))).not.toMatch(/Unsaved profile edit|temporary example passphrase/);
+  await page.goBack();
+  await expect(page).toHaveURL(/dashboard\/accounts/);
+  await page.goForward();
+  await expect(name).toHaveValue("Unsaved profile edit");
+  await expect(page.getByLabel("New password", {exact:true})).toHaveValue("");
+  await page.goBack();
+  session = "new-session";
+  await page.goForward();
+  await expect(name).toHaveValue("Investor");
+  await name.fill("Discard me");
+  await page.getByRole("link", {name:"Manage subscription"}).click();
+  await page.getByRole("button", {name:"Discard changes and leave"}).click();
+  await expect(page).toHaveURL(/\/billing$/);
+  await page.goBack();
+  await expect(name).toHaveValue("Investor");
+});
+
+test("a fee-bearing sale reconciles across Calculations and Reports, including legacy evidence", async ({ page }) => {
+  const { state } = await workspace(page, [
+    { ...purchase, quantity: "1", considerationGBP: "60", feesGBP: "2" },
+    { ...sale, considerationGBP: "100", feesGBP: "5" },
+  ], true);
+  await page.route("**/api/v2/billing", (route) =>
+    route.fulfill({ json: { status: "active", entitled: true } }),
+  );
+  await page.goto("/dashboard/calculations?year=2024-25");
+  const amounts = [
+    ["Gross disposal proceeds", "£100.00"], ["Selling costs", "£5.00"],
+    ["Net sale proceeds", "£95.00"], ["Matched acquisition cost", "£62.00"],
+    ["Total allowable costs", "£67.00"],
+  ] as const;
+  for (const [label, amount] of amounts) {
+    await expect(page.getByText(label, { exact: true }).first().locator("..").locator("dd")).toHaveText(amount);
+  }
+  await page.getByRole("link", { name: "View reports for 2024-25" }).click();
+  const summary = page.getByRole("region", { name: "Calculation summary" });
+  await expect(summary).toContainText("Net gain £33.00");
+  for (const [label, amount] of amounts) {
+    await expect(summary.getByText(label, { exact: true }).locator("..").locator("dd")).toHaveText(amount);
+  }
+  const legacy = state.calculations[0]!.result;
+  delete legacy.saleBreakdown;
+  for (const disposal of legacy.disposals) delete disposal.saleBreakdown;
+  await page.reload();
+  await expect(summary).toContainText("Recalculate this year to include them.");
+  await expect(summary.getByText("Selling costs", { exact: true }).locator("..").locator("dd")).toHaveText("Unavailable");
+  await expect(summary).toContainText("Net gain £33.00");
 });

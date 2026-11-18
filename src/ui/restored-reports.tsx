@@ -1,4 +1,5 @@
 "use client";
+import { latestCalculation } from "./latest-calculation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { FileText, Download } from "lucide-react";
@@ -12,6 +13,7 @@ import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
 import { billingUrl, type PdfFormat } from "../domain/reports/destination";
 import { displayDate, netOutcome } from "./format";
 import type { ReportKind } from "../domain/reports/report";
+import { SaleAmounts } from "./sale-amounts";
 
 const cards = [
   {
@@ -86,7 +88,7 @@ export function RestoredReports({
       .then((d) => {
         if (!controller.signal.aborted) {
           setData(d);
-          setYear(requestedYear || d.calculations[0]?.tax_year || "");
+          setYear(requestedYear || latestCalculation(d.calculations)?.tax_year || "");
         }
       })
       .catch((e) => {
@@ -311,21 +313,26 @@ export function RestoredReports({
                 </div>
               )}
               {result.summary && (
-                <dl className="flex flex-wrap gap-x-7 gap-y-2 text-sm">
-                  {[
-                    ["Proceeds", result.summary.proceedsGBP],
-                    ["Allowable costs", result.summary.allowableCostsGBP],
-                    ["Gains", result.summary.gainsGBP],
-                    ["Losses", result.summary.lossesGBP],
-                  ].map(([label, value]) => (
-                    <div key={label}>
-                      <dt className="text-gray-600">{label}</dt>
-                      <dd className="font-semibold tabular-nums">
-                        {money(value!)}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
+                <div className="space-y-3">
+                  <SaleAmounts
+                    breakdown={result.saleBreakdown}
+                    net={result.summary.proceedsGBP}
+                    matched={result.summary.allowableCostsGBP}
+                  />
+                  <dl className="flex flex-wrap gap-x-7 gap-y-2 text-sm">
+                    {[
+                      ["Gains", result.summary.gainsGBP],
+                      ["Losses", result.summary.lossesGBP],
+                    ].map(([label, value]) => (
+                      <div key={label}>
+                        <dt className="text-gray-600">{label}</dt>
+                        <dd className="font-semibold tabular-nums">
+                          {money(value!)}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
               )}
               {differences.length > 0 && (
                 <details className="text-sm">

@@ -10,6 +10,39 @@ const options = { taxYear: '2024-25' as const, historyThrough: '2025-05-05' }
 const run = (trades: readonly Trade[]) => calculateGains(trades, options)
 
 describe('HMRC share matching regression cases', () => {
+  it('keeps gross proceeds and selling costs separate from acquisition costs for gains and losses', () => {
+    const result = run([
+      trade('buy', '2024-04-06', 'BUY', '2', '120', '4'),
+      trade('sell1', '2024-08-01', 'SELL', '0.6', '60', '3'),
+      trade('sell2', '2024-08-01', 'SELL', '0.4', '40', '2'),
+      trade('sell3', '2024-09-01', 'SELL', '1', '55'),
+    ])
+    expect(result.disposals[0]).toMatchObject({
+      proceedsGBP: '95.00', allowableCostGBP: '62.00', gainGBP: '33.00',
+      saleBreakdown: { grossProceedsGBP: '100.00', sellingCostsGBP: '5.00', totalAllowableCostsGBP: '67.00', proceedsRoundingAdjustmentGBP: '0.00' },
+    })
+    expect(result.disposals[1]).toMatchObject({
+      gainGBP: '-7.00', saleBreakdown: { sellingCostsGBP: '0.00', totalAllowableCostsGBP: '62.00' },
+    })
+    expect(result.saleBreakdown).toEqual({
+      grossProceedsGBP: '155.00', sellingCostsGBP: '5.00', totalAllowableCostsGBP: '129.00', proceedsRoundingAdjustmentGBP: '0.00',
+    })
+    expect(result.summary?.netGainGBP).toBe('26.00')
+  })
+
+  it('explains subpenny sale proceeds rounding and withholds costs when acquisition evidence is missing', () => {
+    const sale = trade('sell', '2024-08-01', 'SELL', '1', '100.004', '5.005')
+    const priced = run([trade('buy', '2024-04-06', 'BUY', '1', '62'), sale])
+    expect(priced.saleBreakdown).toEqual({
+      grossProceedsGBP: '100.00', sellingCostsGBP: '5.01', totalAllowableCostsGBP: '67.01', proceedsRoundingAdjustmentGBP: '0.01',
+    })
+    expect(priced.disposals[0]?.gainGBP).toBe('33.00')
+    const incomplete = run([sale])
+    expect(incomplete.summary).toBeNull()
+    expect(incomplete.disposals[0]?.saleBreakdown).toEqual({ ...priced.saleBreakdown, totalAllowableCostsGBP: null })
+    expect(incomplete.saleBreakdown?.totalAllowableCostsGBP).toBeNull()
+  })
+
   it('matches a partial disposal to the Section 104 pool', () => {
     const result = run([trade('1', '2024-06-01', 'BUY', '100', '10000'), trade('2', '2024-09-01', 'SELL', '50', '6000')])
     expect(result.disposals[0]).toMatchObject({ allowableCostGBP: '5000.00', gainGBP: '1000.00' })

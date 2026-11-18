@@ -27,7 +27,7 @@ const FILE_EXAMPLES: Record<
   freetrade: {
     name: "Activity Feed CSV",
     download:
-      "In the app, open Activity, tap the download arrow and select All Activity. Save the CSV on your device.",
+      "In the app, open Activity, tap the download arrow and select All Activity. Upload the original, unfiltered CSV.",
     example:
       "An ORDER with Buy / Sell set to BUY, a GBP total and reconciled stamp duty can be included. A foreign trade with an unresolved conversion stays in review.",
     check:
@@ -75,7 +75,7 @@ export default function BrokerSupport() {
   return (
     <>
       <Header />
-      <main id="main" className="public-main">
+      <main id="main" className="public-main broker-directory">
         <section className="principles">
           <h1>Find your broker’s CSV export</h1>
           <p className="lead">
@@ -96,7 +96,9 @@ export default function BrokerSupport() {
             ))}
           </nav>
           <p className="mb-6 max-w-prose">
-            Use the full trade history for ordinary shares in taxable accounts.
+            Use the full history for ordinary shares in taxable accounts,
+            including earlier purchases and the 30 days after the reporting
+            year. Keep all activity rows in the original export.
             Trading 212 and Freetrade GBP trades can be read automatically. Other
             formats may need contract notes. The examples use synthetic trades.
             Unknown records block saving. ISA and pension accounts are outside scope.

@@ -4,6 +4,7 @@ import { money, Notice } from "./primitives";
 import type { Calculation } from "../domain/cgt/types";
 import { missingAcquisitionGuidance } from "../domain/cgt/types";
 import { displayDate, netOutcome } from "./format";
+import { SaleAmounts } from "./sale-amounts";
 const rules = {
   SAME_DAY: "Same day",
   THIRTY_DAY: "Within 30 days",
@@ -99,7 +100,7 @@ export function CalculationResult({
         </Notice>
       )}
       {result.summary && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           {[
             [
               netOutcome(result.summary.netGainGBP),
@@ -108,11 +109,6 @@ export function CalculationResult({
             ],
             ["Total Gains", result.summary.gainsGBP, "text-green-700"],
             ["Total Losses", result.summary.lossesGBP, "text-red-600"],
-            [
-              "Allowable Costs",
-              result.summary.allowableCostsGBP,
-              "text-gray-900",
-            ],
           ].map(([label, value, tone]) => (
             <div
               key={label}
@@ -142,6 +138,12 @@ export function CalculationResult({
         {result.status === "blocked" ? "View draft reports" : "View reports"}{" "}
         for {result.taxYear}
       </Link>
+      {result.summary && (
+        <div>
+          <h3 className="text-lg font-semibold mb-3">Annual sale breakdown</h3>
+          <SaleAmounts breakdown={result.saleBreakdown} net={result.summary.proceedsGBP} matched={result.summary.allowableCostsGBP} />
+        </div>
+      )}
       <p className="caption">
         Gains and losses, not tax owed. Personal allowances, reliefs and other
         gains are not applied. This preview is not a filing-ready report.
@@ -179,11 +181,8 @@ export function CalculationResult({
               <dl className="my-3 grid grid-cols-2 gap-2 tabular-nums">
                 <dt>Quantity</dt>
                 <dd className="text-right">{d.quantity}</dd>
-                <dt>Proceeds</dt>
-                <dd className="text-right">{money(d.proceedsGBP)}</dd>
-                <dt>Allowable cost</dt>
-                <dd className="text-right">{money(d.allowableCostGBP)}</dd>
               </dl>
+              <SaleAmounts breakdown={d.saleBreakdown} net={d.proceedsGBP} matched={d.allowableCostGBP} />
               <ul className="match-list">
                 {d.matches.map((m, j) => (
                   <li key={j}>
@@ -209,10 +208,10 @@ export function CalculationResult({
                   "Date",
                   "Asset",
                   "Qty",
-                  "Proceeds",
-                  "Cost",
+                  "Gross disposal proceeds",
+                  "Total allowable costs",
                   "Gain/Loss",
-                  "Matching Rule",
+                  "Disposal details",
                 ].map((h) => (
                   <th key={h} className="px-6 py-3 font-medium">
                     {h}
@@ -236,14 +235,15 @@ export function CalculationResult({
                       {d.securityId}
                     </td>
                     <td>{d.quantity}</td>
-                    <td className="number">{money(d.proceedsGBP)}</td>
-                    <td className="number">{money(d.allowableCostGBP)}</td>
+                    <td className="number">{d.saleBreakdown ? money(d.saleBreakdown.grossProceedsGBP) : "Unavailable"}</td>
+                    <td className="number">{d.saleBreakdown ? money(d.saleBreakdown.totalAllowableCostsGBP) : "Unavailable"}</td>
                     <td className="number font-medium">{money(d.gainGBP)}</td>
                     <td>
                       <details className="border-0 p-0 min-w-56">
                         <summary>
                           {d.date} · {d.securityId} · {money(d.gainGBP)}
                         </summary>
+                        <SaleAmounts breakdown={d.saleBreakdown} net={d.proceedsGBP} matched={d.allowableCostGBP} />
                         <ul className="match-list mt-3">
                           {d.matches.map((m, j) => (
                             <li key={j}>

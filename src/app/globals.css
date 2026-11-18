@@ -740,18 +740,6 @@
     background: #f0f8f4;
     border-color: #d4e8dd;
   }
-  .calculation-layout {
-    display: grid;
-    grid-template-columns: minmax(17rem, 0.8fr) minmax(0, 1.4fr);
-    gap: 1.5rem;
-    align-items: start;
-  }
-  .calculation-layout > .panel:first-child {
-    font-size: 0.85rem;
-  }
-  .calculation-layout .form-columns {
-    grid-template-columns: 1fr;
-  }
   .calculation-layout fieldset {
     font-size: 0.8rem;
   }
@@ -908,12 +896,10 @@
     }
   }
   @media (max-width: 1150px) {
-    .accounts-layout,
-    .calculation-layout {
+    .accounts-layout {
       grid-template-columns: 1fr;
     }
-    .account-form .form-columns,
-    .calculation-layout .form-columns {
+    .account-form .form-columns {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
@@ -980,12 +966,10 @@
     .portfolio-summary small {
       display: none;
     }
-    .accounts-layout,
-    .calculation-layout {
+    .accounts-layout {
       gap: 0;
     }
-    .account-form .form-columns,
-    .calculation-layout .form-columns {
+    .account-form .form-columns {
       grid-template-columns: 1fr;
     }
     .workspace-.site-header nav {
@@ -1070,14 +1054,18 @@
   }
   .calculation-layout {
     display: flex;
-    flex-direction: column-reverse;
+    flex-direction: column;
     gap: 0;
   }
   .calculation-layout > * {
     width: 100%;
   }
-  .calculation-layout .form-columns {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .calculation-layout > .calculation-year {
+    width: min(100%, 16rem);
+    margin-bottom: 1.5rem;
+  }
+  .calculation-cutoff {
+    max-width: 32rem;
   }
   .panel {
     box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
@@ -1141,9 +1129,6 @@
     .workspace-main {
       padding: 1.5rem 1rem;
     }
-    .calculation-layout .form-columns {
-      grid-template-columns: 1fr;
-    }
     .classic-signup {
       grid-template-columns: 1fr;
     }
@@ -1173,8 +1158,18 @@
 
   .guide-article p,
   .guide-article ul,
-  .guide-article ol {
+  .guide-article ol,
+  .broker-directory .panel p {
     max-inline-size: 57ch;
+  }
+
+  .broker-directory details {
+    padding-block: 0;
+  }
+  .broker-directory summary,
+  .guide-contents summary {
+    min-block-size: 44px;
+    padding-block: 0.65rem;
   }
 
   .guide-article p {

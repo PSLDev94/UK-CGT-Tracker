@@ -70,6 +70,12 @@ export default function Section104CalculatorPage() {
     const cost = qty.mul(price).plus(fees);
     return { ...r, decQty: qty, decCost: cost };
   });
+  // Leave the inputs in entry order while presenting a chronological ledger.
+  // ISO dates sort lexically. Undated purchases follow those with known dates.
+  poolRows.sort((a, b) => {
+    if (!a.date || !b.date) return Number(!!b.date) - Number(!!a.date);
+    return a.date.localeCompare(b.date);
+  });
 
   const poolState = poolRows.reduce<
     {
@@ -106,13 +112,16 @@ export default function Section104CalculatorPage() {
     ? new Decimal(0)
     : totalPoolCost.div(totalPoolShares);
 
-  // Disposal calc
-  const hasSellData =
-    validDecimal(sellQty) &&
-    validDecimal(sellPrice) &&
-    new Decimal(sellQty).gt(0) &&
-    new Decimal(sellQty).lte(totalPoolShares) &&
-    !totalPoolShares.isZero();
+  let quantityError = "";
+  if (sellQty) {
+    if (!validDecimal(sellQty) || new Decimal(sellQty).lte(0))
+      quantityError = "Enter a positive quantity with up to 8 decimal places.";
+    else if (!incomplete && !totalPoolShares.isZero() && new Decimal(sellQty).gt(totalPoolShares))
+      quantityError = "Reduce the quantity to the available holding or add the missing purchase.";
+  }
+  const priceError = sellPrice && !validDecimal(sellPrice)
+    ? "Enter a price of zero or more with up to 8 decimal places."
+    : "";
   let disposalResult: null | {
     qty: Decimal;
     proceeds: Decimal;
@@ -122,17 +131,16 @@ export default function Section104CalculatorPage() {
     remainingCost: Decimal;
   } = null;
 
-  if (hasSellData) {
+  if (sellQty && sellPrice && !quantityError && !priceError && totalPoolShares.gt(0)) {
     const sQty = new Decimal(sellQty);
     const sPrice = new Decimal(sellPrice);
-    const effectiveQty = Decimal.min(sQty, totalPoolShares);
-    const proceeds = effectiveQty.mul(sPrice);
-    const allowableCost = effectiveQty.div(totalPoolShares).mul(totalPoolCost);
+    const proceeds = sQty.mul(sPrice);
+    const allowableCost = sQty.div(totalPoolShares).mul(totalPoolCost);
     const gainLoss = proceeds.minus(allowableCost);
-    const remainingShares = totalPoolShares.minus(effectiveQty);
+    const remainingShares = totalPoolShares.minus(sQty);
     const remainingCost = totalPoolCost.minus(allowableCost);
     disposalResult = {
-      qty: effectiveQty,
+      qty: sQty,
       proceeds,
       allowableCost,
       gainLoss,
@@ -145,27 +153,13 @@ export default function Section104CalculatorPage() {
     <div className="min-h-screen bg-white">
       <PublicNav />
 
-      <main id="main" className="max-w-4xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
+      <main id="main" className="max-w-4xl mx-auto px-4 py-8 sm:py-16 sm:px-6 lg:px-8">
         <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-4">
           Section 104 Pool Calculator
         </h1>
-        <p className="text-lg text-gray-600 mb-2 max-w-3xl leading-relaxed">
-          HMRC requires UK investors to use the{" "}
-          <Link
-            href="/guide/section-104-pool"
-            className="text-blue-600 underline hover:no-underline"
-          >
-            Section 104 pool
-          </Link>{" "}
-          to calculate the average cost of shares purchased over time. Each time
-          you buy more of the same share, the pool&apos;s total cost and
-          quantity increase. When you sell, the allowable cost is calculated
-          proportionally from the pool.
-        </p>
-        <p className="text-gray-600 mb-8 max-w-3xl leading-relaxed">
-          This standalone example assumes the sale uses the pool. Enter
-          purchases in date order to see how the average cost changes with each
-          acquisition. Then enter a disposal to calculate your gain or loss.
+        <p className="text-lg text-gray-600 mb-6 max-w-prose leading-relaxed">
+          Enter purchases of the same ordinary share to see your average cost.
+          Then try a sale matched entirely to the pool.
         </p>
 
         {/* Purchase rows */}
@@ -187,7 +181,7 @@ export default function Section104CalculatorPage() {
                 >
                   <div className="sm:col-span-3">
                     <label className="block text-xs font-medium text-gray-500 mb-1">
-                      Date
+                      Date (optional)
                     </label>
                     <input
                       type="date"
@@ -293,6 +287,11 @@ export default function Section104CalculatorPage() {
           {poolState.length > 0 && (
             <div className="bg-blue-50 border-t p-6 sm:p-8">
               <h3 className="font-bold text-gray-900 mb-4">Pool Summary</h3>
+              {poolRows.some((row) => !row.date) && (
+                <p className="mb-3 text-sm text-gray-700">
+                  Undated purchases appear last, in the order you entered them.
+                </p>
+              )}
               <div className="overflow-x-auto mb-6 not-prose">
                 <table className="w-full text-sm border bg-white rounded-lg overflow-hidden">
                   <thead>
@@ -320,7 +319,7 @@ export default function Section104CalculatorPage() {
                   <tbody className="divide-y">
                     {poolState.map((ps, i) => (
                       <tr key={i}>
-                        <td className="px-3 py-2">{ps.date || "—"}</td>
+                        <td className="px-3 py-2">{ps.date || "Undated"}</td>
                         <td className="px-3 py-2 text-right">
                           {ps.qty.toFixed()}
                         </td>
@@ -393,10 +392,20 @@ export default function Section104CalculatorPage() {
                   type="text"
                   inputMode="decimal"
                   placeholder="e.g. 100"
+                  aria-invalid={Boolean(quantityError)}
+                  aria-describedby={quantityError ? "sell-holding sell-qty-error" : "sell-holding"}
                   value={sellQty}
                   onChange={(e) => setSellQty(e.target.value)}
                   className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
                 />
+                <p id="sell-holding" className="mt-1 text-sm text-gray-600">
+                  {totalPoolShares.gt(0)
+                    ? `${totalPoolShares.toFixed()} ${totalPoolShares.eq(1) ? "share" : "shares"} available in the pool.`
+                    : "Complete your purchases to see how many shares are available."}
+                </p>
+                <p id="sell-qty-error" aria-live="polite" className="text-sm text-red-700">
+                  {quantityError}
+                </p>
               </div>
               <div>
                 <label
@@ -410,10 +419,15 @@ export default function Section104CalculatorPage() {
                   type="text"
                   inputMode="decimal"
                   placeholder="e.g. 4.20"
+                  aria-invalid={Boolean(priceError)}
+                  aria-describedby={priceError ? "sell-price-error" : undefined}
                   value={sellPrice}
                   onChange={(e) => setSellPrice(e.target.value)}
                   className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
                 />
+                <p id="sell-price-error" aria-live="polite" className="text-sm text-red-700">
+                  {priceError}
+                </p>
               </div>
             </div>
           </div>
@@ -454,7 +468,7 @@ export default function Section104CalculatorPage() {
                     Pool After Sale
                   </p>
                   <p className="text-lg font-bold text-gray-900">
-                    {disposalResult.remainingShares.toFixed()} shares
+                    {disposalResult.remainingShares.toFixed()} {disposalResult.remainingShares.eq(1) ? "share" : "shares"}
                   </p>
                   <p className="text-sm text-gray-500">
                     £{disposalResult.remainingCost.toFixed(2)} cost

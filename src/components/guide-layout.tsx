@@ -138,7 +138,7 @@ export function GuideLayout({
           </a>
           .
         </div>
-        <details className="mb-8 rounded-xl border border-gray-200 px-5 py-3">
+        <details className="guide-contents mb-8 rounded-xl border border-gray-200 px-5">
           <summary className="cursor-pointer font-semibold">
             On this page
           </summary>

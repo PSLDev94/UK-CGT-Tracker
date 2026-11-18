@@ -6,12 +6,17 @@ import { useRouter } from "next/navigation";
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { authApi } from "./api";
 import { Notice, Button } from "./primitives";
-type Session = { user: { name: string; email: string } };
+type Session = {
+  user: { name: string; email: string };
+  session?: { id: string };
+};
 export function DashboardShell({
   children,
   beforeSignOut,
 }: {
-  children: React.ReactNode | ((user: Session["user"]) => React.ReactNode);
+  children:
+    | React.ReactNode
+    | ((user: Session["user"], sessionId?: string) => React.ReactNode);
   beforeSignOut?: (signOut: () => void) => void;
 }) {
   const router = useRouter();
@@ -83,7 +88,7 @@ export function DashboardShell({
             </Link>
           </section>
         ) : typeof children === "function" ? (
-          children(session.user)
+          children(session.user, session.session?.id)
         ) : (
           children
         )}

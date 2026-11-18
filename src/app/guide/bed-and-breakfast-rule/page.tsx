@@ -21,7 +21,7 @@ export default function BedAndBreakfastRulePage() {
         name: "What is the 30-day bed and breakfast rule?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "If you sell shares and buy the same shares back within 30 calendar days, HMRC matches the sale against the repurchase rather than your Section 104 pool. This prevents investors from selling at a loss to reduce their tax bill and immediately buying back to maintain their position.",
+          text: "Same-day purchases take priority. Then match eligible purchases of the same class in the same company in the next 30 days, earliest first. The Section 104 pool provides the cost for shares still outstanding where a holding is available.",
         },
       },
       {
@@ -101,19 +101,18 @@ export default function BedAndBreakfastRulePage() {
 
       <h2>How the Rule Works — Step by Step</h2>
       <ol>
-        <li>You sell shares of security X.</li>
+        <li>Start with shares sold that are still unmatched after checking same-day purchases.</li>
         <li>
-          Within the next 30 calendar days, you buy shares of the same security
-          X.
+          Check eligible purchases of the same class in the same company during
+          the next 30 calendar days, earliest first.
         </li>
         <li>
-          The sale is &ldquo;matched&rdquo; against the repurchase. The
-          allowable cost of the disposal becomes the cost of the repurchased
-          shares (not the Section 104 pool cost).
+          Use each purchase to match as many outstanding shares as it covers.
+          Its acquisition cost applies to that matched quantity.
         </li>
         <li>
-          The repurchased shares are <strong>not</strong> added to the Section
-          104 pool — they are consumed by the B&amp;B match.
+          After checking all eligible purchases, use the Section 104 pool for
+          the remaining shares where you have a holding.
         </li>
       </ol>
 
@@ -243,8 +242,8 @@ export default function BedAndBreakfastRulePage() {
           >
             bed and breakfast rule calculator
           </Link>{" "}
-          to enter your sell and re-buy details and see your actual gain or loss
-          instantly.
+          to compare one sale with one repurchase and see the gain or loss
+          before fees on the matched quantity.
         </p>
       </div>
 
@@ -259,9 +258,9 @@ export default function BedAndBreakfastRulePage() {
           within 30 days does <strong>not</strong> trigger the rule.
         </li>
         <li>
-          If you sell more shares than you repurchase, only the quantity
-          repurchased is matched under B&amp;B. The remainder is matched against
-          the Section 104 pool.
+          If one purchase covers only part of the sale, check every other
+          eligible purchase within the 30-day window before using the Section
+          104 pool.
         </li>
         <li>
           The same-day rule takes priority over the 30-day rule. If you buy and

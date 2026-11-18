@@ -1,5 +1,6 @@
 import {
   missingAcquisitionGuidance,
+  saleBreakdownUnavailable,
   type Calculation,
   type CalculationIssue,
 } from "../cgt/types";
@@ -14,6 +15,7 @@ export interface ReportSource {
   instrument: string | null;
   reference: string | null;
   statementReference?: string | null;
+  importReference?: string;
 }
 export interface ReportSnapshot {
   sources?: ReportSource[];
@@ -34,6 +36,9 @@ export const reportIssueMessage = (issue: CalculationIssue) =>
 type ReportCell = string | { decimal: string };
 const numberCell = (value: string | null): ReportCell =>
   value === null ? "UNRESOLVED" : { decimal: value };
+
+const evidenceAmount = (value: string | null | undefined): ReportCell =>
+  value === undefined ? "UNAVAILABLE" : numberCell(value);
 
 function encodeCell(cell: ReportCell): string {
   if (typeof cell === "string") return csvCell(cell);
@@ -69,11 +74,15 @@ export function reportCsv(snapshot: ReportSnapshot): string {
       "Date",
       "ISIN",
       "Quantity",
-      "Net proceeds GBP",
-      "Allowable costs GBP",
+      "Net sale proceeds GBP",
+      "Matched acquisition cost GBP",
       "Gain/loss GBP",
       "Unmatched quantity",
       "Source transaction references",
+      "Gross disposal proceeds GBP",
+      "Selling costs GBP",
+      "Total allowable costs GBP",
+      "Net sale proceeds rounding adjustment GBP",
     ],
     ...r.disposals.map((d) => [
       d.date,
@@ -84,6 +93,10 @@ export function reportCsv(snapshot: ReportSnapshot): string {
       numberCell(d.gainGBP),
       numberCell(d.unmatchedQuantity),
       d.sourceIds.join("; "),
+      evidenceAmount(d.saleBreakdown?.grossProceedsGBP),
+      evidenceAmount(d.saleBreakdown?.sellingCostsGBP),
+      evidenceAmount(d.saleBreakdown?.totalAllowableCostsGBP),
+      evidenceAmount(d.saleBreakdown?.proceedsRoundingAdjustmentGBP),
     ]),
     [],
     [
@@ -123,12 +136,28 @@ export function reportCsv(snapshot: ReportSnapshot): string {
       numberCell(i.quantity),
     ]),
   ];
+  if (!r.saleBreakdown) rows.push([], ["Selling cost evidence", saleBreakdownUnavailable]);
   if (r.summary)
     rows.push(
       [],
+      ["Annual sale breakdown (GBP)", "Amount"],
+      ["Gross disposal proceeds", evidenceAmount(r.saleBreakdown?.grossProceedsGBP)],
+      ["Selling costs", evidenceAmount(r.saleBreakdown?.sellingCostsGBP)],
+      ["Net sale proceeds", numberCell(r.summary.proceedsGBP)],
+      ["Matched acquisition cost", numberCell(r.summary.allowableCostsGBP)],
+      ["Total allowable costs", evidenceAmount(r.saleBreakdown?.totalAllowableCostsGBP)],
+      ["Net sale proceeds rounding adjustment", evidenceAmount(r.saleBreakdown?.proceedsRoundingAdjustmentGBP)],
+      ["Net gain or loss", numberCell(r.summary.netGainGBP)],
+      [],
+      ["Calculation keys", "proceedsGBP is net sale proceeds. allowableCostsGBP is matched acquisition cost."],
       ["Summary (GBP)", "Amount"],
       ...Object.entries(r.summary).map(([k, v]) => [k, numberCell(v)]),
     );
+  if (snapshot.accounts) {
+    rows.push([], ["Account coverage", "Broker", "History confirmed"]);
+    for (const account of snapshot.accounts)
+      rows.push([account.label, account.broker, account.confirmed ? "Yes" : "No"]);
+  }
   if (r.poolMovements) {
     rows.push(
       [],
@@ -174,6 +203,7 @@ export function reportCsv(snapshot: ReportSnapshot): string {
         "File row",
         "Execution reference",
         "Statement reference",
+        "Import reference",
       ],
     );
     for (const source of snapshot.sources)
@@ -184,6 +214,7 @@ export function reportCsv(snapshot: ReportSnapshot): string {
         numberCell(String(source.record)),
         source.reference ?? "",
         source.statementReference ?? "",
+        source.importReference ?? "",
       ]);
   }
   const differences = roundingDifferences(r);

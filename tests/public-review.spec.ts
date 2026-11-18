@@ -130,6 +130,64 @@ test("fractional holdings stay visible until the last share is sold", async ({
   await expect(page.getByText("£0.00 cost")).toBeVisible();
 });
 
+test("the pool dates its running balances and explains an oversell without losing edits", async ({ page }) => {
+  await page.goto("/tools/section-104-calculator");
+  await page.getByLabel("Date — purchase 1").fill("2025-02-01");
+  await page.getByLabel("Quantity — purchase 1").fill("10");
+  await page.getByLabel("Price/share (£) — purchase 1").fill("2");
+  const sell = page.getByLabel("Quantity to sell");
+  await sell.fill("10");
+  await page.getByLabel("Sale price per share").fill("3");
+  await expect(page.getByText("+£10.00", { exact: true })).toBeVisible();
+  await sell.fill("11");
+  await expect(sell).toHaveAttribute("aria-invalid", "true");
+  await expect(sell).toHaveAccessibleDescription(/10 shares available.*Reduce the quantity/);
+  await expect(page.getByRole("heading", { name: "Disposal Result" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Add purchase" }).click();
+  await page.getByLabel("Date — purchase 2").fill("2025-01-01");
+  await page.getByLabel("Quantity — purchase 2").fill("10");
+  await page.getByLabel("Price/share (£) — purchase 2").fill("1");
+  const ledger = page.getByRole("table").getByRole("row");
+  await expect(ledger.nth(1).getByRole("cell")).toHaveText(["2025-01-01", "10", "£10.00", "10", "£10.00", "£1.00"]);
+  await expect(ledger.nth(2).getByRole("cell")).toHaveText(["2025-02-01", "10", "£20.00", "20", "£30.00", "£1.50"]);
+  await expect(sell).toHaveValue("11");
+  await expect(sell).toHaveAttribute("aria-invalid", "false");
+  await expect(page.getByText("+£16.50", { exact: true })).toBeVisible();
+});
+
+test("guides retain all broker activity and explain the history around the reporting year", async ({ page }) => {
+  await page.goto("/guide/trading-212-cgt");
+  let guide = page.locator(".guide-article");
+  await expect(guide).toContainText("original, unfiltered CSV");
+  await expect(guide).toContainText("5 April sale can match a 20 April repurchase");
+  await expect(guide).not.toContainText("date range covers exactly");
+  await page.goto("/guide/freetrade-cgt");
+  guide = page.locator(".guide-article");
+  await expect(guide).toContainText("original, unfiltered CSV");
+  await expect(guide).toContainText("Keep every row, including stock splits");
+  await expect(guide).toContainText("buy ordinary shares");
+  await expect(guide.getByRole("cell", { name: "Buy / Sell", exact: true })).toBeVisible();
+  await expect(guide).not.toContainText(/filter for ORDER rows only|VUSA/);
+});
+
+test("public tools open at their first input and disclosure rows leave room to tap", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 664 });
+  for (const [path, firstInput] of [
+    ["/tools/bed-and-breakfast-calculator", "Date of sale"],
+    ["/tools/section-104-calculator", "Date — purchase 1"],
+  ] as const) {
+    await page.goto(path);
+    await expect(page.getByLabel(firstInput)).toBeInViewport({ ratio: 1 });
+  }
+  for (const path of ["/guide/section-104-pool", "/supported-brokers"]) {
+    await page.goto(path);
+    const heights = await page.locator("main summary").evaluateAll((items) =>
+      items.map((item) => item.getBoundingClientRect().height),
+    );
+    expect(Math.min(...heights)).toBeGreaterThanOrEqual(44);
+  }
+});
+
 test("a partial 30-day match identifies the proceeds covered and the sale quantity still to match", async ({
   page,
 }) => {
@@ -147,12 +205,18 @@ test("a partial 30-day match identifies the proceeds covered and the sale quanti
   ).toContainText("£200.00");
   await expect(page.getByText("−£40.00", { exact: true })).toBeVisible();
   await expect(page.getByText(/remaining 80 shares sold/)).toBeVisible();
+  await expect(page.getByText("80 still to match", { exact: true })).toBeVisible();
+  await expect(page.getByText("Loss on matched shares before fees")).toBeVisible();
+  await expect(page.locator(".guide-article")).toContainText("A further purchase of 40 shares");
+  await expect(page.locator(".guide-article")).toContainText("bring their gain down from £20 to £18");
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute("content", /before fees/);
   await page.getByLabel("Shares repurchased").fill("100");
   await check.click();
   await expect(
     page.getByText("Proceeds on matched shares").locator(".."),
   ).toContainText("£1000.00");
   await expect(page.getByText(/remaining .* shares sold/)).toHaveCount(0);
+  await expect(page.getByText("0 still to match", { exact: true })).toBeVisible();
 });
 
 test("the allowance checker and SA108 guide give the same qualified reporting rule", async ({

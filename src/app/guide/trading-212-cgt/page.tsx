@@ -30,45 +30,32 @@ export default function Trading212CGTPage() {
       ]}
     >
       <p>
-        Trading 212 is one of the most popular commission-free brokers in the
-        UK, with millions of active users trading shares, ETFs, and fractional
-        shares. While the app makes investing easy, it doesn&apos;t calculate
-        your <strong>Capital Gains Tax</strong> for you. If you trade in a
-        General Investment Account (GIA) — not an ISA — you are responsible for
-        calculating and reporting your gains to HMRC.
-      </p>
-      <p>
-        This guide walks you through the complete process: exporting your
-        transaction history from Trading 212, understanding the CSV format, and
-        calculating your CGT liability correctly.
+        Use the Invest history CSV for ordinary shares in your taxable account.
+        This guide explains which dates and activity to export and what to
+        check in the preview.
       </p>
 
       <h2>Step 1: Export Your Transaction History</h2>
-      <p>
-        Trading 212 allows you to export your complete transaction history as a
-        CSV file. Here&apos;s how:
-      </p>
       <ol>
-        <li>Open the Trading 212 app or website and log in to your account.</li>
+        <li>Open the menu in your Trading 212 Invest account.</li>
         <li>
-          Navigate to the <strong>Activity</strong> or <strong>History</strong>{" "}
-          section (this may be under the menu or in account settings).
+          Choose <strong>History</strong> and select the export button.
         </li>
         <li>
-          Look for an <strong>Export</strong> or <strong>Download</strong>{" "}
-          button — Trading 212 typically offers a &ldquo;Download
-          statement&rdquo; or &ldquo;Export CSV&rdquo; option.
+          Select all activity categories. Export the history of your holding
+          from the first purchase through 30 days after the end of the tax year.
+          Download consecutive periods if the history spans several files.
         </li>
-        <li>
-          Include the tax year you want to calculate:{" "}
-          <strong>6 April</strong> of one year to <strong>5 April</strong> of
-          the next. For the 2025-26 tax year, this is 6 April 2025 to 5 April
-          2026.
-        </li>
-        <li>Download the CSV file to your computer.</li>
+        <li>Upload each original, unfiltered CSV to CGT Tracker.</li>
       </ol>
       <p>
-        Include acquisitions before the tax year and purchases in the 30 days after it. Download more than one date range when necessary.
+        For 2025–26, report sales from 6 April 2025 to 5 April 2026. Earlier
+        purchases establish the cost of your holding. Include activity through
+        5 May 2026 so a 5 April sale can match a 20 April repurchase.{" "}
+        <a href="https://helpcentre.trading212.com/hc/en-us/articles/360016898917-Can-I-export-the-trading-data-from-my-account">
+          Trading 212’s export instructions
+        </a>
+        .
       </p>
 
       <h2>Step 2: Understanding the CSV Format</h2>
@@ -153,10 +140,8 @@ export default function Trading212CGTPage() {
       <p>
         Trading 212 uses phrases like &ldquo;Market buy&rdquo; and &ldquo;Market
         sell&rdquo; rather than simple &ldquo;BUY&rdquo;/&ldquo;SELL&rdquo;
-        labels. Any action containing the word &ldquo;buy&rdquo; is a purchase,
-        and any containing &ldquo;sell&rdquo; is a disposal.
-        &ldquo;Dividend&rdquo; rows should be excluded from CGT calculations
-        (dividends are taxed separately as income).
+        labels. In the preview you can see which trades were recognised and
+        which cash dividends were counted separately. Leave all rows in the file.
       </p>
 
       <h3>Foreign Currency Transactions</h3>
@@ -178,10 +163,9 @@ export default function Trading212CGTPage() {
 
       <h3>Stock Splits and Corporate Actions</h3>
       <p>
-        If a company underwent a stock split during the period, Trading 212
-        should reflect this in the transaction history. However, it&apos;s worth
-        double-checking that your share counts align before and after the split
-        date.
+        Keep stock splits and other corporate actions in the export. If one
+        blocks saving, compare the event and the resulting share count with your
+        broker statement and follow the instructions in the preview.
       </p>
 
       <h2>Common Mistakes</h2>
@@ -192,18 +176,17 @@ export default function Trading212CGTPage() {
           transactions. ISA gains are tax-free.
         </li>
         <li>
-          <strong>Ignoring dividends:</strong> Don&apos;t include dividend rows
-          in your CGT calculation — they are taxed under different rules.
+          <strong>Removing dividend rows.</strong> Upload the original file.
+          The preview distinguishes cash income from share trades.
         </li>
         <li>
-          <strong>Wrong tax year:</strong> Ensure your date range covers exactly
-          6 April to 5 April, not calendar year January to December.
+          <strong>Exporting only the reporting year.</strong> A sale can use
+          the cost of an earlier purchase or match a purchase after 5 April.
         </li>
         <li>
-          <strong>Reinvested dividends:</strong> If you have &ldquo;Dividend
-          (Reinvested)&rdquo; rows, these represent a new purchase and{" "}
-          <em>should</em> be added to your{" "}
-          <Link href="/guide/section-104-pool">Section 104 pool</Link>.
+          <strong>Reinvested dividends.</strong> Keep the original entry
+          and any associated purchase for review. Check the broker statement
+          before confirming that your acquisition history is complete.
         </li>
       </ul>
 

@@ -3,7 +3,7 @@ import { calendarDate, decimal, Money, plusDays, TAX_YEARS, type TaxYear } from 
 import type { Calculation, CalculationIssue, Disposal, Match, OpeningPool, PoolMovement, Trade } from './types'
 import { missingAcquisitionGuidance } from './types'
 
-export const ENGINE_VERSION = '2.0.0-alpha.2'
+export const ENGINE_VERSION = '2.0.0-alpha.3'
 
 interface DailySide {
   quantity: Decimal
@@ -15,6 +15,8 @@ interface Day {
   date: string
   buy: DailySide
   sell: DailySide
+  grossSales: Decimal
+  sellingCosts: Decimal
   cost: Decimal
   matches: Match[]
 }
@@ -81,8 +83,15 @@ export function calculateGains(
     const value = trade.side === 'BUY' ? amount.plus(fees) : amount.minus(fees)
     if (!groups.has(trade.securityId)) groups.set(trade.securityId, new Map())
     const days = groups.get(trade.securityId)!
-    if (!days.has(trade.date)) days.set(trade.date, { date: trade.date, buy: empty(), sell: empty(), cost: new Money(0), matches: [] })
-    const side = trade.side === 'BUY' ? days.get(trade.date)!.buy : days.get(trade.date)!.sell
+    if (!days.has(trade.date)) days.set(trade.date, {
+      date: trade.date, buy: empty(), sell: empty(), grossSales: new Money(0), sellingCosts: new Money(0), cost: new Money(0), matches: [],
+    })
+    const day = days.get(trade.date)!
+    const side = trade.side === 'BUY' ? day.buy : day.sell
+    if (trade.side === 'SELL') {
+      day.grossSales = day.grossSales.plus(amount)
+      day.sellingCosts = day.sellingCosts.plus(fees)
+    }
     side.quantity = side.quantity.plus(quantity)
     side.remaining = side.remaining.plus(quantity)
     side.value = side.value.plus(value)
@@ -97,6 +106,9 @@ export function calculateGains(
   let annualCosts = new Money(0)
   let annualGains = new Money(0)
   let annualLosses = new Money(0)
+  let reportedGrossSales = new Money(0)
+  let reportedSellingCosts = new Money(0)
+  let reportedProceedsAdjustment = new Money(0)
   for (const [securityId, dayMap] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
     const days = [...dayMap.values()].sort((a, b) => a.date.localeCompare(b.date))
     for (const day of days) {
@@ -161,9 +173,20 @@ export function calculateGains(
       annualCosts = annualCosts.plus(day.cost)
       if (exactGain.isNegative()) annualLosses = annualLosses.plus(exactGain.abs())
       else annualGains = annualGains.plus(exactGain)
+      const gross = day.grossSales.toDP(2)
+      const sellingCosts = day.sellingCosts.toDP(2)
+      const proceedsAdjustment = day.sell.value.toDP(2).minus(gross.minus(sellingCosts))
+      reportedGrossSales = reportedGrossSales.plus(gross)
+      reportedSellingCosts = reportedSellingCosts.plus(sellingCosts)
+      reportedProceedsAdjustment = reportedProceedsAdjustment.plus(proceedsAdjustment)
       disposals.push({
         securityId, date: day.date, sourceIds: [...day.sell.ids], quantity: day.sell.quantity.toString(),
         proceedsGBP: day.sell.value.toFixed(2), allowableCostGBP: missing ? null : day.cost.toFixed(2),
+        saleBreakdown: {
+          grossProceedsGBP: gross.toFixed(2), sellingCostsGBP: sellingCosts.toFixed(2),
+          totalAllowableCostsGBP: missing ? null : day.cost.toDP(2).plus(sellingCosts).toFixed(2),
+          proceedsRoundingAdjustmentGBP: proceedsAdjustment.toFixed(2),
+        },
         gainGBP: missing ? null : day.sell.value.toDP(2).minus(day.cost.toDP(2)).toFixed(2),
         unmatchedQuantity: day.sell.remaining.toString(), matches: day.matches,
       })
@@ -174,17 +197,23 @@ export function calculateGains(
   const sum = (values: string[]) => values.reduce((a, b) => a.plus(b), new Money(0))
   const gains = sum(disposals.filter(d => new Money(d.gainGBP ?? 0).gt(0)).map(d => d.gainGBP!))
   const losses = sum(disposals.filter(d => new Money(d.gainGBP ?? 0).lt(0)).map(d => d.gainGBP!)).abs()
+  const reportedAcquisitionCosts = sum(disposals.map(d => d.allowableCostGBP ?? '0'))
   return {
     engineVersion: ENGINE_VERSION, taxYear: options.taxYear, historyThrough, requiredHistoryThrough,
     poolAsOf: cutoff, status: issues.length ? 'blocked' : historyThrough < requiredHistoryThrough ? 'provisional' : 'complete',
     disposals, pools, poolMovements, issues,
+    saleBreakdown: {
+      grossProceedsGBP: reportedGrossSales.toFixed(2), sellingCostsGBP: reportedSellingCosts.toFixed(2),
+      totalAllowableCostsGBP: issues.length ? null : reportedAcquisitionCosts.plus(reportedSellingCosts).toFixed(2),
+      proceedsRoundingAdjustmentGBP: reportedProceedsAdjustment.toFixed(2),
+    },
     ...(!issues.length && { annualBeforeDisposalRounding: {
       proceedsGBP: annualProceeds.toFixed(2), allowableCostsGBP: annualCosts.toFixed(2),
       gainsGBP: annualGains.toFixed(2), lossesGBP: annualLosses.toFixed(2), netGainGBP: annualGains.minus(annualLosses).toFixed(2),
     } }),
     summary: issues.length ? null : {
       proceedsGBP: sum(disposals.map(d => d.proceedsGBP)).toFixed(2),
-      allowableCostsGBP: sum(disposals.map(d => d.allowableCostGBP!)).toFixed(2),
+      allowableCostsGBP: reportedAcquisitionCosts.toFixed(2),
       gainsGBP: gains.toFixed(2), lossesGBP: losses.toFixed(2), netGainGBP: gains.minus(losses).toFixed(2),
     },
   }

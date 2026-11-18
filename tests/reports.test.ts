@@ -53,6 +53,34 @@ const request = (kind = "csv", extra = {}) =>
     body: JSON.stringify({ kind, runId: snapshot.id, ...extra }),
   });
 describe("auditable report exports", () => {
+  it("gives accountants the sale breakdown, fee rounding, import ID and all covered accounts", () => {
+    const csv = reportCsv({
+      ...snapshot,
+      accounts: [
+        { label: "First", broker: "ibkr", confirmed: true },
+        { label: "Second with no trades", broker: "ajbell", confirmed: true },
+      ],
+      sources: [{ key: "sell", label: "First", broker: "ibkr", record: 2, instrument: null, reference: "S-5", importReference: "import-A" }],
+    });
+    const rows = Papa.parse<string[]>(csv, { delimiter: "," }).data;
+    expect(rows).toContainEqual(["Gross disposal proceeds", "100.00"]);
+    expect(rows).toContainEqual(["Selling costs", "2.00"]);
+    expect(rows).toContainEqual(["Net sale proceeds", "98.00"]);
+    expect(rows).toContainEqual(["Matched acquisition cost", "52.50"]);
+    expect(rows).toContainEqual(["Total allowable costs", "54.50"]);
+    expect(rows).toContainEqual(["Net sale proceeds rounding adjustment", "0.00"]);
+    expect(rows).toContainEqual(["Second with no trades", "ajbell", "Yes"]);
+    expect(rows).toContainEqual(["sell", "ibkr", "First", "2", "S-5", "", "import-A"]);
+    const disposal = rows[rows.findIndex((r) => r[0] === "Date") + 1]!;
+    expect(disposal.slice(8)).toEqual(["100.00", "2.00", "54.50", "0.00"]);
+    const legacy = structuredClone(snapshot);
+    delete legacy.result.saleBreakdown;
+    for (const disposal of legacy.result.disposals) delete disposal.saleBreakdown;
+    const legacyCsv = reportCsv(legacy);
+    expect(legacyCsv).toContain('"Selling costs","UNAVAILABLE"');
+    expect(legacyCsv).toContain('"Matched acquisition cost","52.50"');
+    expect(legacyCsv).toContain("Recalculate this year");
+  });
   it.each([
     { name: "gain", proceeds: [15], gains: ["5.00"], net: "5.00" },
     { name: "loss", proceeds: [5], gains: ["-5.00"], net: "-5.00" },
@@ -218,17 +246,20 @@ describe("auditable report exports", () => {
       "10",
       "source-buy",
     ]);
-    expect(rows).toContainEqual(["Allowable costs", "10.00", "-0.01", "9.99"]);
+    expect(rows).toContainEqual(["Matched acquisition cost", "10.00", "-0.01", "9.99"]);
     expect(rows).toContainEqual(["Net gain or loss", "5.00", "0.01", "5.01"]);
     const pdf = reportPageText(
       await PDFDocument.load(await reportPdf(saved, true)),
     );
     expect(pdf).toContain("Section 104 pool movements");
+    expect(pdf).toContain("Prior-year history · 1 January 2024");
+    expect(pdf).toContain("Change: -1 share · cost -£3.33");
+    expect(pdf).not.toContain("3.333333");
     expect(pdf).toContain("Execution reference: IB-BUY");
     expect(pdf).toContain("Statement reference: CN-BUY");
     expect(pdf).toContain("Balance: 0 shares · cost £0");
     expect(pdf).toContain(
-      "Allowable costs: annual £10.00 · rounding difference -£0.01 · reported £9.99",
+      "Matched acquisition cost: annual £10.00 · rounding difference -£0.01 · reported £9.99",
     );
     expect(
       reportPageText(await PDFDocument.load(await reportPdf(saved, false))),
@@ -355,7 +386,7 @@ describe("auditable report exports", () => {
         page.includes("Before using these figures"),
       );
       expect(guidance).toContain(
-        "Matching and pool costs retain calculation precision.",
+        "The CSV retains full precision for matching and pool costs.",
       );
       expect(pages.join(" ")).toContain("1 share · cost");
       expect(pages.join(" ")).not.toContain("1 shares");

@@ -537,8 +537,8 @@ it("persists native classification confirmation through resume and server-side c
 });
 
 describe("report ownership and assisted draft concurrency", () => {
-  it("verifies an old saved calculation against its original inputs before adding the pool schedule", async () => {
-    const s = await setup("legacy-report-schedule");
+  it.each(["2.0.0-alpha.1", "2.0.0-alpha.2"])("verifies %s inputs and enriches fee evidence without updating the saved run", async (version) => {
+    const s = await setup("legacy-report-" + version);
     const draft = await prepare(s.user, s.account.id);
     await workspace.commitImport(s.user, draft.draftId, draft.revision);
     const run = await workspace.calculate(s.user, {
@@ -547,11 +547,18 @@ describe("report ownership and assisted draft concurrency", () => {
       historyThrough: "2025-05-05",
       confirmedAccountIds: [s.account.id],
     });
+    const original = structuredClone(run.result);
+    original.engineVersion = version;
+    delete original.saleBreakdown;
+    for (const disposal of original.disposals) delete disposal.saleBreakdown;
+    if (version === "2.0.0-alpha.1") {
+      delete original.poolMovements;
+      delete original.annualBeforeDisposalRounding;
+    }
     await database.pg.exec("RESET ROLE");
     await database.pg.query(
-      `UPDATE cgt.calculation_runs SET engine_version='2.0.0-alpha.1',
-      result=(result - 'poolMovements' - 'annualBeforeDisposalRounding') || '{"engineVersion":"2.0.0-alpha.1"}'::jsonb WHERE id=$1`,
-      [run.runId],
+      "UPDATE cgt.calculation_runs SET engine_version=$2,result=$3::jsonb WHERE id=$1",
+      [run.runId, version, JSON.stringify(original)],
     );
     await database.pg.exec("SET ROLE cgt_app");
     const target = { year: "2024-25", format: "evidence" } as const;
@@ -559,28 +566,34 @@ describe("report ownership and assisted draft concurrency", () => {
     const saved = await workspace.reportSnapshot(s.user, run.runId);
     expect(saved.result.poolMovements).toEqual(run.result.poolMovements);
     expect(saved.result.summary).toEqual(run.result.summary);
-    expect(saved.result.engineVersion).toBe("2.0.0-alpha.1");
+    expect(saved.result.engineVersion).toBe(version);
+    expect(saved.result.saleBreakdown).toEqual(run.result.saleBreakdown);
+    expect(saved.result.disposals).toEqual(run.result.disposals);
     expect(
       (await workspace.overview(s.user, false, true)).calculations[0],
-    ).toMatchObject({ evidenceIssue: null });
+    ).toMatchObject({ evidenceIssue: null, result: { saleBreakdown: run.result.saleBreakdown } });
     await database.pg.exec("RESET ROLE");
+    const raw = await database.pg.query<{ result: typeof original }>(
+      "SELECT result FROM cgt.calculation_runs WHERE id=$1", [run.runId],
+    );
+    expect(raw.rows[0]?.result).toEqual(original);
     await database.pg.query(
       "UPDATE cgt.calculation_runs SET input_digest=repeat('b',64) WHERE id=$1",
       [run.runId],
     );
     await database.pg.exec("SET ROLE cgt_app");
-    expect(await workspace.selectedReportIssue(s.user, target)).toMatchObject({
-      code: "REPORT_NEEDS_REFRESH",
-    });
+    if (version === "2.0.0-alpha.1")
+      expect(await workspace.selectedReportIssue(s.user, target)).toMatchObject({ code: "REPORT_NEEDS_REFRESH" });
+    else expect(await workspace.selectedReportIssue(s.user, target)).toBeNull();
     expect(
       await workspace.selectedReportIssue(s.user, {
         ...target,
         format: "summary",
       }),
     ).toBeNull();
-    expect(
-      (await workspace.reportSnapshot(s.user, run.runId)).result.poolMovements,
-    ).toBeUndefined();
+    const unverifiable = (await workspace.reportSnapshot(s.user, run.runId)).result;
+    expect(unverifiable).toEqual(original);
+    expect(unverifiable.saleBreakdown).toBeUndefined();
   });
   it("allows only current owned snapshots and blocks pending files and invalidated runs", async () => {
     const a = await setup("report-owner"),
@@ -783,6 +796,10 @@ it.each(brokerCases)(
     const rows = Papa.parse<string[]>(await csvResponse.text()).data;
     expect(rows).toContainEqual(["netGainGBP", c.gain]);
     expect(rows).toContainEqual(["Calculation reference", run.runId]);
+    const traceHeader = rows.findIndex((row) => row[0] === "Trace reference");
+    const savedSale = rows.slice(traceHeader + 1).find((row) => row[0] === run.result.disposals[0]!.sourceIds[0]);
+    expect(savedSale?.[rows[traceHeader]!.indexOf("Import reference")]).toBe(draft.draftId);
+    expect(rows).toContainEqual([account.label, account.broker, "Yes"]);
     expect(entitled).not.toHaveBeenCalled();
     for (const kind of ["summary", "evidence"]) {
       const response = await download(kind);
