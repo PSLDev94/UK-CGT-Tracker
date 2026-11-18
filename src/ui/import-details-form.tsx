@@ -142,7 +142,7 @@ export function ImportDetailsForm({
             <Notice tone="error">{error || savedIssue}</Notice>
           </div>
         )}
-        <div className="form-columns">
+        <div className="form-columns items-start">
           {terms.isin ? (
             <input type="hidden" name="isin" value={terms.isin} />
           ) : (

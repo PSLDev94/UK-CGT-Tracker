@@ -1250,11 +1250,14 @@ test("assisted corrections stay with the failed trade and survive cancelling a d
   await fees.fill("5");
   await reference.fill("Statement for sale S900000002");
   await confirm.check();
+  const initialInputHeight = (await isin.boundingBox())!.height;
   await save.click();
   await expect(page.getByRole("heading", { name: "Resolve record 3" })).toBeVisible();
   await expect(fees).toBeFocused();
   await expect(fees).toHaveValue("5");
   await expect(fees).toHaveAccessibleDescription(/net cash do not reconcile.*GBP 195\.00.*GBP 198\.00/);
+  expect(Math.abs((await isin.boundingBox())!.height - initialInputHeight)).toBeLessThanOrEqual(1);
+  expect(initialInputHeight).toBeLessThan(60);
   await expect(reference).toHaveValue("Statement for sale S900000002");
   await expect(page.getByText("Details checked for record 3", { exact: false })).toHaveCount(0);
   await fees.fill("2");
