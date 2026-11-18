@@ -255,7 +255,7 @@ export class Workspace {
                       nullif(f.fields->>'TradeID',''), nullif(f.fields->>'Order ID','')),120) AS reference
       FROM cgt.transactions t JOIN cgt.broker_accounts a ON a.id=t.account_id
       CROSS JOIN LATERAL (SELECT t.provenance->'native'->'fields' AS fields) f
-      WHERE t.source_key=ANY($1::text[])
+      WHERE t.active AND t.source_key=ANY($1::text[])
     `,
         [sourceKeys],
       ),

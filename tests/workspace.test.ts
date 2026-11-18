@@ -540,6 +540,7 @@ describe("report ownership and assisted draft concurrency", () => {
       draft.draftId,
       "Synthetic qualification reversal",
     );
+    expect(await workspace.reportSources(a.user, saleKeys)).toEqual([]);
     await expect(
       workspace.reportSnapshot(a.user, run.runId),
     ).rejects.toMatchObject({ status: 404 });
