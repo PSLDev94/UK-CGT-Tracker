@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { PublicNav } from "@/components/public-nav";
 import { PublicFooter } from "@/components/public-footer";
+export const metadata = { title: "Privacy and your data" };
+
 export default function Privacy() {
   return (
     <>

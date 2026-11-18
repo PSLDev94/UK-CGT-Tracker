@@ -46,6 +46,25 @@ export interface CalculationIssue {
   message: string
 }
 
+export interface PoolMovement {
+  securityId: string
+  date: string
+  kind: 'opening' | 'acquisition' | 'disposal'
+  quantityChange: string
+  costChangeGBP: string
+  quantityAfter: string
+  costAfterGBP: string
+  sourceIds: string[]
+}
+
+export interface AnnualAmounts {
+  proceedsGBP: string
+  allowableCostsGBP: string
+  gainsGBP: string
+  lossesGBP: string
+  netGainGBP: string
+}
+
 export interface Calculation {
   engineVersion: string
   status: 'complete' | 'provisional' | 'blocked'
@@ -55,12 +74,9 @@ export interface Calculation {
   poolAsOf: string
   disposals: Disposal[]
   pools: { securityId: string; quantity: string; costGBP: string }[]
+  // Earlier saved runs predate this evidence. Report readers verify their inputs before enrichment.
+  poolMovements?: PoolMovement[]
+  annualBeforeDisposalRounding?: AnnualAmounts
   issues: CalculationIssue[]
-  summary: null | {
-    proceedsGBP: string
-    allowableCostsGBP: string
-    gainsGBP: string
-    lossesGBP: string
-    netGainGBP: string
-  }
+  summary: AnnualAmounts | null
 }

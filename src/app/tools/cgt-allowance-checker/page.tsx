@@ -7,6 +7,7 @@ import { money } from "@/ui/format";
 import { ArrowRight, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
 import { PublicNav } from "@/components/public-nav";
 import { CalculatorFields } from "@/components/calculator-fields";
+import { CgtReportingGuidance } from "@/components/cgt-reporting-guidance";
 import { PublicFooter } from "@/components/public-footer";
 
 const EXEMPT_AMOUNT = 3000;
@@ -91,14 +92,17 @@ export default function CGTAllowanceCheckerPage() {
           UK CGT Allowance Checker 2025-26
         </h1>
         <p className="text-lg text-gray-600 mb-2 max-w-3xl leading-relaxed">
-          Eligible UK individuals generally have a{" "}
-          <strong>£3,000 annual exempt amount</strong> for capital gains in
-          2025-26. This means the first £3,000 of net gains in the tax year is
-          completely tax-free. Use this checker to see where you stand.
+          Estimate your tax on ordinary share gains for 6 April 2025 to 5 April
+          2026. This checker assumes you qualify for the individual{" "}
+          <strong>£3,000 annual exempt amount</strong>.
         </p>
         <p className="text-gray-600 mb-8 max-w-3xl leading-relaxed">
-          Enter your total gains and losses so far this tax year to see how much
-          of your exemption remains and your estimated CGT liability.
+          If you claimed the foreign income and gains regime or Overseas
+          Workday Relief for this year, you have no annual exempt amount and
+          this estimate does not apply.{" "}
+          <a className="text-blue-700 underline" href="https://www.gov.uk/guidance/capital-gains-tax-rates-and-allowances">
+            Check allowance eligibility with HMRC
+          </a>.
         </p>
 
         {/* Calculator */}
@@ -115,7 +119,7 @@ export default function CGTAllowanceCheckerPage() {
                 htmlFor="gains"
                 className="block text-sm font-semibold text-gray-700 mb-1"
               >
-                Total gains so far this tax year (£)
+                Total gains for 2025–26 (£)
               </label>
               <input
                 id="gains"
@@ -133,7 +137,7 @@ export default function CGTAllowanceCheckerPage() {
                 htmlFor="losses"
                 className="block text-sm font-semibold text-gray-700 mb-1"
               >
-                Total losses so far this tax year (£)
+                Total allowable losses for 2025–26 (£)
               </label>
               <input
                 id="losses"
@@ -291,47 +295,21 @@ export default function CGTAllowanceCheckerPage() {
         <div className="guide-article mb-12">
           <h2>About the Annual Exempt Amount</h2>
           <p>
-            Every UK individual receives a Capital Gains Tax annual exempt
-            amount — currently <strong>£3,000 for the 2025-26 tax year</strong>{" "}
-            (6 April 2025 to 5 April 2026). This is the amount of net capital
-            gains you can realise each year without paying any CGT. The
-            exemption resets every 6 April and{" "}
-            <strong>cannot be carried forward</strong> — if you don&apos;t use
-            it, you lose it.
+            The exemption belongs to each eligible person for that tax year.
+            Any unused allowance expires on 5 April. See the{" "}
+            <Link href="/guide/cgt-rates-2025-26">2025–26 CGT rates guide</Link>{" "}
+            for a worked example of how the income bands apply.
           </p>
-          <p>
-            Each person has their own exemption, so a married couple or civil
-            partners have a combined £6,000 between them. Transferring assets
-            between spouses before sale is a legitimate way to utilise both
-            exemptions. Note that even if your gains fall within the exempt
-            amount and no tax is due, you{" "}
-            <strong>must still report to HMRC</strong> if your total disposal
-            proceeds for the year exceed £12,000. Failing to report can result
-            in penalties. For the full breakdown of rates and bands, see our{" "}
-            <Link href="/guide/cgt-rates-2025-26">full CGT rates guide</Link>.
-          </p>
+          <h2>When do I report share gains?</h2>
+          <CgtReportingGuidance />
 
-          <h2>What to Do If You&apos;re Over the Limit</h2>
+          <h2>Checking the figures for your return</h2>
           <p>
-            If your net gains exceed £3,000, there are several strategies to
-            consider before 5 April. <strong>Tax-loss harvesting</strong>{" "}
-            involves selling positions currently at a loss to offset your gains
-            — the loss reduces your net gain and can bring you back within the
-            exempt amount. You could also consider a{" "}
-            <strong>bed-and-ISA</strong> strategy, where you sell shares in your
-            taxable account and repurchase them within your ISA to shelter
-            future growth — see our guide on{" "}
-            <Link href="/guide/bed-and-breakfast-rule">
-              bed and breakfast alternatives
-            </Link>
-            . Another option is to{" "}
-            <strong>split disposals across tax years</strong> — sell some shares
-            before 5 April and the rest after, giving you two annual exemptions.
-            Use our{" "}
-            <Link href="/tools/section-104-calculator">
-              Section 104 pool calculator
-            </Link>{" "}
-            to model different disposal scenarios.
+            Check your sale proceeds, allowable costs and share matching against
+            your broker statements. The estimate uses the gains and losses you
+            enter. Your return may also include other assets, reliefs or losses
+            brought forward. See the{" "}
+            <Link href="/guide/sa108-how-to-fill-in">2025–26 SA108 guide</Link>.
           </p>
         </div>
 

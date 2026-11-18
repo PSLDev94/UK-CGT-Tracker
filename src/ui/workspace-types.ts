@@ -1,5 +1,6 @@
 import type { Calculation } from "../domain/cgt/types";
-import type { ImportReview } from "../domain/imports/review";
+import type { ImportRecord, ImportReview } from "../domain/imports/review";
+import type { ImportTradeDetail } from "../domain/imports/trade-detail";
 export interface BrokerAccount {
   id: string;
   broker: string;
@@ -28,6 +29,7 @@ export interface Overview {
     tax_year: string;
     created_at?: string;
     result: Calculation;
+    evidenceIssue?: import("../domain/reports/eligibility").ReportIssue | null;
     coverage_confirmed: boolean;
     coverage_accounts?: string[];
   }[];
@@ -37,10 +39,12 @@ export interface Preview {
   accountId: string;
   revision: number;
   reviewVersion?: number;
-  review: ImportReview & {
+  review: Omit<ImportReview, "records"> & {
+    records: (ImportRecord & { tradeDetail?: ImportTradeDetail })[];
     page: number;
     pageSize: number;
     issueCount: number;
+    sourceBlockerCount: number;
     nextUnresolved: {
       record: number;
       page: number;

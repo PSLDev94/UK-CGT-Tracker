@@ -9,6 +9,8 @@ import {
 import { IBKR_HEADERS } from "@/domain/imports/additional-brokers";
 import { NATIVE_GUIDANCE } from "@/domain/imports/native";
 
+export const metadata = { title: "Supported brokers and CSV exports" };
+
 const FILE_EXAMPLES: Record<
   BrokerId,
   { name: string; download: string; check: string; example: string }

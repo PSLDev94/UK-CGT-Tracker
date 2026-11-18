@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { roundingDifferences } from "./rounding";
 import { netOutcome } from "../values";
 import { BROKERS } from "../imports/brokers";
 import {
@@ -119,6 +120,23 @@ export async function reportPdf(
     }
     if (buffer) flush();
   }
+  function sourceLine(key: string, side: string) {
+    const source = sources.get(key);
+    if (source) {
+      const broker =
+        BROKERS.find((b) => b.id === source.broker)?.name ?? source.broker;
+      line(
+        `${side} · ${broker} · ${source.label} · file row ${source.record}`,
+        false,
+        9,
+      );
+      if (source.reference)
+        line(`Execution reference: ${source.reference}`, false, 9);
+      if (source.statementReference)
+        line(`Statement reference: ${source.statementReference}`, false, 9);
+    }
+    line(`${source ? "Trace reference" : side}: ${key}`, false, 8);
+  }
   function heading(text: string) {
     space(48);
     y -= 8;
@@ -235,12 +253,61 @@ export async function reportPdf(
         line(`Unmatched: ${shares(d.unmatchedQuantity)}`, true);
       y -= 6;
     }
+    if (r.poolMovements?.length) {
+      heading("Section 104 pool movements");
+      line(
+        "Each entry shows the part added to or removed from the pool after same-day and 30-day matching. Source references identify the transactions on that date.",
+        false,
+        9,
+        muted,
+      );
+      for (const movement of r.poolMovements) {
+        space(movement.sourceIds.length ? 118 : 62);
+        const label = {
+          opening: "Opening balance",
+          acquisition: "Acquisition into pool",
+          disposal: "Disposal from pool",
+        }[movement.kind];
+        line(
+          `${date(movement.date)} · ${movement.securityId} · ${label}`,
+          true,
+          10,
+        );
+        line(
+          `Change: ${shares(movement.quantityChange)} · cost ${pounds(movement.costChangeGBP)}`,
+          false,
+          9,
+        );
+        line(
+          `Balance: ${shares(movement.quantityAfter)} · cost ${pounds(movement.costAfterGBP)}`,
+          false,
+          9,
+        );
+        for (const key of movement.sourceIds) sourceLine(key, "Pool movement");
+      }
+    }
     heading(`Section 104 pools at ${date(r.poolAsOf)}`);
     if (!r.pools.length) line("No remaining pool balances.");
     for (const p of r.pools)
       line(
         `${p.securityId} · ${shares(p.quantity)} · total cost ${pounds(p.costGBP)}`,
       );
+  }
+  const differences = roundingDifferences(r);
+  if (differences.length) {
+    heading("Annual rounding reconciliation");
+    line(
+      "The reported total sums disposals rounded to pence. The first amount rounds only after adding the full-precision amounts for the year.",
+      false,
+      9,
+    );
+    for (const d of differences) {
+      line(
+        `${d.label}: annual ${pounds(d.annual)} · rounding difference ${pounds(d.adjustment)} · reported ${pounds(d.reported)}`,
+        false,
+        9,
+      );
+    }
   }
   if (r.issues.length) {
     heading("Unresolved issues");
@@ -278,23 +345,6 @@ export async function reportPdf(
     for (const [index, d] of r.disposals.entries()) {
       space(35);
       line(`D${index + 1} · ${date(d.date)} · ${d.securityId}`, true, 9);
-      function sourceLine(key: string, side: string) {
-        const source = sources.get(key);
-        if (source) {
-          const broker =
-            BROKERS.find((b) => b.id === source.broker)?.name ?? source.broker;
-          line(
-            `${side} · ${broker} · ${source.label} · file row ${source.record}`,
-            false,
-            9,
-          );
-          if (source.reference)
-            line(`Execution reference: ${source.reference}`, false, 9);
-          if (source.statementReference)
-            line(`Statement reference: ${source.statementReference}`, false, 9);
-        }
-        line(`${source ? "Trace reference" : side}: ${key}`, false, 8);
-      }
       for (const key of d.sourceIds) sourceLine(key, "Sale");
       for (const match of d.matches)
         for (const key of match.acquisitionIds ?? [])

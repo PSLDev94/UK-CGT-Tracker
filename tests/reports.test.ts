@@ -9,6 +9,7 @@ import {
   reportStatus,
   type ReportSnapshot,
 } from "../src/domain/reports/report";
+import { evidenceIssue } from "../src/domain/reports/eligibility";
 import { reportPdf } from "../src/domain/reports/pdf";
 import { createReportHandler } from "../src/server/reports-api";
 import { AppError } from "../src/server/errors";
@@ -119,6 +120,121 @@ describe("auditable report exports", () => {
       }
     },
   );
+  it("checks both PDF limits inclusively and counts the rendered pool history", () => {
+    const sale = {
+      ...snapshot.result.disposals[0]!,
+      sourceIds: [],
+      matches: [],
+    };
+    const result = {
+      ...snapshot.result,
+      poolMovements: [],
+      disposals: Array(5000).fill(sale),
+    };
+    expect(evidenceIssue(result)).toBeNull();
+    expect(
+      evidenceIssue({ ...result, disposals: [...result.disposals, sale] })
+        ?.code,
+    ).toBe("REPORT_TOO_LARGE");
+    const saleWithRefs = { ...sale, sourceIds: Array(49998).fill("ref") };
+    const movement = {
+      ...snapshot.result.poolMovements![0]!,
+      sourceIds: ["buy"],
+    };
+    const exact = {
+      ...result,
+      disposals: [saleWithRefs],
+      poolMovements: [movement],
+    };
+    expect(evidenceIssue(exact)).toBeNull();
+    expect(
+      evidenceIssue({
+        ...exact,
+        poolMovements: [{ ...movement, sourceIds: ["buy", "buy2"] }],
+      })?.code,
+    ).toBe("REPORT_TOO_LARGE");
+  });
+
+  it("reconstructs partial and closed pools and explains every penny of disposal rounding", async () => {
+    const template = { securityId: "GB0008706128", feesGBP: "0" };
+    const trades = [
+      {
+        ...template,
+        id: "source-buy",
+        date: "2024-01-01",
+        side: "BUY" as const,
+        quantity: "3",
+        considerationGBP: "10",
+      },
+      ...[1, 2, 3].map((i) => ({
+        ...template,
+        id: `source-sell-${i}`,
+        date: `2024-09-0${i}`,
+        side: "SELL" as const,
+        quantity: "1",
+        considerationGBP: "5",
+      })),
+    ];
+    const options = {
+      taxYear: "2024-25",
+      historyThrough: "2025-05-05",
+    } as const;
+    const partial = calculateGains(trades.slice(0, 3), options);
+    expect(partial.poolMovements?.at(-1)?.quantityAfter).toBe("1");
+    expect(partial.pools[0]?.costGBP).toBe(
+      partial.poolMovements?.at(-1)?.costAfterGBP,
+    );
+    const result = calculateGains(trades, options);
+    expect(result.poolMovements?.at(-1)).toMatchObject({
+      quantityAfter: "0",
+      costAfterGBP: "0",
+    });
+    expect(result.summary?.netGainGBP).toBe("5.01");
+    const saved = {
+      ...snapshot,
+      result,
+      sources: [
+        {
+          key: "source-buy",
+          label: "Example",
+          broker: "ibkr",
+          record: 2,
+          instrument: null,
+          reference: "IB-BUY",
+          statementReference: "CN-BUY",
+        },
+      ],
+    };
+    const rows = Papa.parse<string[]>(reportCsv(saved), {
+      delimiter: ",",
+    }).data;
+    expect(rows).toContainEqual([
+      "2024-01-01",
+      template.securityId,
+      "acquisition",
+      "3",
+      "10",
+      "3",
+      "10",
+      "source-buy",
+    ]);
+    expect(rows).toContainEqual(["Allowable costs", "10.00", "-0.01", "9.99"]);
+    expect(rows).toContainEqual(["Net gain or loss", "5.00", "0.01", "5.01"]);
+    const pdf = reportPageText(
+      await PDFDocument.load(await reportPdf(saved, true)),
+    );
+    expect(pdf).toContain("Section 104 pool movements");
+    expect(pdf).toContain("Execution reference: IB-BUY");
+    expect(pdf).toContain("Statement reference: CN-BUY");
+    expect(pdf).toContain("Balance: 0 shares · cost £0");
+    expect(pdf).toContain(
+      "Allowable costs: annual £10.00 · rounding difference -£0.01 · reported £9.99",
+    );
+    expect(
+      reportPageText(await PDFDocument.load(await reportPdf(saved, false))),
+    ).toContain("Annual rounding reconciliation");
+  });
+
   it("exports saved decimal figures, matching details, pools and provenance", () => {
     const csv = reportCsv(snapshot);
     expect(snapshot.result.summary?.netGainGBP).toBe("45.50");

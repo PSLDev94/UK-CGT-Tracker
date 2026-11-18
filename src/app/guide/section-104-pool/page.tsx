@@ -46,6 +46,7 @@ export default function Section104PoolPage() {
   return (
     <GuideLayout
       slug="section-104-pool"
+      lastUpdated="November 2026"
       edition="Share matching"
       nextStep={{ href: "/tools/section-104-calculator", title: "Try the Section 104 pool example" }}
       title="What is a Section 104 Pool? UK CGT Explained with Examples"
@@ -272,8 +273,12 @@ export default function Section104PoolPage() {
           share purchases
         </li>
         <li>
-          <strong>PTM levy</strong> — the Panel on Takeovers and Mergers levy
-          (if applicable, currently £1 on trades over £10,000)
+          <strong>PTM levy.</strong> For qualifying trades over £10,000,
+          the levy rose from £1 to £1.50 per contract on 2 December 2024.
+          Use the amount on the contract note.{" "}
+          <a href="https://www.thetakeoverpanel.org.uk/wp-content/uploads/2024/08/Panel-Statement-2024_19.pdf">
+            Read the Takeover Panel’s levy notice
+          </a>.
         </li>
       </ul>
       <p>

@@ -322,13 +322,13 @@ export default function Section104CalculatorPage() {
                       <tr key={i}>
                         <td className="px-3 py-2">{ps.date || "—"}</td>
                         <td className="px-3 py-2 text-right">
-                          {ps.qty.toFixed(2)}
+                          {ps.qty.toFixed()}
                         </td>
                         <td className="px-3 py-2 text-right">
                           £{ps.cost.toFixed(2)}
                         </td>
                         <td className="px-3 py-2 text-right font-medium">
-                          {ps.totalShares.toFixed(2)}
+                          {ps.totalShares.toFixed()}
                         </td>
                         <td className="px-3 py-2 text-right font-medium">
                           £{ps.totalCost.toFixed(2)}
@@ -347,7 +347,7 @@ export default function Section104CalculatorPage() {
                     Total Shares
                   </p>
                   <p className="text-xl font-bold text-gray-900">
-                    {totalPoolShares.toFixed(2)}
+                    {totalPoolShares.toFixed()}
                   </p>
                 </div>
                 <div className="bg-white rounded-xl p-4 border text-center">
@@ -454,7 +454,7 @@ export default function Section104CalculatorPage() {
                     Pool After Sale
                   </p>
                   <p className="text-lg font-bold text-gray-900">
-                    {disposalResult.remainingShares.toFixed(2)} shares
+                    {disposalResult.remainingShares.toFixed()} shares
                   </p>
                   <p className="text-sm text-gray-500">
                     £{disposalResult.remainingCost.toFixed(2)} cost

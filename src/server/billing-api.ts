@@ -1,6 +1,10 @@
 import { recordJourney } from "./journey";
 import { createHash } from "node:crypto";
-import { reportDestination } from "../domain/reports/destination";
+import type { ReportIssue } from "../domain/reports/eligibility";
+import {
+  reportDestination,
+  type ReportDestination,
+} from "../domain/reports/destination";
 import type { Billing } from "./billing";
 import { authenticate, type SessionReader } from "./identity";
 import {
@@ -21,6 +25,10 @@ export function createBillingHandler(
     identity: Awaited<ReturnType<typeof authenticate>>,
     bucket: "general" | "billing",
   ) => Promise<void>,
+  selectedReportIssue: (
+    identity: Awaited<ReturnType<typeof authenticate>>,
+    target: ReportDestination,
+  ) => Promise<ReportIssue | null>,
 ) {
   return async (request: Request) => {
     try {
@@ -36,10 +44,11 @@ export function createBillingHandler(
         input.action === "report-access"
           ? ["action"]
           : input.action === "status"
-            ? ["action", "tab"]
+            ? ["action", "tab", "year", "format", "returning"]
             : ["action", "tab", "year", "format"];
       const target = reportDestination(input.year, input.format);
       if (
+        ("returning" in input && typeof input.returning !== "boolean") ||
         Object.keys(input).some((key) => !allowed.includes(key)) ||
         (("year" in input || "format" in input) && !target) ||
         (input.tab !== undefined &&
@@ -68,13 +77,24 @@ export function createBillingHandler(
           .find((part) => part.startsWith(cookieName + "="));
         const [binding, year, format] =
           saved?.slice(cookieName.length + 1).split(".") ?? [];
+        const returnReport =
+          binding === owner ? reportDestination(year, format) : null;
+        const checkedReport =
+          target ?? (input.returning === true ? returnReport : null);
         return privateResponse({
           ...(await billing.status(identity)),
-          returnReport:
-            binding === owner ? reportDestination(year, format) : null,
+          returnReport,
+          checkedReport,
+          reportIssue: checkedReport
+            ? await selectedReportIssue(identity, checkedReport)
+            : null,
         });
       }
       if (input.action === "checkout" || input.action === "portal") {
+        if (input.action === "checkout" && target) {
+          const issue = await selectedReportIssue(identity, target);
+          if (issue) throw new AppError(409, issue.code, issue.message);
+        }
         const response = privateResponse(await billing[input.action](identity));
         if (input.action === "checkout") recordJourney("checkout_opened");
         const value = target ? `${owner}.${target.year}.${target.format}` : "";

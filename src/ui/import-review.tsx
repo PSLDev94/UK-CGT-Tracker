@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ImportDetailsForm } from "./import-details-form";
+import { ImportTradeDetails } from "./import-trade-detail";
 import type { SupportingDetails } from "../domain/imports/supporting-details";
 import { Button, Notice } from "./primitives";
 import type { Preview } from "./workspace-types";
@@ -46,6 +47,7 @@ export function ImportReviewPanel({
   const row = review.records.find((r) => r.record === editing);
   const pages = Math.max(1, Math.ceil(review.counts.total / review.pageSize));
   const next = review.nextUnresolved;
+  const repairable = review.counts.needsReview - review.sourceBlockerCount;
   useEffect(() => () => onDirty(false), [onDirty]);
   useEffect(() => {
     title.current?.focus();
@@ -87,12 +89,13 @@ export function ImportReviewPanel({
             />
           ) : (
             <p>
-              Check this record against the original statement and the{" "}
+              Check record {row.record} against the original statement and the{" "}
               <Link href={`/supported-brokers#${broker}`}>
                 broker export instructions
               </Link>
-              . If you need a replacement export, upload the complete file with
-              every source row.
+              . If the export is incorrect, get a corrected complete file from your broker.
+              If it matches the statement, keep every source row and{" "}
+              <Link href="/contact">contact support</Link> about this activity before using this file.
             </p>
           )}
           <Button
@@ -135,6 +138,14 @@ export function ImportReviewPanel({
           )}
           {review.status !== "ready" && (
             <Notice tone="warning">
+              {review.status !== "unsupported" && review.sourceBlockerCount > 0 && (
+                <p className="font-semibold">
+                  {review.sourceBlockerCount === 1
+                    ? "1 source record prevents this file from being saved."
+                    : `${review.sourceBlockerCount} source records prevent this file from being saved.`}
+                  {repairable > 0 && ` Check ${review.sourceBlockerCount === 1 ? "this record" : "these records"} before adding supporting details for the other ${repairable === 1 ? "record" : repairable + " records"}.`}
+                </p>
+              )}
               {review.status === "unsupported"
                 ? "This format is not verified. Check the export instructions and upload a supported file."
                 : review.counts.duplicate === review.counts.total &&
@@ -210,7 +221,7 @@ export function ImportReviewPanel({
             return (
               <details
                 key={group.key}
-                open={group.key === "needs_review" || review.counts.total <= 5}
+                open={review.counts.total <= 5 || (group.key === "needs_review" && review.sourceBlockerCount === 0)}
               >
                 <summary>
                   {group.label} ({records.length}
@@ -221,12 +232,7 @@ export function ImportReviewPanel({
                     <li className="py-2 break-words" key={item.record}>
                       <strong>Record {item.record}</strong>
                       <p>{item.reason}</p>
-                      {item.trade && (
-                        <p className="caption">
-                          {item.trade.date} · {item.trade.side} ·{" "}
-                          {item.trade.quantity} shares · {item.trade.securityId}
-                        </p>
-                      )}
+                      {item.tradeDetail && <ImportTradeDetails record={item.record} trade={item.tradeDetail} />}
                       {(item.canSupplyDetails ||
                         item.status === "needs_review") && (
                         <button

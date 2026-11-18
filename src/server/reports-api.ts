@@ -1,3 +1,4 @@
+import { evidenceIssue } from "../domain/reports/eligibility";
 import { recordJourney } from "./journey";
 import { authenticate, type Identity, type SessionReader } from "./identity";
 import { AppError } from "./errors";
@@ -7,7 +8,11 @@ import {
   jsonInput,
   stringField,
 } from "./http";
-import { reportCsv, type ReportSnapshot, type ReportSource } from "../domain/reports/report";
+import {
+  reportCsv,
+  type ReportSnapshot,
+  type ReportSource,
+} from "../domain/reports/report";
 import { reportPdf } from "../domain/reports/pdf";
 
 export function createReportHandler(deps: {
@@ -33,35 +38,23 @@ export function createReportHandler(deps: {
         identity,
         stringField(input, "runId"),
       );
+      const issue = kind === "evidence" ? evidenceIssue(snapshot.result) : null;
+      if (issue) throw new AppError(400, issue.code, issue.message);
       if (kind !== "csv" && !(await deps.entitled(identity)))
         throw new AppError(
           402,
           "SUBSCRIPTION_REQUIRED",
           "An active subscription is required for PDF reports. Your CSV evidence remains available.",
         );
-      if (
-        kind === "evidence" &&
-        (snapshot.result.disposals.length > 5000 ||
-          snapshot.result.disposals.reduce(
-            (count, d) =>
-              count +
-              d.sourceIds.length +
-              d.matches.reduce(
-                (n, m) => n + 1 + (m.acquisitionIds?.length ?? 0),
-                0,
-              ),
-            0,
-          ) > 50000)
-      )
-        throw new AppError(
-          400,
-          "REPORT_TOO_LARGE",
-          "For more than 5,000 disposal groups or 50,000 matching references, download the full CSV evidence and the summary PDF.",
+      if (kind !== "summary" && deps.sources) {
+        const keys = new Set(
+          snapshot.result.disposals.flatMap((d) => [
+            ...d.sourceIds,
+            ...d.matches.flatMap((match) => match.acquisitionIds ?? []),
+          ]),
         );
-      if (kind === "evidence" && deps.sources) {
-        const keys = new Set(snapshot.result.disposals.flatMap(d => [
-          ...d.sourceIds, ...d.matches.flatMap(match => match.acquisitionIds ?? []),
-        ]));
+        for (const movement of snapshot.result.poolMovements ?? [])
+          for (const key of movement.sourceIds) keys.add(key);
         snapshot.sources = await deps.sources(identity, [...keys]);
       }
       const csv = kind === "csv";

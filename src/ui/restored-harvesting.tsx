@@ -7,6 +7,7 @@ import { workspaceApi } from "./api";
 import type { Overview } from "./workspace-types";
 import { Notice, money } from "./primitives";
 import { displayDate } from "./format";
+import styles from "./holding-scenario.module.css";
 export function RestoredHarvesting() {
   const [data, setData] = useState<Overview | null>(null);
   const [year, setYear] = useState("");
@@ -123,34 +124,63 @@ export function RestoredHarvesting() {
           </Notice>
         )}
         <div
-          className="overflow-x-auto"
+          className={styles.holdings}
           role="region"
           aria-label="Holding scenario"
-          tabIndex={0}
         >
-          <table>
-            <thead>
-              <tr>
-                <th>Asset</th>
-                <th>Shares at snapshot</th>
-                <th>Cost Per Share</th>
-                <th>Your scenario price (£)</th>
+          <table role="table">
+            <thead role="rowgroup">
+              <tr role="row">
+                <th scope="col" role="columnheader">
+                  Asset
+                </th>
+                <th scope="col" role="columnheader">
+                  Shares at snapshot
+                </th>
+                <th scope="col" role="columnheader">
+                  Cost per share
+                </th>
+                <th scope="col" role="columnheader">
+                  Your scenario price (£)
+                </th>
               </tr>
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               {rows.length ? (
                 rows.map((p) => (
-                  <tr key={p.securityId}>
-                    <td>{p.securityId}</td>
-                    <td>{p.quantity}</td>
-                    <td>
+                  <tr key={p.securityId} role="row">
+                    <th scope="row" role="rowheader" className={styles.asset}>
+                      {p.securityId}
+                    </th>
+                    <td role="cell">
+                      <span aria-hidden="true" className={styles.mobileLabel}>
+                        Shares at snapshot
+                      </span>
+                      {p.quantity}
+                    </td>
+                    <td role="cell">
+                      <span aria-hidden="true" className={styles.mobileLabel}>
+                        Cost per share
+                      </span>
                       {money(new Decimal(p.costGBP).div(p.quantity).toFixed(8))}
                     </td>
-                    <td>
+                    <td role="cell" className={styles.price}>
+                      <label
+                        className={styles.mobileLabel}
+                        htmlFor={`price-${p.securityId}`}
+                      >
+                        Your scenario price (£)
+                      </label>
                       <input
-                        aria-label={`Scenario price for ${p.securityId}`}
+                        id={`price-${p.securityId}`}
+                        aria-label={`Your scenario price (£) for ${p.securityId}`}
+                        aria-describedby={
+                          p.input && !p.valid
+                            ? `price-error-${p.securityId}`
+                            : undefined
+                        }
                         inputMode="decimal"
-                        className="border rounded px-2 py-2 w-36"
+                        className="border rounded px-2 py-2 w-36 min-h-11"
                         value={p.input}
                         disabled={!savedRun?.coverage_confirmed}
                         onChange={(e) =>
@@ -162,7 +192,10 @@ export function RestoredHarvesting() {
                         aria-invalid={!!p.input && !p.valid}
                       />
                       {p.input && !p.valid && (
-                        <span className="block text-sm text-red-700">
+                        <span
+                          id={`price-error-${p.securityId}`}
+                          className="block text-sm text-red-700"
+                        >
                           Use a non-negative decimal with up to 8 decimal
                           places.
                         </span>
@@ -171,8 +204,8 @@ export function RestoredHarvesting() {
                   </tr>
                 ))
               ) : (
-                <tr>
-                  <td colSpan={4}>
+                <tr role="row">
+                  <td colSpan={4} role="cell" className={styles.empty}>
                     {result
                       ? "This snapshot has no eligible holdings to explore."
                       : "A saved calculation provides the holdings for this scenario."}{" "}

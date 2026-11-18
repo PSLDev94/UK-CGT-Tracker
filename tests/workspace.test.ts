@@ -130,6 +130,11 @@ describe("authenticated PostgreSQL application workflow", () => {
       "excluded",
     ]);
     expect(receipt.records[0]).not.toHaveProperty("sourceKey");
+    expect(receipt.records[0]?.tradeDetail).toMatchObject({
+      side: "BUY", currency: "USD", consideration: "1000", fees: "10", netCash: "-1010",
+      netCashGBP: "-808", gbpPerUnit: "0.8", executionReference: "synthetic-buy",
+    });
+    expect(receipt.records.find((row) => row.status === "excluded")?.tradeDetail).toBeUndefined();
     expect(
       (await workspace.importDetail(s.user, draft.draftId, 2)).records,
     ).toEqual([]);
@@ -515,10 +520,68 @@ it("persists native classification confirmation through resume and server-side c
     expect(rows).toHaveLength(2);
     expect(rows[0]!.provenance.native.ordinarySharesConfirmed).toBe(true);
     expect(rows[0]!.provenance.native.fields.ID).toContain("SYNTHETIC-T-");
+    // Pre-existing transactions predate the explicit executionReference property.
+    await query(tx, "UPDATE cgt.transactions SET provenance = provenance - 'executionReference' WHERE import_id=$1", [confirmed.draftId]);
   });
+  await workspace.reverseImport(s.user, confirmed.draftId, "Synthetic legacy receipt check");
+  expect((await workspace.importDetail(s.user, confirmed.draftId, 1)).records[0]?.tradeDetail).toMatchObject({
+    executionReference: "SYNTHETIC-T-001", date: "2024-06-01", side: "BUY",
+  });
+  await new OwnedDatabase(database.db).run(s.user, (tx) =>
+    query(tx, "UPDATE cgt.imports SET record_receipts = '[]'::jsonb WHERE id=$1", [confirmed.draftId]),
+  );
+  const earliestReceipt = await workspace.importDetail(s.user, confirmed.draftId, 1);
+  expect(earliestReceipt.legacy).toBe(true);
+  expect(earliestReceipt.total).toBe(2);
+  expect(earliestReceipt.records[0]?.tradeDetail?.executionReference).toBe("SYNTHETIC-T-001");
 });
 
 describe("report ownership and assisted draft concurrency", () => {
+  it("verifies an old saved calculation against its original inputs before adding the pool schedule", async () => {
+    const s = await setup("legacy-report-schedule");
+    const draft = await prepare(s.user, s.account.id);
+    await workspace.commitImport(s.user, draft.draftId, draft.revision);
+    const run = await workspace.calculate(s.user, {
+      portfolioId: s.portfolio.id,
+      taxYear: "2024-25",
+      historyThrough: "2025-05-05",
+      confirmedAccountIds: [s.account.id],
+    });
+    await database.pg.exec("RESET ROLE");
+    await database.pg.query(
+      `UPDATE cgt.calculation_runs SET engine_version='2.0.0-alpha.1',
+      result=(result - 'poolMovements' - 'annualBeforeDisposalRounding') || '{"engineVersion":"2.0.0-alpha.1"}'::jsonb WHERE id=$1`,
+      [run.runId],
+    );
+    await database.pg.exec("SET ROLE cgt_app");
+    const target = { year: "2024-25", format: "evidence" } as const;
+    expect(await workspace.selectedReportIssue(s.user, target)).toBeNull();
+    const saved = await workspace.reportSnapshot(s.user, run.runId);
+    expect(saved.result.poolMovements).toEqual(run.result.poolMovements);
+    expect(saved.result.summary).toEqual(run.result.summary);
+    expect(saved.result.engineVersion).toBe("2.0.0-alpha.1");
+    expect(
+      (await workspace.overview(s.user, false, true)).calculations[0],
+    ).toMatchObject({ evidenceIssue: null });
+    await database.pg.exec("RESET ROLE");
+    await database.pg.query(
+      "UPDATE cgt.calculation_runs SET input_digest=repeat('b',64) WHERE id=$1",
+      [run.runId],
+    );
+    await database.pg.exec("SET ROLE cgt_app");
+    expect(await workspace.selectedReportIssue(s.user, target)).toMatchObject({
+      code: "REPORT_NEEDS_REFRESH",
+    });
+    expect(
+      await workspace.selectedReportIssue(s.user, {
+        ...target,
+        format: "summary",
+      }),
+    ).toBeNull();
+    expect(
+      (await workspace.reportSnapshot(s.user, run.runId)).result.poolMovements,
+    ).toBeUndefined();
+  });
   it("allows only current owned snapshots and blocks pending files and invalidated runs", async () => {
     const a = await setup("report-owner"),
       b = await setup("report-other");

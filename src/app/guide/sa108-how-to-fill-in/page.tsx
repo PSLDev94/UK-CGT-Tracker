@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Metadata } from "next";
 import { GuideLayout } from "@/components/guide-layout";
+import { CgtReportingGuidance } from "@/components/cgt-reporting-guidance";
 
 export const metadata: Metadata = {
   title: "How to Fill in SA108 for Shares and Investments",
@@ -16,6 +17,7 @@ export default function SA108GuidePage() {
     <GuideLayout
       slug="sa108-how-to-fill-in"
       edition="Tax year 2025–26"
+      lastUpdated="November 2026"
       nextStep={{ href: "/dashboard/reports", title: "View your saved reports" }}
       title="How to Fill in SA108 for Shares and Investments"
       breadcrumb="SA108 Guide"
@@ -40,19 +42,7 @@ export default function SA108GuidePage() {
       </p>
 
       <h2>When Must You Report?</h2>
-      <p>
-        Check your reporting obligations even when no tax is due. HMRC says that
-        people registered for Self Assessment must report gains if total
-        disposal proceeds exceed £50,000 for 2023–24 onwards. Taxable gains
-        above the available allowance and claims for losses can also require
-        reporting.
-      </p>
-      <p>
-        <a href="https://www.gov.uk/capital-gains-tax/work-out-need-to-pay">
-          Check HMRC’s reporting guidance
-        </a>{" "}
-        for your circumstances.
-      </p>
+      <CgtReportingGuidance />
       <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-lg my-6 not-prose">
         <p className="text-sm text-amber-900">
           This guide describes the 2025–26 form. Use the form and notes for the

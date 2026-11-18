@@ -16,6 +16,7 @@ export default function CGTRatesPage() {
     <GuideLayout
       slug="cgt-rates-2025-26"
       edition="Tax year 2025–26"
+      lastUpdated="November 2026"
       nextStep={{ href: "/tools/cgt-allowance-checker", title: "Try the 2025–26 allowance example" }}
       title="UK Capital Gains Tax Rates 2025-26 on Shares"
       breadcrumb="CGT Rates 2025-26"
@@ -35,12 +36,12 @@ export default function CGTRatesPage() {
         Capital Gains Tax rates on shares and investments in the UK have changed
         significantly over the past few years. The October 2024 Autumn Budget
         introduced the latest changes, increasing rates for disposals from 30
-        October 2024 onwards. This guide covers the current 2025-26 tax year
+        October 2024 onwards. This guide covers the 2025-26 tax year
         rates, the historical progression, and exactly how your income level
         determines which rate you pay.
       </p>
 
-      <h2>Current CGT Rates for 2025-26</h2>
+      <h2 id="current-cgt-rates-for-2025-26">CGT Rates for 2025-26</h2>
       <p>
         For the tax year 6 April 2025 to 5 April 2026, the CGT rates on shares,
         securities, and other investments (excluding residential property) are:
@@ -54,9 +55,13 @@ export default function CGTRatesPage() {
         </li>
       </ul>
       <p>
-        The <strong>annual exempt amount</strong> for 2025-26 is{" "}
-        <strong>£3,000</strong>. This means the first £3,000 of capital gains in
-        the tax year is tax-free.
+        For eligible individuals the <strong>annual exempt amount</strong> in
+        2025–26 is <strong>£3,000</strong>. A claim for the foreign income and
+        gains regime or Overseas Workday Relief removes the allowance for that
+        year.{" "}
+        <a href="https://www.gov.uk/guidance/capital-gains-tax-rates-and-allowances">
+          Check HMRC’s eligibility rules
+        </a>.
       </p>
 
       <h2>Historical Rate Table</h2>
@@ -214,9 +219,9 @@ export default function CGTRatesPage() {
 
       <h3>1. Use Your Annual Exempt Amount</h3>
       <p>
-        Make sure both you and your spouse/civil partner use the full £3,000
-        annual exemption each year. Consider transferring assets to your spouse
-        before sale to utilise their exemption (spouse transfers are tax-free).
+        Each eligible spouse or civil partner has their own allowance. Check
+        each person’s eligibility and ownership of the shares when working out
+        their gains.
       </p>
 
       <h3>2. Bed and ISA</h3>

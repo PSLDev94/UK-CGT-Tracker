@@ -62,6 +62,7 @@ export interface ImportRecord {
   canSupplyDetails?: boolean;
   sourceKey?: string;
   digest?: string;
+  executionReference?: string;
   trade?: Trade;
   provenance?: {
     originalCurrency: string;
@@ -518,6 +519,7 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
           status: "accepted",
           sourceKey,
           digest,
+          executionReference: (adapter && source[adapter.idColumn]) || row["Transaction ID"],
           trade,
           provenance,
           reason: adapter

@@ -12,6 +12,7 @@ import type { Workspace } from "./workspace";
 import type { SupportingDetails } from "../domain/imports/supporting-details";
 import type { ImportReview } from "../domain/imports/review";
 import { MAX_CSV_BYTES } from "../domain/imports/review";
+import { importTradeDetail } from "../domain/imports/trade-detail";
 
 // JSON.stringify escapes quotes, backslashes and allowed CSV whitespace. The
 // decoded file still has its own 10 MiB cap; allow its bounded wire expansion.
@@ -23,18 +24,32 @@ export function pageForReviewIndex(index: number) {
 }
 
 export function reviewPage(review: ImportReview, page: number) {
-  // Prioritise records the investor can repair here. Once those are resolved,
-  // take them straight to the first blocker that requires a corrected export.
-  let index = review.records.findIndex((record) => record.status === "needs_review" && record.canSupplyDetails);
-  if (index === -1) index = review.records.findIndex((record) => record.status === "needs_review");
+  let sourceBlockerCount = 0;
+  let firstBlocker = -1;
+  let firstRepair = -1;
+  for (const [position, record] of review.records.entries()) {
+    if (record.status !== "needs_review") continue;
+    if (record.canSupplyDetails) {
+      if (firstRepair === -1) firstRepair = position;
+    } else {
+      sourceBlockerCount++;
+      if (firstBlocker === -1) firstBlocker = position;
+    }
+  }
+  const index = firstBlocker === -1 ? firstRepair : firstBlocker;
   const next = review.records[index];
   return {
     ...review,
-    records: review.records.slice((page - 1) * pageSize, page * pageSize),
+    records: review.records.slice((page - 1) * pageSize, page * pageSize).map((record) =>
+      record.trade
+        ? { ...record, tradeDetail: importTradeDetail(record.trade, record.provenance, record.executionReference) }
+        : record,
+    ),
     issues: review.issues.slice(0, 100),
     issueCount: review.issues.length,
     page,
     pageSize,
+    sourceBlockerCount,
     nextUnresolved: next
       ? { record: next.record, page: pageForReviewIndex(index), canSupplyDetails: !!next.canSupplyDetails, reason: next.reason }
       : null,
@@ -77,7 +92,7 @@ export function createWorkspaceHandler(
             await workspace.importHistory(identity, Number(input.page ?? 1)),
           );
         case "overview": {
-          const overview = await workspace.overview(identity, input.surface === "accounts");
+          const overview = await workspace.overview(identity, input.surface === "accounts", input.surface === "reports");
           if (input.surface === "reports") recordJourney("reports_opened");
           return privateResponse(overview);
         }
@@ -217,6 +232,8 @@ export function createWorkspaceHandler(
               confirmedAccountIds: input.confirmedAccountIds,
             });
           recordJourney(calculation.result.status === "complete" && calculation.coverageConfirmed ? "calculation_complete" : "calculation_incomplete");
+          // The PDF and CSV readers load the full pool ledger from the stored run.
+          delete calculation.result.poolMovements;
           return privateResponse(calculation);
         }
         default:

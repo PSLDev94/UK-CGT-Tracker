@@ -25,9 +25,10 @@ it("locates actionable and read-only blockers by position across the complete st
   blocker.status = "needs_review";
   blocker.canSupplyDetails = false;
   expect(reviewPage(review, 1).nextUnresolved).toMatchObject({
-    record: 209,
-    page: 3,
+    record: 108,
+    page: 1,
   });
+  expect(reviewPage(review, 1).sourceBlockerCount).toBe(1);
   review.records[200]!.status = "accepted";
   expect(reviewPage(review, 3).nextUnresolved).toMatchObject({
     record: 108,

@@ -6,20 +6,27 @@ import { useRouter } from "next/navigation";
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { authApi } from "./api";
 import { Notice, Button } from "./primitives";
-export function DashboardShell({ children }: { children: React.ReactNode }) {
+type Session = { user: { name: string; email: string } };
+export function DashboardShell({
+  children,
+  beforeSignOut,
+}: {
+  children: React.ReactNode | ((user: Session["user"]) => React.ReactNode);
+  beforeSignOut?: (signOut: () => void) => void;
+}) {
   const router = useRouter();
-  const [session, setSession] = useState<{ user: { name: string } } | null>();
+  const [session, setSession] = useState<Session | null>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   function load() {
     setError("");
-    authApi<{ user: { name: string } } | null>("get-session")
+    authApi<Session | null>("get-session")
       .then(setSession)
       .catch((e) => setError(e.message));
   }
   useEffect(() => {
     let active = true;
-    authApi<{ user: { name: string } } | null>("get-session")
+    authApi<Session | null>("get-session")
       .then((s) => {
         if (active) setSession(s);
       })
@@ -46,7 +53,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     <div className="workspace">
       <DashboardSidebar
         userEmail={session?.user.name || ""}
-        onSignOut={signOut}
+        onSignOut={() =>
+          beforeSignOut ? beforeSignOut(signOut) : void signOut()
+        }
         busy={busy}
       />
       <main id="main" className="workspace-main">
@@ -73,6 +82,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               Sign in
             </Link>
           </section>
+        ) : typeof children === "function" ? (
+          children(session.user)
         ) : (
           children
         )}

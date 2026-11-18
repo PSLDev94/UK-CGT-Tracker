@@ -3,15 +3,19 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { workspaceApi } from "./api";
 import { Button } from "./primitives";
+import { ImportTradeDetails } from "./import-trade-detail";
+import type { ImportTradeDetail } from "../domain/imports/trade-detail";
 
 type Receipt = {
   page: number;
   pageSize: number;
   total: number;
+  legacy: boolean;
   records: {
     record: number;
     status: "accepted" | "excluded" | "duplicate";
     reason: string;
+    tradeDetail?: ImportTradeDetail;
   }[];
 };
 
@@ -79,6 +83,7 @@ export function ImportHistoryDetail({
             <p role="status">Loading source rows…</p>
           ) : receipt.total ? (
             <>
+              {receipt.legacy && <p>This older import retained its included trades. Other source-row outcomes are unavailable.</p>}
               <dl>
                 {receipt.records.map((row) => (
                   <div
@@ -88,7 +93,10 @@ export function ImportHistoryDetail({
                     <dt className="font-semibold">
                       Record {row.record} · {labels[row.status]}
                     </dt>
-                    <dd>{row.reason}</dd>
+                    <dd>
+                      {row.reason}
+                      {row.tradeDetail && <ImportTradeDetails record={row.record} trade={row.tradeDetail} />}
+                    </dd>
                   </div>
                 ))}
               </dl>

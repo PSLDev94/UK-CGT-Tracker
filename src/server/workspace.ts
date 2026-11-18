@@ -1,4 +1,7 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
+import { evidenceIssue, type ReportIssue } from "../domain/reports/eligibility";
+import type { ReportDestination } from "../domain/reports/destination";
 import { BROKERS, type BrokerId } from "../domain/imports/brokers";
 import {
   MAX_CSV_BYTES,
@@ -6,7 +9,7 @@ import {
   type ImportReview,
 } from "../domain/imports/review";
 import { calculateGains, ENGINE_VERSION } from "../domain/cgt/calculate";
-import type { Trade } from "../domain/cgt/types";
+import type { Calculation, Trade } from "../domain/cgt/types";
 import { calendarDate, TAX_YEARS, ukCalendarDate } from "../domain/values";
 import { type Connection, OwnedDatabase, query } from "./database";
 import { AppError, requireLabel, requireUuid } from "./errors";
@@ -17,6 +20,7 @@ import {
   type SupportingDetails,
 } from "../domain/imports/supporting-details";
 import type { ReportSnapshot, ReportSource } from "../domain/reports/report";
+import { importTradeDetail, type ImportTradeDetail } from "../domain/imports/trade-detail";
 
 interface Portfolio {
   id: string;
@@ -46,6 +50,13 @@ interface Import {
   account_id: string;
 }
 
+interface ReceiptRecord {
+  record: number;
+  status: "accepted" | "duplicate" | "excluded";
+  reason: string;
+  tradeDetail?: ImportTradeDetail;
+}
+
 const missing = () =>
   new AppError(
     404,
@@ -54,6 +65,63 @@ const missing = () =>
   );
 const fingerprint = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
+
+interface EvidenceRun {
+  result: Calculation;
+  input_digest: string;
+  portfolio_id: string;
+  portfolio_revision: number;
+  coverage_accounts: string[];
+}
+
+function calculationTrades(
+  tx: Connection,
+  portfolioId: string,
+  through: string,
+) {
+  return query<Trade>(
+    tx,
+    `SELECT t.source_key AS id,t.security_id AS "securityId",t.trade_date::text AS date,t.side,
+        t.quantity::text AS quantity,t.consideration_gbp::text AS "considerationGBP",t.fees_gbp::text AS "feesGBP"
+        FROM cgt.transactions t JOIN cgt.broker_accounts a ON a.id=t.account_id
+        WHERE a.portfolio_id=$1 AND t.active AND t.trade_date <= $2::date ORDER BY t.trade_date,t.source_key`,
+    [portfolioId, through],
+  );
+}
+
+// A legacy report may acquire an evidence schedule only from its original, verified inputs.
+// Keep the stored disposal and annual amounts, including their original rounding.
+async function enrichReportHistory(tx: Connection, run: EvidenceRun) {
+  const saved = run.result;
+  if (saved.poolMovements || saved.engineVersion !== "2.0.0-alpha.1") return;
+  const trades = await calculationTrades(
+    tx,
+    run.portfolio_id,
+    saved.historyThrough,
+  );
+  if (
+    fingerprint({
+      trades,
+      taxYear: saved.taxYear,
+      historyThrough: saved.historyThrough,
+      revision: run.portfolio_revision,
+      confirmed: run.coverage_accounts,
+    }) !== run.input_digest
+  )
+    return;
+  const rebuilt = calculateGains(trades, {
+    taxYear: saved.taxYear as keyof typeof TAX_YEARS,
+    historyThrough: saved.historyThrough,
+  });
+  if (
+    !isDeepStrictEqual(rebuilt.disposals, saved.disposals) ||
+    !isDeepStrictEqual(rebuilt.pools, saved.pools) ||
+    !isDeepStrictEqual(rebuilt.summary, saved.summary)
+  )
+    return;
+  saved.poolMovements = rebuilt.poolMovements;
+  saved.annualBeforeDisposalRounding = rebuilt.annualBeforeDisposalRounding;
+}
 
 async function account(tx: Connection, id: string): Promise<Account> {
   const row = (
@@ -180,10 +248,14 @@ export class Workspace {
       const receipt = (
         await query<{
           total: number;
-          records: { record: number; status: string; reason: string }[];
+          legacy: boolean;
+          records: ReceiptRecord[];
         }>(
           tx,
-          `SELECT jsonb_array_length(i.record_receipts) AS total, ARRAY(
+          `SELECT jsonb_array_length(i.record_receipts) = 0 AS legacy,
+          CASE WHEN jsonb_array_length(i.record_receipts) = 0
+            THEN (SELECT count(*)::int FROM cgt.transactions t WHERE t.import_id = i.id)
+            ELSE jsonb_array_length(i.record_receipts) END AS total, ARRAY(
           SELECT jsonb_build_object(
             'record', i.record_receipts->n->'record',
             'status', i.record_receipts->n->'status',
@@ -195,11 +267,51 @@ export class Workspace {
         )
       )[0];
       if (!receipt) throw missing();
+      const accepted = receipt.records
+        .filter((row) => row.status === "accepted")
+        .map((row) => row.record);
+      if (accepted.length || (receipt.legacy && receipt.total > start)) {
+        const transactions = await query<
+          Omit<Trade, "id"> & {
+            record: number;
+            provenance: Parameters<typeof importTradeDetail>[1];
+          }
+        >(
+          tx,
+          `SELECT t.source_record AS record, t.security_id AS "securityId",
+          t.trade_date::text AS date, t.side, t.quantity::text, t.consideration_gbp::text AS "considerationGBP",
+          t.fees_gbp::text AS "feesGBP", t.provenance FROM cgt.transactions t
+          WHERE t.import_id = $1 AND ($2::boolean OR t.source_record = ANY($3::int[]))
+          ORDER BY t.source_record LIMIT 25 OFFSET $4`,
+          [importId, receipt.legacy, accepted, receipt.legacy ? start : 0],
+        );
+        if (receipt.legacy) {
+          receipt.records = transactions.map(({ record }) => ({
+            record,
+            status: "accepted",
+            reason: "Saved trade from this import.",
+          }));
+        }
+        const detailsByRow = new Map(
+          transactions.map((trade) => [
+            trade.record,
+            importTradeDetail(trade, trade.provenance),
+          ]),
+        );
+        for (const row of receipt.records) {
+          const detail = detailsByRow.get(row.record);
+          if (detail) row.tradeDetail = detail;
+        }
+      }
       return { ...receipt, page, pageSize: 25 };
     });
   }
 
-  async overview(identity: Identity, includeImportCount = false) {
+  async overview(
+    identity: Identity,
+    includeImportCount = false,
+    includeReportEligibility = false,
+  ) {
     return this.db.run(identity, async (tx) => {
       // Unique owner index serialises concurrent first visits; no advisory key collisions.
       await query(
@@ -221,14 +333,59 @@ export class Workspace {
         duplicate_count, created_at, reversed_at, reversal_reason FROM cgt.imports ORDER BY created_at DESC, id DESC LIMIT 100`,
       );
       // The Accounts summary includes older imports beyond the recent list.
-      const importCount = includeImportCount && imports.length === 100
-        ? (await query<{ count: number }>(tx, "SELECT count(*)::int AS count FROM cgt.imports"))[0]!.count
-        : imports.length;
-      const calculations = await query(
+      const importCount =
+        includeImportCount && imports.length === 100
+          ? (
+              await query<{ count: number }>(
+                tx,
+                "SELECT count(*)::int AS count FROM cgt.imports",
+              )
+            )[0]!.count
+          : imports.length;
+      const runs = await query<
+        EvidenceRun & {
+          id: string;
+          tax_year: string;
+          status: string;
+          history_through: string;
+          coverage_confirmed: boolean;
+          created_at: string;
+        }
+      >(
         tx,
-        `SELECT r.id, r.tax_year, r.status, r.history_through, r.result, r.coverage_confirmed, r.coverage_accounts, r.created_at
+        `SELECT r.id, r.tax_year, r.status, r.history_through, ${includeReportEligibility ? "r.result" : "r.result - 'poolMovements'"} AS result,
+        r.portfolio_id, r.portfolio_revision, r.input_digest, r.coverage_confirmed, r.coverage_accounts, r.created_at
         FROM cgt.published_calculations p JOIN cgt.calculation_runs r ON r.id = p.run_id ORDER BY r.tax_year DESC`,
       );
+      const calculations = [];
+      for (const run of runs) {
+        if (includeReportEligibility) await enrichReportHistory(tx, run);
+        const availability = includeReportEligibility
+          ? { evidenceIssue: evidenceIssue(run.result) }
+          : {};
+        const {
+          id,
+          tax_year,
+          status,
+          history_through,
+          coverage_confirmed,
+          coverage_accounts,
+          created_at,
+          result,
+        } = run;
+        delete result.poolMovements; // The working ledger is rendered in the export, not the overview.
+        calculations.push({
+          id,
+          tax_year,
+          status,
+          history_through,
+          coverage_confirmed,
+          coverage_accounts,
+          created_at,
+          result,
+          ...availability,
+        });
+      }
       const drafts = await query(
         tx,
         "SELECT id, account_id, created_at, expires_at FROM cgt.import_drafts WHERE expires_at > now() ORDER BY created_at DESC",
@@ -257,14 +414,14 @@ export class Workspace {
         left(coalesce(nullif(f.fields->>'Name',''), nullif(f.fields->>'Stock name',''),
                       nullif(f.fields->>'Ticker',''), nullif(f.fields->>'Symbol',''),
                       nullif(f.fields->>'Description','')),120) AS instrument,
-        coalesce(nullif(f.fields->>'ID',''), nullif(f.fields->>'Reference',''),
+        coalesce(nullif(t.provenance->>'executionReference',''), nullif(f.fields->>'ID',''), nullif(f.fields->>'Reference',''),
                  nullif(f.fields->>'TradeID',''), nullif(f.fields->>'Order ID',''),
                  nullif(btrim(f.details->>'transactionId'),'')) AS reference,
         nullif(btrim(f.details->>'reference'),'') AS "statementReference"
       FROM cgt.transactions t JOIN cgt.broker_accounts a ON a.id=t.account_id
       CROSS JOIN LATERAL (SELECT t.provenance->'native'->'fields' AS fields,
                                  t.provenance->'native'->'supportingDetails' AS details) f
-      WHERE t.active AND t.source_key=ANY($1::text[])
+      WHERE t.active AND t.source_key=ANY($1::text[]) ORDER BY t.source_key
     `,
         [sourceKeys],
       ),
@@ -275,16 +432,41 @@ export class Workspace {
     identity: Identity,
     runId: string,
   ): Promise<ReportSnapshot> {
+    return this.currentSnapshot(identity, { id: requireUuid(runId) });
+  }
+
+  async selectedReportIssue(
+    identity: Identity,
+    target: ReportDestination,
+  ): Promise<ReportIssue | null> {
+    try {
+      const saved = await this.currentSnapshot(identity, { year: target.year });
+      return target.format === "evidence" ? evidenceIssue(saved.result) : null;
+    } catch (error) {
+      if (
+        error instanceof AppError &&
+        (error.code === "REPORT_UNAVAILABLE" ||
+          error.code === "PENDING_IMPORTS")
+      )
+        return { code: error.code, message: error.message };
+      throw error;
+    }
+  }
+
+  private async currentSnapshot(
+    identity: Identity,
+    target: { id: string } | { year: string },
+  ): Promise<ReportSnapshot> {
     return this.db.run(identity, async (tx) => {
-      const rows = await query<ReportSnapshot>(
+      const rows = await query<ReportSnapshot & EvidenceRun>(
         tx,
-        `SELECT r.id,r.input_digest,r.created_at,r.coverage_confirmed,r.result,
+        `SELECT r.id,r.input_digest,r.created_at,r.coverage_confirmed,r.result,r.portfolio_id,r.portfolio_revision,r.coverage_accounts,
           (SELECT coalesce(jsonb_agg(jsonb_build_object('label',a.label,'broker',a.broker,'confirmed',r.coverage_accounts ? a.id::text) ORDER BY a.label,a.id),'[]'::jsonb)
            FROM cgt.broker_accounts a WHERE a.portfolio_id=r.portfolio_id) AS accounts
         FROM cgt.calculation_runs r JOIN cgt.published_calculations p ON p.run_id=r.id
         JOIN cgt.portfolios f ON f.id=r.portfolio_id AND f.revision=r.portfolio_revision
-        WHERE r.id=$1`,
-        [requireUuid(runId)],
+        WHERE ${"id" in target ? "r.id" : "r.tax_year"}=$1`,
+        ["id" in target ? target.id : target.year],
       );
       if (!rows[0])
         throw new AppError(
@@ -302,6 +484,7 @@ export class Workspace {
           "PENDING_IMPORTS",
           "Finish or discard your import previews before downloading a report.",
         );
+      await enrichReportHistory(tx, rows[0]);
       return rows[0];
     });
   }
@@ -751,7 +934,10 @@ export class Workspace {
           quantity: row.trade!.quantity,
           consideration_gbp: row.trade!.considerationGBP,
           fees_gbp: row.trade!.feesGBP,
-          provenance: row.provenance!,
+          provenance: {
+            ...row.provenance,
+            executionReference: row.executionReference,
+          },
         }));
       // Bounded batches avoid the PostgreSQL parameter ceiling on large histories.
       for (let offset = 0; offset < accepted.length; offset += 1000) {
@@ -866,14 +1052,7 @@ export class Workspace {
           "PENDING_IMPORTS",
           "Finish or discard your import previews before calculating. Unresolved files may change the result.",
         );
-      const trades = await query<Trade>(
-        tx,
-        `SELECT t.source_key AS id,t.security_id AS "securityId",t.trade_date::text AS date,t.side,
-        t.quantity::text AS quantity,t.consideration_gbp::text AS "considerationGBP",t.fees_gbp::text AS "feesGBP"
-        FROM cgt.transactions t JOIN cgt.broker_accounts a ON a.id=t.account_id
-        WHERE a.portfolio_id=$1 AND t.active AND t.trade_date <= $2::date ORDER BY t.trade_date,t.source_key`,
-        [p.id, input.historyThrough],
-      );
+      const trades = await calculationTrades(tx, p.id, input.historyThrough);
       if (!trades.length)
         throw new AppError(
           409,

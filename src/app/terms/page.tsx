@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { PublicNav } from "@/components/public-nav";
 import { PublicFooter } from "@/components/public-footer";
+export const metadata = { title: "Service terms" };
+
 export default function Terms() {
   return (
     <>

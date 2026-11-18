@@ -36,6 +36,7 @@ import {
 import { ImportHistoryDetail } from "./import-history-detail";
 import { ImportReviewPanel } from "./import-review";
 import { CalculationResult } from "./calculation-result";
+import { useModal, useNavigationGuard, LeaveDialog } from "./navigation-guard";
 import type { Overview, Preview, SavedImport } from "./workspace-types";
 
 type History = {
@@ -58,26 +59,6 @@ const uploadGuidance: Record<string, string> = {
   ajbell:
     "Choose Transaction history and have contract notes for references, dealing costs and verified units.",
 };
-function useModal(
-  ref: React.RefObject<HTMLDialogElement | null>,
-  open: boolean,
-) {
-  useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
-    const previous = document.activeElement as HTMLElement | null;
-    if (open && !dialog.open) {
-      dialog.showModal();
-      dialog.querySelector<HTMLButtonElement>("[data-modal-cancel]")?.focus();
-    }
-    if (!open && dialog.open) dialog.close();
-    return () => {
-      if (dialog.open) dialog.close();
-      if (open && previous?.isConnected) previous.focus();
-    };
-  }, [open, ref]);
-}
-
 function focusHeading(heading: HTMLElement | null) {
   if (!heading) return;
   heading.focus({ preventScroll: true });
@@ -142,7 +123,6 @@ function WorkspaceBody({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const confirmedNavigation = useRef(false);
   const reloadGeneration = useRef(0);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -192,13 +172,11 @@ function WorkspaceBody({
   const [detailsDirty, setDetailsDirty] = useState(false);
   const dirty = formDirty || detailsDirty || (view === "calculations" && settingsEdited);
   const [reverse, setReverse] = useState<SavedImport | null>(null);
-  const [leaveAction, setLeaveAction] = useState<(() => void) | null>(null);
+  const navigation = useNavigationGuard(dirty || !!file, busy);
   const reverseDialog = useRef<HTMLDialogElement>(null);
-  const leaveDialog = useRef<HTMLDialogElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
   useModal(reverseDialog, !!reverse);
-  useModal(leaveDialog, !!leaveAction);
 
   const fail = useCallback((caught: unknown) => {
     const problem = caught as ApiError;
@@ -247,38 +225,6 @@ function WorkspaceBody({
     document.addEventListener("visibilitychange", refresh);
     return () => document.removeEventListener("visibilitychange", refresh);
   }, [reload, fail]);
-  useEffect(() => {
-    if (!dirty && !file && !busy) return;
-    const unload = (event: BeforeUnloadEvent) => {
-      if (confirmedNavigation.current) return;
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    const navigate = (event: MouseEvent) => {
-      const anchor = (event.target as Element).closest("a");
-      if (
-        !anchor ||
-        anchor.hasAttribute("download") ||
-        anchor.target === "_blank" ||
-        anchor.getAttribute("href")?.startsWith("#")
-      )
-        return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (busyRef.current) return;
-      setLeaveAction(() => () => {
-        confirmedNavigation.current = true;
-        location.assign(anchor.href);
-      });
-    };
-    window.addEventListener("beforeunload", unload);
-    document.addEventListener("click", navigate, true);
-    return () => {
-      window.removeEventListener("beforeunload", unload);
-      document.removeEventListener("click", navigate, true);
-    };
-  }, [dirty, file, busy]);
-
   useEffect(() => {
     if (
       !requestedDraft ||
@@ -486,9 +432,7 @@ function WorkspaceBody({
       <DashboardSidebar
         userEmail={userName}
         busy={busy}
-        onSignOut={() =>
-          dirty || file ? setLeaveAction(() => signOut) : signOut()
-        }
+        onSignOut={() => navigation.request(signOut)}
       />
       <main id="main" className="workspace-main">
         <div className="workspace-topbar">
@@ -1197,7 +1141,8 @@ function WorkspaceBody({
                                 <Button
                                   variant="secondary"
                                   disabled={busy}
-                                  onClick={() => {
+                                  onClick={(event) => {
+                                    event.currentTarget.focus({ preventScroll: true });
                                     setReverse(item);
                                     setErrors({});
                                   }}
@@ -1306,37 +1251,10 @@ function WorkspaceBody({
           </div>
         </form>
       </dialog>
-      <dialog
-        ref={leaveDialog}
-        aria-labelledby="leave-title"
-        onCancel={() => setLeaveAction(null)}
-      >
-        <h2 id="leave-title">Leave this workspace?</h2>
-        <p>
-          Unsaved form entries and local file selections will be lost. Saved
-          previews remain available. A request already sent may still finish.
-        </p>
-        <div className="actions">
-          <Button
-            variant="secondary"
-            autoFocus
-            data-modal-cancel
-            onClick={() => setLeaveAction(null)}
-          >
-            Stay here
-          </Button>
-          <Button
-            onClick={() => {
-              const action = leaveAction;
-              setLeaveAction(null);
-              setDirty(false);
-              action?.();
-            }}
-          >
-            Leave workspace
-          </Button>
-        </div>
-      </dialog>
+      <LeaveDialog guard={navigation} title="Leave this workspace?" confirm="Leave workspace">
+        Unsaved form entries and local file selections will be lost. Saved previews remain
+        available. A request already sent may still finish.
+      </LeaveDialog>
     </div>
   );
 }

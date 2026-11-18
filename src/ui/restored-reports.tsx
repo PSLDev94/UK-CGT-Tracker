@@ -6,6 +6,8 @@ import { api, ApiError, workspaceApi } from "./api";
 import type { Overview } from "./workspace-types";
 import type { BillingStatus } from "@/server/billing";
 import { Notice, Button, SelectField, money } from "./primitives";
+import { evidenceIssue } from "@/domain/reports/eligibility";
+import { roundingDifferences } from "@/domain/reports/rounding";
 import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
 import { billingUrl, type PdfFormat } from "../domain/reports/destination";
 import { displayDate, netOutcome } from "./format";
@@ -199,6 +201,7 @@ export function RestoredReports({
   }
 
   const result = calculation?.result;
+  const differences = result ? roundingDifferences(result) : [];
   const confirmed =
     calculation?.coverage_confirmed && result?.status === "complete";
   const accounts = calculation?.coverage_accounts;
@@ -324,6 +327,26 @@ export function RestoredReports({
                   ))}
                 </dl>
               )}
+              {differences.length > 0 && (
+                <details className="text-sm">
+                  <summary className="cursor-pointer font-semibold">
+                    How rounding affects this year
+                  </summary>
+                  <p className="mt-2">
+                    The reported total adds disposals rounded to pence. Rounding
+                    once for the year gives these differences.
+                  </p>
+                  <ul className="mt-2 space-y-1">
+                    {differences.map((d) => (
+                      <li key={d.label}>
+                        {d.label}: {money(d.annual)} rounded for the year,{" "}
+                        {money(d.adjustment)} rounding difference,{" "}
+                        {money(d.reported)} reported.
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
               {!confirmed && (
                 <div className="text-sm">
                   {result.status === "blocked" ? (
@@ -375,6 +398,12 @@ export function RestoredReports({
             <div className="grid md:grid-cols-2 gap-6">
               {cards.map((card) => {
                 const target = { year, format: card.kind };
+                const issue =
+                  card.kind === "evidence"
+                    ? calculation.evidenceIssue === undefined
+                      ? evidenceIssue(calculation.result)
+                      : calculation.evidenceIssue
+                    : null;
                 const locked =
                   entitlement &&
                   (!entitlement.entitled ||
@@ -398,6 +427,7 @@ export function RestoredReports({
                     </p>
                     {requestedYear === year &&
                       requestedFormat === card.kind &&
+                      !issue &&
                       !(outcome === "returned" && billingError) &&
                       outcome && (
                         <Notice
@@ -416,7 +446,32 @@ export function RestoredReports({
                               : "Checking PDF access."}
                         </Notice>
                       )}
-                    {locked ? (
+                    {issue ? (
+                      <Notice tone="warning">
+                        {issue.message}{" "}
+                        {issue.code === "REPORT_TOO_LARGE" ? (
+                          <>
+                            <a href="#report-csv" className={linkClass}>
+                              Free CSV evidence
+                            </a>
+                            {" · "}
+                            <a href="#report-summary" className={linkClass}>
+                              Summary PDF{" "}
+                              {entitlement?.entitled
+                                ? "(included)"
+                                : `(${ANNUAL_REPORT_PRICE}/year)`}
+                            </a>
+                          </>
+                        ) : (
+                          <Link
+                            className={linkClass}
+                            href={`/dashboard/calculations?year=${year}`}
+                          >
+                            Recalculate this year
+                          </Link>
+                        )}
+                      </Notice>
+                    ) : locked ? (
                       <Link
                         className="button primary"
                         href={billingUrl(target)}

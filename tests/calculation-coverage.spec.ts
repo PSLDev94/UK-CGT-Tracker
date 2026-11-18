@@ -200,7 +200,7 @@ test("editing saved coverage hides old figures until recalculated and isolates t
     page.getByRole("link", { name: "Review account coverage" }),
   ).toHaveAttribute("href", "/dashboard/calculations?year=2024-25");
   await expect(
-    page.getByLabel("Scenario price for " + sale.securityId),
+    page.getByLabel("Your scenario price (£) for " + sale.securityId),
   ).toBeDisabled();
   await expect(
     page.getByRole("heading", { name: "Illustrative Holding Scenarios" }),
@@ -254,7 +254,7 @@ test("missing purchase recovery preserves the year through upload, preview, save
   await expect(page.locator(".net-gain")).toContainText("£5.00");
   await page.goto("/dashboard/tax-loss-harvesting");
   await expect(page.getByText(/Account coverage confirmed/)).toBeVisible();
-  await page.getByLabel("Scenario price for " + sale.securityId).fill("20");
+  await page.getByLabel("Your scenario price (£) for " + sale.securityId).fill("20");
   await expect(
     page.getByRole("heading", { name: "Illustrative Holding Scenarios" }),
   ).toBeVisible();
@@ -302,4 +302,53 @@ test("a rate-limited checkout return explains when to retry and restores the sel
     evidence.getByRole("button", { name: "Download evidence PDF" }),
   ).toBeEnabled();
   expect(checks).toBe(2);
+});
+
+test("scenario prices and their labels are visible without sideways scrolling on narrow screens", async ({ page }) => {
+  await workspace(page, [purchase, sale], true);
+  await page.goto("/dashboard/tax-loss-harvesting");
+  const holding = page.getByRole("region", { name: "Holding scenario" });
+  const price = holding.getByRole("textbox", { name: "Your scenario price (£) for US0378331005" });
+  for (const width of [320, 390, 820]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(price).toBeVisible();
+    const inputRect = await price.boundingBox();
+    const tableRect = await holding.boundingBox();
+    expect(inputRect!.x).toBeGreaterThanOrEqual(tableRect!.x);
+    expect(inputRect!.x + inputRect!.width).toBeLessThanOrEqual(tableRect!.x + tableRect!.width + 1);
+    await expect(holding.locator('label[for]')).toBeVisible();
+  }
+  await price.fill("30");
+  await expect(page.getByText(/Scenario value £30.00/)).toBeVisible();
+  await price.fill("-1");
+  await expect(price).toHaveAccessibleDescription(/Use a non-negative decimal/);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(holding.getByRole("columnheader", { name: "Your scenario price (£)" })).toBeVisible();
+  await expect(holding.locator('label[for]')).toBeHidden();
+});
+
+test("unsaved settings survive staying, and leaving or saving releases the guard", async ({ page }) => {
+  await workspace(page, [], false);
+  await page.goto("/dashboard/settings");
+  const name = page.getByLabel("Full name");
+  const billing = page.getByRole("link", { name: "Manage subscription" });
+  const dialog = page.getByRole("dialog", { name: "Leave settings?" });
+  await name.fill("Edited investor");
+  await billing.click();
+  await expect(dialog.getByRole("button", { name: "Stay here" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(billing).toBeFocused();
+  await expect(name).toHaveValue("Edited investor");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("Profile updated successfully.")).toBeVisible();
+  await billing.click();
+  await expect(page).toHaveURL(/\/billing$/);
+  await page.goBack();
+  await page.getByLabel("New password", { exact: true }).fill("staging-example-123");
+  await billing.click();
+  await dialog.getByRole("button", { name: "Stay here" }).click();
+  await expect(page.getByLabel("New password", { exact: true })).toHaveValue("staging-example-123");
+  await billing.click();
+  await dialog.getByRole("button", { name: "Discard changes and leave" }).click();
+  await expect(page).toHaveURL(/\/billing$/);
 });

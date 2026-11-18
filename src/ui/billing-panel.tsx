@@ -10,6 +10,7 @@ import {
   reportUrl,
   type ReportDestination,
 } from "@/domain/reports/destination";
+import type { ReportIssue } from "@/domain/reports/eligibility";
 import type { BillingStatus } from "@/server/billing";
 import { api, ApiError } from "./api";
 import { Button, Notice } from "./primitives";
@@ -28,7 +29,11 @@ const labels: Record<string, string> = {
 };
 type Outcome = "returned" | "cancelled" | "portal" | null;
 type Action = "status" | "checkout" | "portal";
-type Status = BillingStatus & { returnReport?: ReportDestination | null };
+type Status = BillingStatus & {
+  returnReport?: ReportDestination | null;
+  checkedReport?: ReportDestination | null;
+  reportIssue?: ReportIssue | null;
+};
 
 // Only a random navigation namespace is kept in the tab. The selected year and
 // document stay in an owner-bound HttpOnly cookie on the billing API.
@@ -60,6 +65,17 @@ export function BillingPanel({
   const [signIn, setSignIn] = useState(false);
   const controller = useRef<AbortController | null>(null);
   const destination = target ?? (outcome ? status?.returnReport : null);
+  const targetYear = target?.year,
+    targetFormat = target?.format;
+  const statusTarget = useCallback(
+    () => ({
+      ...(targetYear && targetFormat
+        ? { year: targetYear, format: targetFormat }
+        : {}),
+      ...(outcome ? { returning: true } : {}),
+    }),
+    [targetYear, targetFormat, outcome],
+  );
   const acceptStatus = useCallback(
     (confirmed: Status) => {
       setStatus(confirmed);
@@ -91,7 +107,7 @@ export function BillingPanel({
         if (action === "status") {
           const confirmed = await api<Status>(
             "/api/v2/billing",
-            { action, tab },
+            { action, tab, ...statusTarget() },
             request.signal,
           );
           if (request.signal.aborted) return;
@@ -114,7 +130,30 @@ export function BillingPanel({
         }
       } catch (e) {
         if (request.signal.aborted) return;
-        showError(e);
+        if (
+          action === "checkout" &&
+          report &&
+          e instanceof ApiError &&
+          [
+            "REPORT_TOO_LARGE",
+            "REPORT_NEEDS_REFRESH",
+            "REPORT_UNAVAILABLE",
+            "PENDING_IMPORTS",
+          ].includes(e.code)
+        ) {
+          const issue = {
+            code: e.code as ReportIssue["code"],
+            message: e.message,
+          };
+          setStatus(
+            (previous) =>
+              previous && {
+                ...previous,
+                checkedReport: report,
+                reportIssue: issue,
+              },
+          );
+        } else showError(e);
       } finally {
         if (controller.current === request) {
           controller.current = null;
@@ -122,14 +161,14 @@ export function BillingPanel({
         }
       }
     },
-    [acceptStatus, showError],
+    [acceptStatus, showError, statusTarget],
   );
   useEffect(() => {
     const request = new AbortController();
     controller.current = request;
     api<Status>(
       "/api/v2/billing",
-      { action: "status", tab: billingTab() },
+      { action: "status", tab: billingTab(), ...statusTarget() },
       request.signal,
     )
       .then((confirmed) => {
@@ -145,7 +184,7 @@ export function BillingPanel({
         }
       });
     return () => controller.current?.abort();
-  }, [acceptStatus, showError]);
+  }, [acceptStatus, showError, statusTarget]);
   function userAction(action: Action, report?: ReportDestination | null) {
     if (controller.current && !controller.current.signal.aborted) return;
     setBusy(action);
@@ -157,6 +196,10 @@ export function BillingPanel({
     outcome === "returned" && status?.status === "none" && !status.needsReview;
   const canCheckout =
     status &&
+    (!destination ||
+      (status.checkedReport?.year === destination.year &&
+        status.checkedReport.format === destination.format &&
+        !status.reportIssue)) &&
     !awaiting &&
     !status.needsReview &&
     ["none", "canceled", "incomplete_expired"].includes(status.status);
@@ -188,6 +231,34 @@ export function BillingPanel({
               ? "CGT summary PDF"
               : "Calculation evidence PDF"}
           </p>
+        )}
+        {destination && status?.reportIssue && (
+          <Notice tone="warning">
+            {status.reportIssue.message}{" "}
+            {status.reportIssue.code === "REPORT_TOO_LARGE" && (
+              <>
+                <Link
+                  className="underline"
+                  href={`/dashboard/reports?year=${destination.year}#report-csv`}
+                >
+                  Free CSV evidence
+                </Link>
+                {" · "}
+                <Link
+                  className="underline"
+                  href={reportUrl({
+                    year: destination.year,
+                    format: "summary",
+                  })}
+                >
+                  Summary PDF{" "}
+                  {status.entitled
+                    ? "(included)"
+                    : `(${ANNUAL_REPORT_PRICE}/year)`}
+                </Link>
+              </>
+            )}
+          </Notice>
         )}
         {error && <Notice tone="error">{error}</Notice>}
         {signIn && (

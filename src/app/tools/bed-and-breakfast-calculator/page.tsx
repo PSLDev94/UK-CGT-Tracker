@@ -7,6 +7,7 @@ import { Calculator, ArrowRight, AlertCircle, CheckCircle } from "lucide-react";
 import { PublicNav } from "@/components/public-nav";
 import { CalculatorFields } from "@/components/calculator-fields";
 import { PublicFooter } from "@/components/public-footer";
+import { money } from "@/ui/format";
 
 export default function BedAndBreakfastCalculatorPage() {
   const [sellDate, setSellDate] = useState("");
@@ -19,6 +20,7 @@ export default function BedAndBreakfastCalculatorPage() {
     isMatch: boolean;
     daysBetween: number;
     matchedQty: Decimal;
+    remainingSaleQty: Decimal;
     proceeds: Decimal;
     cost: Decimal;
     gainLoss: Decimal;
@@ -70,7 +72,15 @@ export default function BedAndBreakfastCalculatorPage() {
     const cost = matchedQty.mul(bPrice);
     const gainLoss = proceeds.minus(cost);
 
-    setResult({ isMatch, daysBetween, matchedQty, proceeds, cost, gainLoss });
+    setResult({
+      isMatch,
+      daysBetween,
+      matchedQty,
+      remainingSaleQty: sQty.minus(matchedQty),
+      proceeds,
+      cost,
+      gainLoss,
+    });
   };
 
   const faqLd = {
@@ -407,12 +417,12 @@ export default function BedAndBreakfastCalculatorPage() {
                       Matched Quantity
                     </p>
                     <p className="text-xl font-bold text-gray-900">
-                      {result.matchedQty.toString()} shares
+                      {result.matchedQty.toFixed()} shares
                     </p>
                   </div>
                   <div className="bg-white rounded-xl p-4 border">
                     <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-                      Sale Proceeds
+                      Proceeds on matched shares
                     </p>
                     <p className="text-xl font-bold text-gray-900">
                       £{result.proceeds.toFixed(2)}
@@ -433,10 +443,18 @@ export default function BedAndBreakfastCalculatorPage() {
                     <p
                       className={`text-xl font-bold ${result.gainLoss.gte(0) ? "text-green-700" : "text-red-600"}`}
                     >
-                      {result.gainLoss.gte(0) ? "+" : ""}£
-                      {result.gainLoss.toFixed(2)}
+                      {result.gainLoss.gte(0) ? "+" : ""}
+                      {money(result.gainLoss.toString())}
                     </p>
                   </div>
+                  {result.remainingSaleQty.gt(0) && (
+                    <p className="sm:col-span-2 text-sm text-gray-700">
+                      The result covers the matched shares only. For the
+                      remaining {result.remainingSaleQty.toFixed()}{" "}
+                      {result.remainingSaleQty.eq(1) ? "share" : "shares"} sold,
+                      check other eligible purchases and the Section 104 pool.
+                    </p>
+                  )}
                 </div>
               )}
             </div>

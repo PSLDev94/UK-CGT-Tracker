@@ -3,7 +3,7 @@ import { Metadata } from "next";
 export const metadata: Metadata = {
   title: "UK CGT Allowance Checker 2025-26 — How Much Have You Used?",
   description:
-    "Check how much of your £3,000 CGT annual exempt amount you've used this tax year. Enter your gains and losses to see your position.",
+    "Estimate CGT on ordinary shares for 2025–26 if you qualify for the £3,000 annual exempt amount. Check when gains need reporting to HMRC.",
   alternates: {
     canonical: "https://www.cgttracker.com/tools/cgt-allowance-checker",
   },

@@ -1,9 +1,9 @@
 import type Decimal from 'decimal.js'
 import { calendarDate, decimal, Money, plusDays, TAX_YEARS, type TaxYear } from '../values'
-import type { Calculation, CalculationIssue, Disposal, Match, OpeningPool, Trade } from './types'
+import type { Calculation, CalculationIssue, Disposal, Match, OpeningPool, PoolMovement, Trade } from './types'
 import { missingAcquisitionGuidance } from './types'
 
-export const ENGINE_VERSION = '2.0.0-alpha.1'
+export const ENGINE_VERSION = '2.0.0-alpha.2'
 
 interface DailySide {
   quantity: Decimal
@@ -92,6 +92,11 @@ export function calculateGains(
   const disposals: Disposal[] = []
   const issues: CalculationIssue[] = []
   const pools: Calculation['pools'] = []
+  const poolMovements: PoolMovement[] = []
+  let annualProceeds = new Money(0)
+  let annualCosts = new Money(0)
+  let annualGains = new Money(0)
+  let annualLosses = new Money(0)
   for (const [securityId, dayMap] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
     const days = [...dayMap.values()].sort((a, b) => a.date.localeCompare(b.date))
     for (const day of days) {
@@ -114,19 +119,32 @@ export function calculateGains(
     const initial = opening.get(securityId)
     let quantity = new Money(initial?.quantity ?? 0)
     let cost = new Money(initial?.costGBP ?? 0)
+    function movement(date: string, kind: PoolMovement['kind'], quantityChange: Decimal, costChange: Decimal, sourceIds: string[]) {
+      poolMovements.push({
+        securityId, date, kind, sourceIds,
+        quantityChange: quantityChange.toString(),
+        costChangeGBP: costChange.toString(),
+        quantityAfter: quantity.toString(),
+        costAfterGBP: cost.toString(),
+      })
+    }
+    if (initial) movement(initial.asOf, 'opening', quantity, cost, [])
     // Pool state is at the requested tax-year end (or history cutoff), never
     // accidentally at the end of all supplied future transactions.
     for (const day of days.filter(day => day.date <= cutoff)) {
       if (day.buy.remaining.gt(0)) {
-        cost = cost.plus(day.buy.value.times(day.buy.remaining).div(day.buy.quantity))
+        const addedCost = day.buy.value.times(day.buy.remaining).div(day.buy.quantity)
+        cost = cost.plus(addedCost)
         quantity = quantity.plus(day.buy.remaining)
+        movement(day.date, 'acquisition', day.buy.remaining, addedCost, day.buy.ids)
       }
       if (day.sell.quantity.isZero()) continue
       const pooled = Money.min(quantity, day.sell.remaining)
       if (pooled.gt(0)) {
-        const pooledCost = cost.times(pooled).div(quantity)
+        const pooledCost = pooled.eq(quantity) ? cost : cost.times(pooled).div(quantity)
         quantity = quantity.minus(pooled)
         cost = cost.minus(pooledCost)
+        movement(day.date, 'disposal', pooled.neg(), pooledCost.neg(), day.sell.ids)
         day.sell.remaining = day.sell.remaining.minus(pooled)
         day.cost = day.cost.plus(pooledCost)
         day.matches.push({ rule: 'SECTION_104', quantity: pooled.toString(), costGBP: pooledCost.toString() })
@@ -137,7 +155,13 @@ export function calculateGains(
         quantity: day.sell.remaining.toString(),
         message: missingAcquisitionGuidance,
       })
-      if (day.date >= year.start) disposals.push({
+      if (day.date < year.start) continue
+      const exactGain = day.sell.value.minus(day.cost)
+      annualProceeds = annualProceeds.plus(day.sell.value)
+      annualCosts = annualCosts.plus(day.cost)
+      if (exactGain.isNegative()) annualLosses = annualLosses.plus(exactGain.abs())
+      else annualGains = annualGains.plus(exactGain)
+      disposals.push({
         securityId, date: day.date, sourceIds: [...day.sell.ids], quantity: day.sell.quantity.toString(),
         proceedsGBP: day.sell.value.toFixed(2), allowableCostGBP: missing ? null : day.cost.toFixed(2),
         gainGBP: missing ? null : day.sell.value.toDP(2).minus(day.cost.toDP(2)).toFixed(2),
@@ -153,7 +177,11 @@ export function calculateGains(
   return {
     engineVersion: ENGINE_VERSION, taxYear: options.taxYear, historyThrough, requiredHistoryThrough,
     poolAsOf: cutoff, status: issues.length ? 'blocked' : historyThrough < requiredHistoryThrough ? 'provisional' : 'complete',
-    disposals, pools, issues,
+    disposals, pools, poolMovements, issues,
+    ...(!issues.length && { annualBeforeDisposalRounding: {
+      proceedsGBP: annualProceeds.toFixed(2), allowableCostsGBP: annualCosts.toFixed(2),
+      gainsGBP: annualGains.toFixed(2), lossesGBP: annualLosses.toFixed(2), netGainGBP: annualGains.minus(annualLosses).toFixed(2),
+    } }),
     summary: issues.length ? null : {
       proceedsGBP: sum(disposals.map(d => d.proceedsGBP)).toFixed(2),
       allowableCostsGBP: sum(disposals.map(d => d.allowableCostGBP!)).toFixed(2),

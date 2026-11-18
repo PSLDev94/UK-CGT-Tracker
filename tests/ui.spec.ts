@@ -5,7 +5,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { readFileSync } from "node:fs";
 import { reviewCsv, tradesFromReview } from "../src/domain/imports/review";
 import { pageForReviewIndex, reviewPage } from "../src/server/workspace-api";
-import { longFreetradeStatement } from "./helpers/freetrade-statement";
+import { longFreetradeStatement, mixedFreetradeStatement } from "./helpers/freetrade-statement";
 import { calculateGains } from "../src/domain/cgt/calculate";
 import type { Overview, Preview } from "../src/ui/workspace-types";
 
@@ -189,11 +189,9 @@ async function mockWorkspace(
           },
         });
       case "import-detail":
-        return route.fulfill({json: {page: 1, pageSize: 25, total: 3, records: [
-          {record: 1, status: "accepted", reason: "Share purchase"},
-          {record: 2, status: "accepted", reason: "Share sale"},
-          {record: 3, status: "excluded", reason: "Cash dividend"},
-        ]}});
+        return route.fulfill({json: {page: 1, pageSize: 25, legacy: false, total: wholeReview?.counts.total ?? 0,
+          records: currentPreview?.review.records.map(({ record, status, reason, tradeDetail }) => ({ record, status, reason, tradeDetail })) ?? [],
+        }});
       case "add-account":
         state.accounts.push({
           id: accountId,
@@ -274,10 +272,10 @@ async function mockWorkspace(
             id: draftId,
             account_id: accountId,
             status: "committed",
-            record_count: 3,
-            accepted_count: 2,
-            excluded_count: 1,
-            duplicate_count: 0,
+            record_count: wholeReview!.counts.total,
+            accepted_count: wholeReview!.counts.accepted,
+            excluded_count: wholeReview!.counts.excluded,
+            duplicate_count: wholeReview!.counts.duplicate,
             created_at: "2026-11-16T12:00:00Z",
           },
         ];
@@ -490,10 +488,10 @@ test("account → review → conflict → commit → calculate → reverse", asy
   const resultHeading = page.getByRole("heading", {name: "2024-25 share gains"});
   await expect(resultHeading).toBeFocused();
   await expect(resultHeading).toBeInViewport();
-  await page
-    .getByText("2024-09-01 · US0378331005 · £391.00", { exact: true })
-    .click();
-  await expect(page.getByRole("region", {name:"Disposal evidence"}).getByText(/Section 104 pool: 50 shares/)).toBeVisible();
+  const disposal = page.locator("details:visible")
+    .filter({ has: page.locator("summary").filter({ hasText: "US0378331005" }) });
+  await disposal.locator("summary").click();
+  await expect(disposal.getByText(/Section 104 pool: 50 shares/)).toBeVisible();
   await page.screenshot({
     path: ".private/screenshots/calculation-desktop.png",
     fullPage: true,
@@ -507,7 +505,7 @@ test("account → review → conflict → commit → calculate → reverse", asy
   ).toEqual([]);
   await navigateWorkspace(page, "Import history");
   await page.getByText("View import details", {exact:true}).click();
-  await expect(page.getByText("Cash dividend")).toBeVisible();
+  await expect(page.getByText(/CASH_DIVIDEND: excluded from share gains/)).toBeVisible();
   await page
     .getByRole("button", { name: "Reverse import", exact: true })
     .click();
@@ -816,8 +814,8 @@ test("restored tools handle band boundaries, oversells and same-day matching", a
   page,
 }) => {
   await page.goto("/tools/cgt-allowance-checker");
-  await page.getByLabel("Total gains so far").fill("10000");
-  await page.getByLabel("Total losses so far").fill("1000");
+  await page.getByLabel("Total gains for 2025–26").fill("10000");
+  await page.getByLabel("Total allowable losses for 2025–26").fill("1000");
   await page.getByLabel("Taxable income after").fill("36700");
   await expect(page.getByText("£1,380.00", { exact: true })).toBeVisible();
   await page.getByLabel("Taxable income after").fill("-1");
@@ -934,7 +932,7 @@ test("restored reports export saved evidence and settings retain edits after fai
   await page.goto("/dashboard/tax-loss-harvesting");
   await expect(page.getByText(/Snapshot at/)).toBeVisible();
   const price = page.getByLabel(
-    `Scenario price for ${result.pools[0]!.securityId}`,
+    `Your scenario price (£) for ${result.pools[0]!.securityId}`,
   );
   await price.fill("1");
   await expect(
@@ -1030,6 +1028,50 @@ test("a long import opens its late blocker from page one and returns to the repa
   await expect(page.getByText(/Details checked for record 202/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Save 201 transactions" })).toBeEnabled();
   expect(calls).not.toContain("import-history");
+});
+
+test("a source-wide blocker leads before twenty contract notes on another page", async ({ page }) => {
+  const { state, calls } = await mockWorkspace(page, { account: true });
+  state.accounts[0]!.broker = "freetrade";
+  await page.goto("/dashboard/upload");
+  await page.getByLabel("CSV file", { exact: true }).setInputFiles({
+    name: "mixed-freetrade.csv", mimeType: "text/csv", buffer: Buffer.from(mixedFreetradeStatement()),
+  });
+  await page.getByRole("checkbox", { name: /For a native broker export/ }).check();
+  await page.getByRole("button", { name: "Review file", exact: true }).click();
+  await expect(page.getByText(/1 source record prevents this file from being saved/)).toContainText("20 records");
+  await expect(page.getByRole("status").filter({ hasText: /Record 102:.*STOCK_SPLIT/ })).toBeVisible();
+  await page.getByRole("button", { name: "Review record 102", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Review record 102" })).toBeFocused();
+  await expect(page.getByRole("link", { name: "contact support", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check and save supporting details" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Back to file review" }).click();
+  await expect(page.getByText("Page 2 of 2", { exact: true })).toBeVisible();
+  await expect(page.getByText(/101 source records/)).toBeVisible();
+  expect(calls).not.toContain("commit-import");
+});
+
+test("IBKR cash and execution references match between the preview and the receipt", async ({ page }) => {
+  const { state } = await mockWorkspace(page, { account: true });
+  state.accounts[0]!.broker = "ibkr";
+  await page.goto("/dashboard/upload");
+  await page.getByLabel("CSV file", { exact: true }).setInputFiles("tests/fixtures/brokers/ibkr-flex-gbp.csv");
+  await page.getByRole("checkbox", { name: /For a native broker export/ }).check();
+  await page.getByRole("button", { name: "Review file", exact: true }).click();
+  async function checkTradeDetails() {
+    for (const [record, amounts] of [[2, ["£500.00", "£5.50", "−£505.50", "12345"]], [3, ["£200.00", "£2.00", "£198.00", "12346"]]] as const) {
+      const summary = page.getByText("Trade details for record " + record, { exact: true });
+      await summary.click();
+      for (const amount of amounts) await expect(summary.locator("..").getByText(amount, { exact: true })).toBeVisible();
+    }
+  }
+  await checkTradeDetails();
+  await page.getByRole("button", { name: "Save 2 transactions", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Transactions saved", exact: true })).toBeVisible();
+  await page.goto("/dashboard/history");
+  await page.getByText("View import details", { exact: true }).click();
+  await checkTradeDetails();
+  await expect(page.getByRole("button", { name: "Reverse import", exact: true })).toBeVisible();
 });
 
 test("Accounts and Upload skip paginated history and explain a local CSV selection after navigation", async ({ page }) => {
@@ -1324,4 +1366,83 @@ test("pricing serves both sample reports without signing in", async ({
     expect(response.headers()["content-type"]).toContain("application/pdf");
     expect((await response.body()).subarray(0, 5).toString()).toBe("%PDF-");
   }
+});
+
+test("oversized evidence shows usable alternatives before payment and after a return", async ({
+  page,
+}) => {
+  const { state } = await mockWorkspace(page, { account: true });
+  const result = calculateGains([], {
+    taxYear: "2024-25",
+    historyThrough: "2025-05-05",
+  });
+  const issue = {
+    code: "REPORT_TOO_LARGE",
+    message:
+      "This calculation exceeds the evidence PDF limit of 5,000 disposal groups or 50,000 matching and pool references.",
+  } as const;
+  state.calculations = [
+    {
+      id: "large",
+      tax_year: "2024-25",
+      result,
+      coverage_confirmed: true,
+      evidenceIssue: issue,
+    },
+  ];
+  let paid = false;
+  await page.route("**/api/v2/billing", (route) => {
+    const input = route.request().postDataJSON();
+    expect(input.action).not.toBe("checkout");
+    return route.fulfill({
+      json: {
+        status: paid ? "active" : "none",
+        entitled: paid,
+        canManage: paid,
+        checkedReport: input.year
+          ? { year: input.year, format: input.format }
+          : null,
+        reportIssue: input.format === "evidence" ? issue : null,
+      },
+    });
+  });
+  await page.goto("/dashboard/reports?year=2024-25&format=evidence");
+  const card = page.locator("#report-evidence");
+  await expect(
+    card.getByText("This calculation exceeds", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    card.getByRole("link", { name: "Get evidence PDF", exact: false }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Download CSV evidence" }),
+  ).toBeVisible();
+  await page.goto("/billing?year=2024-25&format=evidence");
+  await expect(
+    page.getByRole("link", { name: "Free CSV evidence" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Open test checkout" }),
+  ).toHaveCount(0);
+  await page.getByRole("link", { name: "Summary PDF (£49/year)" }).click();
+  await page.getByRole("link", { name: "Get summary PDF · £49/year" }).click();
+  await expect(
+    page.getByRole("button", { name: "Open test checkout" }),
+  ).toBeVisible();
+  paid = true;
+  await page.goto(
+    "/dashboard/reports?year=2024-25&format=evidence&checkout=returned",
+  );
+  await expect(
+    card.getByRole("link", { name: "Summary PDF (included)" }),
+  ).toBeVisible();
+  await expect(
+    card.getByText("Payment confirmed. Your PDF is ready."),
+  ).toHaveCount(0);
+  await expect(
+    card.getByRole("button", { name: "Download evidence PDF" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Download summary PDF" }),
+  ).toBeVisible();
 });

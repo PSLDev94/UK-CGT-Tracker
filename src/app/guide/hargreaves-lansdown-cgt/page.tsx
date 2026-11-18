@@ -15,6 +15,7 @@ export default function HargreavesLansdownCGTPage() {
   return (
     <GuideLayout
       slug="hargreaves-lansdown-cgt"
+      lastUpdated="November 2026"
       edition="HL Fund and Share accounts"
       nextStep={{ href: "/supported-brokers#hl", title: "Check my HL export" }}
       title="Hargreaves Lansdown Capital Gains Tax — How to Calculate It"
@@ -95,8 +96,8 @@ export default function HargreavesLansdownCGTPage() {
 
       <h2>How the S104 Pool Works with HL Purchases</h2>
       <p>
-        Let&apos;s walk through a realistic example using Barclays (BARC)
-        purchased through Hargreaves Lansdown over several years:
+        This example uses three Barclays (BARC) purchases from 2022 to 2025,
+        each with the £11.95 dealing charge in force at the time.
       </p>
 
       <div
@@ -172,11 +173,11 @@ export default function HargreavesLansdownCGTPage() {
 
       <h2>HL Dealing Charges</h2>
       <p>
-        Hargreaves Lansdown charges a flat dealing fee per trade (currently
-        £11.95 for online share deals, with discounts for frequent traders).
-        These fees are an <strong>allowable cost</strong> for CGT purposes and
-        should be included in the{" "}
-        <Link href="/guide/section-104-pool">Section 104 pool</Link> cost.
+        From 1 March 2026, HL reduced its standard online share dealing fee
+        from £11.95 to £6.95. Other rates can apply. Enter the actual dealing
+        charge shown on each contract note. A purchase fee adds to acquisition
+        cost, and a sale fee reduces sale proceeds.{" "}
+        <a href="https://www.hl.co.uk/accounts/fee-changes">See HL’s fee changes</a>.
       </p>
       <p>
         Additionally, UK share purchases incur{" "}

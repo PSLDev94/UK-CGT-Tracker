@@ -75,6 +75,7 @@ async function initialise() {
         config.origin,
         (identity, bucket) =>
           application.workspace.consumeRequest(identity, bucket),
+        (identity, target) => application.workspace.selectedReportIssue(identity, target),
       ),
       webhook: createStripeWebhookHandler(
         billing,

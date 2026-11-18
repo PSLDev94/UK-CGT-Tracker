@@ -87,7 +87,7 @@ describe("billing ownership, retries and reconciliation", () => {
     }), config.origin, async (_identity, bucket) => {
       if (++calls[bucket] > (bucket === "general" ? 60 : 10))
         throw new AppError(429, "TOO_MANY_REQUESTS", "Wait one minute.");
-    });
+    }, async () => null);
     const post = (action: string) => handler(new Request(config.origin + "/api/v2/billing", {
       method: "POST", headers: { origin: config.origin, "content-type": "application/json" },
       body: JSON.stringify({ action }),
@@ -136,6 +136,7 @@ describe("billing ownership, retries and reconciliation", () => {
       }),
       config.origin,
       async () => {},
+      async () => null,
     );
     const request = (body: object, origin = config.origin) =>
       new Request(`${config.origin}/api/v2/billing`, {
@@ -162,7 +163,7 @@ describe("billing ownership, retries and reconciliation", () => {
     let owner = a.identity.ownerId;
     const handler = createBillingHandler(a.billing, async () => ({
       user: { id: owner, emailVerified: true }, session: { expiresAt: new Date(Date.now() + 60000) }
-    }), config.origin, async () => {});
+    }), config.origin, async () => {}, async () => null);
     const post = (body: object, cookie = "") => handler(new Request(config.origin + "/api/v2/billing",{
       method: "POST", headers: {origin: config.origin, "content-type": "application/json", cookie}, body: JSON.stringify(body)
     }));
@@ -177,6 +178,64 @@ describe("billing ownership, retries and reconciliation", () => {
     owner = b.identity.ownerId;
     expect((await (await post({action:"status",tab}, cookie)).json()).returnReport).toBeNull();
     expect((await post({action:"checkout",year:"2024-25",format:"invalid"})).status).toBe(400);
+  });
+  it("preflights the selected PDF on direct entry, Stripe return and immediately before checkout", async () => {
+    const s = await setup();
+    const issue = {
+      code: "REPORT_TOO_LARGE",
+      message: "This evidence report exceeds the limit.",
+    } as const;
+    const check = vi.fn(
+      async (
+        _identity: typeof s.identity,
+        target: { year: string; format: string },
+      ) => (target.format === "evidence" ? issue : null),
+    );
+    const handler = createBillingHandler(
+      s.billing,
+      async () => ({
+        user: { id: s.identity.ownerId, emailVerified: true },
+        session: { expiresAt: new Date(Date.now() + 60000) },
+      }),
+      config.origin,
+      async () => {},
+      check,
+    );
+    const post = async (body: object, cookie = "") =>
+      handler(
+        new Request(config.origin + "/api/v2/billing", {
+          method: "POST",
+          headers: {
+            origin: config.origin,
+            "content-type": "application/json",
+            cookie,
+          },
+          body: JSON.stringify(body),
+        }),
+      );
+    const target = { year: "2024-25", format: "evidence" };
+    expect(
+      await (await post({ action: "status", ...target })).json(),
+    ).toMatchObject({ checkedReport: target, reportIssue: issue });
+    expect((await post({ action: "checkout", ...target })).status).toBe(409);
+    expect(s.gateway.createCheckout).not.toHaveBeenCalled();
+    const allowed = await post({
+      action: "checkout",
+      ...target,
+      format: "summary",
+    });
+    expect(allowed.status).toBe(200);
+    const cookie = allowed.headers.get("set-cookie")!.split(";")[0]!;
+    expect(
+      await (await post({ action: "status", returning: true }, cookie)).json(),
+    ).toMatchObject({
+      checkedReport: { ...target, format: "summary" },
+      reportIssue: null,
+    });
+    s.state.subscriptions = [active()];
+    expect(
+      await (await post({ action: "status", ...target })).json(),
+    ).toMatchObject({ entitled: true, reportIssue: issue });
   });
   it("keeps provider idempotency keys after a provider failure", async () => {
     const s = await setup();

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Header } from "@/ui/header";
+export const metadata = { title: "Page unavailable" };
+
 export default function NotFound() {
   return (
     <>
