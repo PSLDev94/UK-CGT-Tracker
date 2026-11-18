@@ -29,7 +29,7 @@ Supporting details are stored with the draft, reviewed again at commit and retai
 - Current ownership, published revision and absence of pending previews are checked before export.
 - Incomplete results remain downloadable as explicitly marked drafts; unresolved values are never replaced with zero.
 - Over 5,000 disposal groups: use the full CSV and summary PDF instead of an unbounded evidence PDF.
-- All nine supported broker-format fixtures now exercise persisted CSV and both PDF export paths, including blocked/stale/reversed states. These use synthetic provider entitlements; hosted paid-account qualification remains pending.
+- All nine supported broker-format fixtures now exercise persisted CSV and both PDF export paths, including blocked/stale/reversed states. A verified staging account also completed sandbox checkout and downloaded both PDFs showing the expected £5.25 net gain.
 - These are calculation reports, not completed SA108 forms or a personal tax-liability calculation. Independent UK tax review remains required.
 
 ## Business decisions supplied by the owner
@@ -51,7 +51,8 @@ PSL Digital; support@cgttracker.com; not VAT-registered; retain £49/year, no VA
 - Real or anonymised broker exports covering historical/current variants, especially AJ Bell and IBKR sectioned statements; synthetic tests cannot establish 100% broker compatibility.
 - Independent UK tax review of engine, unsupported scope, rounding and report interpretation.
 - Final privacy/retention/consumer terms, business-address disclosure and cancellation/refund review. Owner asked to omit the address; UK online-selling guidance generally requires an address before sales. This is unresolved, not silently waived.
-- Mapped-user renewal/3DS/dispute/provider-recovery and paid-PDF qualification, monitoring and hosted encrypted backup schedule/restore verification. Provider-only sandbox annual renewal, declined renewal/recovery, and rejected/completed 3DS challenge passed on 17 November; those synthetic customers have no application mapping. R2 14-day staging retention is saved, but worker credentials and deployment remain pending. Support inbox delivery was confirmed by the owner on 17 November. Read-only live Stripe inspection returned no subscriptions or payment intents (both lists complete); this is scoped to the connected existing live account.
+- Mapped-user renewal, 3DS, disputes and provider recovery. Provider-only sandbox tests covered annual renewal, decline and recovery, and rejected and completed 3DS challenges. The verified staging account passed initial checkout and paid PDF downloads on 18 November.
+- First scheduled backup and monitored alert delivery. The manual hosted backup, full encrypted readback and isolated PostgreSQL restore passed on 18 November.
 - Production DNS, live Stripe enablement and launch approval.
 
 Sources: [UK online-selling guidance](https://www.gov.uk/online-and-distance-selling-for-businesses/online-selling), [consumer pre-contract information](https://www.legislation.gov.uk/uksi/2013/3134/schedule/2), [IBKR Flex trade semantics](https://www.ibkrguides.com/reportingreference/reportguide/tradesfq.htm). The implementation evidence and remaining gates must be reviewed together.

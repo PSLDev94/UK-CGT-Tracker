@@ -1,6 +1,6 @@
 # Separate encrypted database backups
 
-Prepared 17 November 2026. **Worker deployment and hosted recovery qualification remain pending.** The owner chose a separate backup service instead of a Railway Pro upgrade. R2 storage is activated and the private EU bucket exists. Production launch remains blocked on credential setup, a successful scheduled run and an isolated restore rehearsal.
+On 18 November 2026 the staging worker backed up the hosted database to private EU R2. The manual run passed ciphertext readback and the downloaded archive restored into an isolated PostgreSQL 18 cluster. Scheduled-run observation and operator alert delivery are pending. See [the restore results](REVIEW_OPERATIONS.md#18-november-2026-staging-qualification).
 
 ## Concrete service design
 
@@ -39,6 +39,6 @@ Run this command hourly from a separately monitored scheduler. Configure an exte
 
 The S3 operations used are listed in [Cloudflare's compatibility reference](https://developers.cloudflare.com/r2/api/s3/api/).
 
-The owner activated R2 on 17 November 2026. The private staging bucket was created with EU jurisdiction; its endpoint uses `<account>.eu.r2.cloudflarestorage.com`. The owner approved the staged worker deployment and 14-day retention, and retention is saved. The two bucket credential variables, recovery-key escrow confirmation and first hosted backup are still pending; deployment approval must not be confused with a successful backup. Published Standard allowances: 10 GB-month storage, 1 million Class A and 10 million Class B operations per month; excess usage is billed. Daily full-object readback counts toward requests, storage and Railway network usage. Set account usage alerts and review backup sizes before production.
+The owner activated R2 on 17 November 2026. The private staging bucket was created with EU jurisdiction; its endpoint uses `<account>.eu.r2.cloudflarestorage.com`. The owner approved the staged worker deployment and 14-day retention, and retention is saved. The owner completed credential setup and recovery-key storage on 18 November. Published Standard allowances: 10 GB-month storage, 1 million Class A and 10 million Class B operations per month; excess usage is billed. Daily full-object readback counts toward requests, storage and Railway network usage. Set account usage alerts and review backup sizes before production.
 
 Sources: [R2 pricing](https://developers.cloudflare.com/r2/pricing/), [R2 S3 client setup](https://developers.cloudflare.com/r2/examples/aws/aws-sdk-js-v3/), [PostgreSQL pg_dump](https://www.postgresql.org/docs/18/app-pgdump.html), [predefined read roles](https://www.postgresql.org/docs/18/predefined-roles.html).
