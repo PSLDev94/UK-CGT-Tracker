@@ -65,3 +65,17 @@ The spreadsheet and both PDFs agreed with the screen on £37.00 proceeds and £4
 A native Interactive Brokers Flex preview retained its quantities, commission and taxes across devices. Mobile WebKit repaired the last execution in a 201-record Freetrade statement from the first page and preserved £1,000.00 consideration and £4.50 fees. An unsupported corporate action remained blocked with instructions for the investor.
 
 At 767, 768 and 800 CSS pixels the Accounts heading started 102 pixels down. At 801 it started 33 pixels down alongside the sidebar. Upload selectors measured 44.8 pixels high in mobile WebKit. Twenty-eight desktop and mobile axe scans across 14 public and signed-in routes returned zero detected WCAG A/AA violations.
+
+## Impeccable follow-up on 18 November 2026
+
+Staging application commits `c154f6e` and `e58daf1` implement the assessment. The second commit keeps related source references together in the PDF and removes duplicate reference blocks. The final staging sample fits on two pages and contains all seven example executions. The existing design, page URLs and £49 annual sandbox plan were retained.
+
+| Customer task | Result |
+|---|---|
+| Understand the filing guidance | Desktop Chromium and mobile WebKit passed the public-tool checks, including Self Assessment registration, the £50,000 proceeds boundary, separate loss-claim guidance, fractional pool balances and partial 30-day matches. Guide lines measured a median of 74 characters on desktop and 47 on mobile. |
+| Decide whether to repair a file | The real 101-row Freetrade preview showed the stock split on page two before asking for the 20 repairable FX trades. IBKR consideration, fees, cash and execution references appeared on both devices. Receipts for all six brokers opened on each browser, including reversed imports and the statement references on assisted imports. |
+| Choose and buy an available report | Automated cases exercised both sides of the 5,000-group and 50,000-reference limits, the selected report, direct Billing, API checkout and the return journey. A hosted request for an unavailable year returned 409 before issuing a Stripe URL. The exercise used an existing sandbox subscription. |
+| Trace a gain or loss | The older £5.25 gain retained its original amounts and gained the verified purchase and sale references on both devices. Fresh assisted and native uploads from AJ Bell, HL, ii and Trading 212 produced £37 proceeds, £40 costs, £3 gains, £6 losses and a £3 net loss. Independent readers checked the signed CSV, summary PDF and detailed PDF on both devices. The missing AJ Bell purchase withheld the total until supplied. |
+| Use the workspace on a phone | The scenario price was visible without sideways scrolling at 320 and 390 pixels. Staying on Settings retained the edit and explicitly discarding it reached Billing. The review covered 35 routes and states per browser, with zero automated accessibility violations across the 70 scans. |
+
+The rounding example and professional sign-off field are in [the tax review pack](TAX_REVIEW.md). Broker exercises used synthetic statements. Production deployment and live payments still require a separate decision.

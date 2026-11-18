@@ -29,6 +29,20 @@ Files for inspection: `src/domain/cgt/calculate.ts`, `src/domain/cgt/types.ts`, 
 
 Pre-1982 basis adjustments, employee share schemes, funds/ETFs with distributions or reporting-income adjustments, reorganisations/splits/rights issues, short positions, options and other derivatives, crypto, gifts/transfers requiring market valuation and specialist residency/capacity cases have not been certified. Unknown source activity blocks the file; removing an inconvenient row is not an approved repair. AJ Bell's documented assisted history and older candidate headers still require broker-issued export validation; configured IBKR Flex support does not cover arbitrary sectioned Activity Statements.
 
+## Fractional pool rounding decision for review
+
+The staging evidence PDF, CSV and Reports screen include an annual reconciliation when summing the individual rounded disposals differs from rounding once for the year. The pool ledger retains its calculation precision. This example is reproducible in `tests/reports.test.ts` in the test “reconstructs partial and closed pools and explains every penny of disposal rounding”.
+
+Buy three shares for £10 in one purchase. After the 30-day window, sell one share on each of three separate days for £5 each, with no fees and no other trades. The reported cost for each disposal is £3.33. The pool closes with zero shares and zero cost.
+
+| Measure | Rounded once for the year | Effect of rounding each disposal | Published total |
+|---|---:|---:|---:|
+| Proceeds | £15.00 | £0.00 | £15.00 |
+| Allowable costs | £10.00 | −£0.01 | £9.99 |
+| Net gain | £5.00 | +£0.01 | £5.01 |
+
+The reviewer should record which figure the investor should use for UK reporting, the authority for that treatment and any required change to the annual or per-disposal presentation. Review the same decision for losses, partial disposals and transactions spanning a tax-year boundary. HMRC's worked example illustrates how to carry the remaining pooled cost forward after a partial disposal. [HMRC HS284, example 3](https://assets.publishing.service.gov.uk/media/69c14ad87e02b81c0d1c7669/HS284-Example-3-2026.pdf)
+
 ## Sign-off record (open)
 
 Record reviewer name/qualification, exact commit, source statements reviewed, independently calculated results, identified exceptions and release decision. No independent tax review has been obtained yet. Do not replace this with a test-suite pass or describe the product as HMRC-approved.
