@@ -310,7 +310,9 @@ export async function reportPdf(
   }
 
   line(`${r.taxYear}  ${title}`, true, 19, ink, "H1");
-  if (r.summary) {
+  if (!r.disposals.length) {
+    line("No disposals in this tax year", true, 17);
+  } else if (r.summary) {
     const net = r.summary.netGainGBP;
     line(`${netOutcome(net)}  ${pounds(net.replace(/^-/, ""))}`, true, 22);
   } else {

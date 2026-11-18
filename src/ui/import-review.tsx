@@ -154,6 +154,12 @@ export function ImportReviewPanel({
                   : next ? `Record ${next.record}: ${next.reason}` : "This file cannot be saved yet. Check the original export and keep all source rows in the file."}
             </Notice>
           )}
+          {review.status === "ready" && !!preview.affectedReportYears?.length && (
+            <Notice tone="warning">
+              <strong>After saving, recalculate {new Intl.ListFormat("en-GB").format(preview.affectedReportYears)}.</strong>{" "}
+              New trades can change which purchases match a sale. Downloads for these years need an up-to-date calculation.
+            </Notice>
+          )}
           <div className="actions">
             {review.status === "ready" && (
               <Button busy={busy} onClick={onCommit}>

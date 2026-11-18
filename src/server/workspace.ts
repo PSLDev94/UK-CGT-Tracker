@@ -169,6 +169,18 @@ async function invalidate(tx: Connection, portfolioId: string): Promise<void> {
   );
 }
 
+async function publishedReportYears(tx: Connection, portfolioId: string) {
+  const rows = await query<{ tax_year: string }>(
+    tx,
+    `SELECT p.tax_year FROM cgt.published_calculations p
+     JOIN cgt.calculation_runs r ON r.id=p.run_id
+     JOIN cgt.portfolios f ON f.id=p.portfolio_id AND f.revision=r.portfolio_revision
+     WHERE p.portfolio_id=$1 ORDER BY p.tax_year DESC`,
+    [portfolioId],
+  );
+  return rows.map((row) => row.tax_year);
+}
+
 async function preview(
   tx: Connection,
   a: Account,
@@ -254,15 +266,33 @@ export class Workspace {
     });
   }
 
-  async importDetail(identity: Identity, importId: string, page: number) {
+  async importDetail(identity: Identity, importId: string, page: number, sourceRecord?: number) {
     if (!Number.isSafeInteger(page) || page < 1 || page > 100000)
       throw new AppError(
         400,
         "INVALID_PAGE",
         "Choose a valid source-row page.",
       );
-    const start = (page - 1) * 25;
+    requireUuid(importId);
+    if (sourceRecord !== undefined && (!Number.isSafeInteger(sourceRecord) || sourceRecord < 1))
+      throw new AppError(400, "INVALID_RECORD", "Choose a valid source record.");
     return this.db.run(identity, async (tx) => {
+      if (sourceRecord !== undefined) {
+        // Archived receipts may contain only included trades, with gaps in their record numbers.
+        const position = await query<{ offset: number | null }>(
+          tx,
+          `SELECT CASE WHEN jsonb_array_length(i.record_receipts) > 0 THEN
+            (SELECT (n - 1)::int FROM jsonb_array_elements(i.record_receipts) WITH ORDINALITY AS r(row, n)
+             WHERE (row->>'record')::int = $2 LIMIT 1)
+            WHEN EXISTS (SELECT 1 FROM cgt.transactions WHERE import_id = i.id AND source_record = $2)
+            THEN (SELECT count(*)::int FROM cgt.transactions WHERE import_id = i.id AND source_record < $2)
+            END AS "offset" FROM cgt.imports i WHERE i.id = $1`,
+          [importId, sourceRecord],
+        );
+        if (position[0]?.offset == null) throw missing();
+        page = Math.floor(position[0].offset / 25) + 1;
+      }
+      const start = (page - 1) * 25;
       const receipt = (
         await query<{
           total: number;
@@ -329,6 +359,7 @@ export class Workspace {
     identity: Identity,
     includeImportCount = false,
     includeReportEligibility = false,
+    receiptId?: string,
   ) {
     return this.db.run(identity, async (tx) => {
       // Unique owner index serialises concurrent first visits; no advisory key collisions.
@@ -350,6 +381,28 @@ export class Workspace {
         `SELECT id, account_id, status, record_count, accepted_count, excluded_count,
         duplicate_count, created_at, reversed_at, reversal_reason FROM cgt.imports ORDER BY created_at DESC, id DESC LIMIT 100`,
       );
+      // Read only the requested receipt. Its saved trades also cover older, paginated imports.
+      const savedReceipt = receiptId
+        ? (await query(
+            tx,
+            `SELECT i.id, i.account_id, i.accepted_count,
+              COALESCE((
+                SELECT jsonb_agg(jsonb_build_object(
+                  'year', start_year::text || '-' || right((start_year + 1)::text, 2),
+                  'count', sale_count) ORDER BY start_year DESC)
+                FROM (
+                  SELECT extract(year FROM t.trade_date)::int -
+                    CASE WHEN to_char(t.trade_date, 'MMDD') < '0406' THEN 1 ELSE 0 END AS start_year,
+                    count(*)::int AS sale_count
+                  FROM cgt.transactions t
+                  WHERE t.import_id = i.id AND t.active AND t.side = 'SELL'
+                  GROUP BY 1
+                ) sales
+              ), '[]'::jsonb) AS "disposalYears"
+             FROM cgt.imports i WHERE i.id = $1 AND i.status = 'committed'`,
+            [requireUuid(receiptId)],
+          ))[0] ?? null
+        : null;
       // The Accounts summary includes older imports beyond the recent list.
       const importCount =
         includeImportCount && imports.length === 100
@@ -361,22 +414,32 @@ export class Workspace {
             )[0]!.count
           : imports.length;
       const runs = await query<
-        EvidenceRun & {
+        (EvidenceRun & {
           id: string;
           tax_year: string;
           status: string;
           history_through: string;
           coverage_confirmed: boolean;
           created_at: string;
-        }
+        }) | { id: null; tax_year: string }
       >(
         tx,
-        `SELECT r.id, r.tax_year, r.status, r.history_through, ${includeReportEligibility ? "r.result" : "r.result - 'poolMovements'"} AS result,
+        `SELECT r.id, years.tax_year, r.status, r.history_through, ${includeReportEligibility ? "r.result" : "r.result - 'poolMovements'"} AS result,
         r.portfolio_id, r.portfolio_revision, r.input_digest, r.coverage_confirmed, r.coverage_accounts, r.created_at
-        FROM cgt.published_calculations p JOIN cgt.calculation_runs r ON r.id = p.run_id ORDER BY r.tax_year DESC`,
+        FROM (SELECT DISTINCT tax_year FROM cgt.calculation_runs WHERE portfolio_id=$1) years
+        LEFT JOIN cgt.published_calculations p ON p.portfolio_id=$1 AND p.tax_year=years.tax_year
+        LEFT JOIN cgt.calculation_runs r ON r.id=p.run_id
+          AND r.portfolio_revision=(SELECT revision FROM cgt.portfolios WHERE id=$1)
+        ORDER BY years.tax_year DESC`,
+        [portfolios[0]!.id],
       );
       const calculations = [];
+      const staleReportYears: string[] = [];
       for (const run of runs) {
+        if (run.id === null) {
+          staleReportYears.push(run.tax_year);
+          continue;
+        }
         if (includeReportEligibility) await enrichReportHistory(tx, run);
         const availability = includeReportEligibility
           ? { evidenceIssue: evidenceIssue(run.result) }
@@ -412,9 +475,11 @@ export class Workspace {
         portfolio: portfolios[0]!,
         accounts,
         imports,
+        ...(receiptId && { savedReceipt }),
         ...(includeImportCount && { importCount }),
         drafts,
         calculations,
+        staleReportYears,
       };
     });
   }
@@ -456,9 +521,15 @@ export class Workspace {
   async selectedReportIssue(
     identity: Identity,
     target: ReportDestination,
+    purpose: "purchase" | "download" = "download",
   ): Promise<ReportIssue | null> {
     try {
       const saved = await this.currentSnapshot(identity, { year: target.year });
+      if (purpose === "purchase" && !saved.result.disposals.length)
+        return {
+          code: "NO_DISPOSALS",
+          message: `There are no saved disposals in ${target.year}. Check the tax year or upload a file containing sales before buying a PDF.`,
+        };
       return target.format === "evidence" ? evidenceIssue(saved.result) : null;
     } catch (error) {
       if (
@@ -627,6 +698,7 @@ export class Workspace {
         accountId: a.id,
         revision: p.revision,
         reviewVersion: 0,
+        affectedReportYears: await publishedReportYears(tx, p.id),
         review,
       };
     });
@@ -698,6 +770,7 @@ export class Workspace {
         accountId: a.id,
         revision: p.revision,
         reviewVersion: draft.review_version,
+        affectedReportYears: await publishedReportYears(tx, p.id),
         review,
       };
     });
@@ -774,6 +847,7 @@ export class Workspace {
         accountId: a.id,
         revision: p.revision,
         reviewVersion: next,
+        affectedReportYears: await publishedReportYears(tx, p.id),
         broker: a.broker,
         review,
       };
@@ -900,6 +974,7 @@ export class Workspace {
           accountId: a.id,
           revision: p.revision,
           reviewVersion: draft.review_version,
+          affectedReportYears: await publishedReportYears(tx, p.id),
           review,
         };
       }
@@ -909,6 +984,7 @@ export class Workspace {
           accountId: a.id,
           revision: p.revision,
           reviewVersion: draft.review_version,
+          affectedReportYears: await publishedReportYears(tx, p.id),
           review,
         };
       const c = review.counts;

@@ -81,6 +81,18 @@ describe("auditable report exports", () => {
     expect(legacyCsv).toContain('"Matched acquisition cost","52.50"');
     expect(legacyCsv).toContain("Recalculate this year");
   });
+  it("identifies a year without disposals in the CSV and both PDFs", async () => {
+    const saved = {
+      ...snapshot,
+      result: calculateGains([], { taxYear: "2024-25", historyThrough: "2025-05-05" }),
+    };
+    expect(reportCsv(saved)).toContain("No disposals in this tax year");
+    for (const evidence of [false, true]) {
+      const text = reportPageText(await PDFDocument.load(await reportPdf(saved, evidence)));
+      expect(text).toContain("No disposals in this tax year");
+      expect(text).not.toContain("Break-even");
+    }
+  });
   it.each([
     { name: "gain", proceeds: [15], gains: ["5.00"], net: "5.00" },
     { name: "loss", proceeds: [5], gains: ["-5.00"], net: "-5.00" },

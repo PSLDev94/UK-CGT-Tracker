@@ -138,6 +138,7 @@ export function BillingPanel({
             "REPORT_TOO_LARGE",
             "REPORT_NEEDS_REFRESH",
             "REPORT_UNAVAILABLE",
+            "NO_DISPOSALS",
             "PENDING_IMPORTS",
           ].includes(e.code)
         ) {
@@ -235,6 +236,11 @@ export function BillingPanel({
         {destination && status?.reportIssue && (
           <Notice tone="warning">
             {status.reportIssue.message}{" "}
+            {status.reportIssue.code === "NO_DISPOSALS" && (
+              <Link className="underline" href={`/dashboard/reports?year=${destination.year}#report-csv`}>
+                Review the year and free CSV evidence
+              </Link>
+            )}
             {status.reportIssue.code === "REPORT_TOO_LARGE" && (
               <>
                 <Link

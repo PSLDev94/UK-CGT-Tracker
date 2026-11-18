@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { Money } from "@/domain/values";
 import { money } from "@/ui/format";
-import { ArrowRight, CheckCircle, AlertTriangle, XCircle } from "lucide-react";
+import { CheckCircle, AlertTriangle, XCircle } from "lucide-react";
+import { CalculatorUploadLink } from "@/components/calculator-upload-link";
 import { PublicNav } from "@/components/public-nav";
 import { CalculatorFields } from "@/components/calculator-fields";
 import { CgtReportingGuidance } from "@/components/cgt-reporting-guidance";
@@ -20,7 +21,7 @@ export default function CGTAllowanceCheckerPage() {
   const [taxBand, setTaxBand] = useState<"basic" | "higher">("basic");
 
   const [taxableIncome, setTaxableIncome] = useState("");
-  const valid = (v: string) => /^\d{1,12}(\.\d{1,8})?$/.test(v);
+  const valid = (v: string) => /^\d{1,12}(\.\d{1,2})?$/.test(v);
   const gainsInvalid = gains !== "" && !valid(gains);
   const lossesInvalid = losses !== "" && !valid(losses);
   const hasInput =
@@ -215,8 +216,8 @@ export default function CGTAllowanceCheckerPage() {
           )}
           {(gainsInvalid || lossesInvalid || incomeInvalid) && (
             <p id="allowance-input-error" role="alert" className="px-6 pb-6 text-red-700">
-              Enter non-negative amounts with up to 12 whole digits and 8
-              decimal places.
+              Enter non-negative amounts in pounds and pence, with up to 12 whole
+              digits and 2 decimal places.
             </p>
           )}
           {/* Results */}
@@ -335,12 +336,7 @@ export default function CGTAllowanceCheckerPage() {
             Import supported broker records to calculate your share gains and
             losses.
           </p>
-          <Link
-            href="/signup"
-            className="inline-flex items-center bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-medium hover:bg-blue-700 transition-colors"
-          >
-            Upload your CSV free <ArrowRight className="ml-2 w-5 h-5" />
-          </Link>
+          <CalculatorUploadLink />
         </section>
       </main>
 

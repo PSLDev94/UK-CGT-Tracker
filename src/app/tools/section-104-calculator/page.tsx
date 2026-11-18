@@ -2,11 +2,12 @@
 
 import { useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { BarChart3, Plus, Trash2, ArrowRight, Calculator } from "lucide-react";
+import { BarChart3, Plus, Trash2, Calculator } from "lucide-react";
 import type Decimal from "decimal.js";
 import { Money } from "@/domain/values";
 import { money } from "@/ui/format";
 import { SaleAmounts } from "@/ui/sale-amounts";
+import { CalculatorUploadLink } from "@/components/calculator-upload-link";
 import { PublicNav } from "@/components/public-nav";
 import { CalculatorFields } from "@/components/calculator-fields";
 import { PublicFooter } from "@/components/public-footer";
@@ -552,12 +553,7 @@ export default function Section104CalculatorPage() {
             Import supported ordinary-share trades, confirm your history and
             review each disposal against its matched acquisitions.
           </p>
-          <Link
-            href="/signup"
-            className="inline-flex items-center bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-medium hover:bg-blue-700 transition-colors"
-          >
-            Create a free account <ArrowRight className="ml-2 w-5 h-5" />
-          </Link>
+          <CalculatorUploadLink />
         </section>
       </main>
 

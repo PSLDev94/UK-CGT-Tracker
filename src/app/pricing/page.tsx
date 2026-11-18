@@ -18,9 +18,9 @@ export default async function PricingPage() {
         id="main"
         className="flex-1 flex flex-col items-center pt-16 px-4 pb-20"
       >
-        <div className="max-w-3xl mx-auto text-center">
-          <h1 className="text-4xl font-extrabold text-gray-900 mb-6">
-            Simple, transparent pricing
+        <div className="w-full max-w-3xl mx-auto text-center [overflow-wrap:anywhere]">
+          <h1 className="text-4xl text-balance hyphens-auto font-extrabold text-gray-900 mb-6">
+            Simple pricing
           </h1>
           <p className="text-xl text-gray-600 mb-10">
             Import and calculate for free. Download PDF reports for {ANNUAL_REPORT_PRICE} per year.

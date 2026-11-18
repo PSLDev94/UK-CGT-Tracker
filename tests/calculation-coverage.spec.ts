@@ -31,6 +31,47 @@ const purchase: Trade = {
 };
 const cutoff = "2025-05-05";
 
+test("saved receipts offer only their disposal years and preserve an explicit different year", async ({ page }) => {
+  const { state } = await workspace(page, [], true);
+  state.savedReceipt = {
+    id: "receipt", account_id: account.id, accepted_count: 4,
+    disposalYears: [{ year: "2024-25", count: 2 }, { year: "2023-24", count: 1 }],
+  };
+  await page.goto("/dashboard/upload?saved=receipt&year=2025-26");
+  const years = page.getByRole("list", { name: "Tax years with saved sales" });
+  await expect(years).toContainText("2024-25 · 2 sales");
+  await expect(years).toContainText("2023-24 · 1 sale");
+  await expect(page.getByText("You previously selected 2025-26. This import contains no sales in that year.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Return to 2025-26 calculation" })).toHaveAttribute("href", "/dashboard/calculations?year=2025-26");
+  await years.getByRole("link", { name: "Calculate gains for 2023-24" }).click();
+  await expect(page.getByLabel("Tax year", { exact: true })).toHaveValue("2023-24");
+  state.savedReceipt.disposalYears = [];
+  await page.goto("/dashboard/upload?saved=receipt");
+  await expect(page.getByText(/This file added purchases only/)).toBeVisible();
+  await expect(page.getByRole("link", { name: /Calculate gains for/ })).toHaveCount(0);
+});
+
+test("Reports distinguishes no disposals from a real break-even sale before offering PDFs", async ({ page }) => {
+  const { state } = await workspace(page, [purchase], true);
+  let entitled = false;
+  await page.route("**/api/v2/billing", (route) => route.fulfill({
+    json: { status: entitled ? "active" : "none", entitled },
+  }));
+  await page.goto("/dashboard/reports?year=2024-25");
+  const summary = page.getByRole("region", { name: "Calculation summary" });
+  await expect(summary.getByText("No disposals in this tax year", { exact: true })).toBeVisible();
+  await expect(summary.getByRole("button", { name: "Download CSV evidence" })).toBeVisible();
+  await expect(page.locator("#report-summary, #report-evidence")).toHaveCount(0);
+  entitled = true;
+  await page.reload();
+  await expect(page.locator("#report-summary").getByRole("button", { name: /Download/ })).toBeVisible();
+  entitled = false;
+  state.calculations[0]!.result = calculateGains([purchase, { ...sale, considerationGBP: "25" }], { taxYear: "2024-25", historyThrough: cutoff });
+  await page.reload();
+  await expect(summary.getByText("Break-even £0.00", { exact: true })).toBeVisible();
+  await expect(page.locator("#report-summary").getByRole("link", { name: /Get summary PDF/ })).toBeVisible();
+});
+
 async function workspace(page: Page, trades: Trade[], confirmed: boolean) {
   const run = (year: TaxYear, date: string, ids: string[]) => ({
     id: "run-" + year,
@@ -82,6 +123,7 @@ async function workspace(page: Page, trades: Trade[], confirmed: boolean) {
           body.confirmedAccountIds,
         );
         state.calculations = [saved];
+        state.staleReportYears = state.staleReportYears?.filter((year) => year !== body.taxYear);
         return route.fulfill({
           json: { runId: saved.id, result: saved.result },
         });
@@ -105,6 +147,7 @@ async function workspace(page: Page, trades: Trade[], confirmed: boolean) {
           draftId: "recovery",
           accountId: account.id,
           revision: 1,
+          affectedReportYears: state.calculations.map((c) => c.tax_year),
           review: reviewPage(review, 1),
         };
         return route.fulfill({ json: preview });
@@ -114,6 +157,7 @@ async function workspace(page: Page, trades: Trade[], confirmed: boolean) {
       case "commit-import":
         trades.push(...importedTrades);
         state.drafts = [];
+        state.staleReportYears = state.calculations.map((c) => c.tax_year);
         state.calculations = [];
         state.imports = [
           {
@@ -127,6 +171,7 @@ async function workspace(page: Page, trades: Trade[], confirmed: boolean) {
             duplicate_count: 0,
           },
         ];
+        state.savedReceipt = { ...state.imports[0]!, disposalYears: [] };
         return route.fulfill({
           json: { outcome: "committed", importId: "saved" },
         });
@@ -233,12 +278,15 @@ test("missing purchase recovery preserves the year through upload, preview, save
   });
   await page.getByRole("button", { name: "Review file", exact: true }).click();
   await expect(page).toHaveURL(/draft=recovery&year=2024-25/);
+  await expect(page.getByText("After saving, recalculate 2024-25.")).toBeVisible();
   await page
     .getByRole("button", { name: "Save 1 transaction", exact: true })
     .click();
   await expect(page).toHaveURL(/saved=saved&year=2024-25/);
+  await expect(page.getByRole("region", { name: "Reports to recalculate" })
+    .getByRole("link", { name: "Recalculate 2024-25" })).toHaveAttribute("href", "/dashboard/calculations?year=2024-25");
   await page
-    .getByRole("link", { name: "Calculate gains", exact: true })
+    .getByRole("link", { name: "Return to 2024-25 calculation", exact: true })
     .click();
   await expect(page.getByLabel("Tax year", { exact: true })).toHaveValue(
     "2024-25",
@@ -258,6 +306,39 @@ test("missing purchase recovery preserves the year through upload, preview, save
   await expect(
     page.getByRole("heading", { name: "Illustrative Holding Scenarios" }),
   ).toBeVisible();
+});
+
+test("Reports keeps year-specific recovery after an import on another device and a fresh sidebar visit", async ({ page }) => {
+  const { state } = await workspace(page, [purchase, sale], true);
+  await page.route("**/api/v2/billing", (route) => route.fulfill({ json: { status: "active", entitled: true } }));
+  await page.route("**/api/v2/reports", (route) => route.fulfill({
+    status: 404, json: { error: { code: "REPORT_UNAVAILABLE", message: "The calculation has changed." } },
+  }));
+  await page.goto("/dashboard/reports?year=2024-25");
+  const summary = page.getByRole("region", { name: "Calculation summary" });
+  await expect(summary).toBeVisible();
+  const published = state.calculations[0]!;
+  state.calculations = [];
+  state.staleReportYears = ["2025-26", "2024-25"];
+  await page.getByRole("button", { name: "Download CSV evidence" }).click();
+  const recovery = page.getByRole("region", { name: "Reports to recalculate" });
+  for (const year of state.staleReportYears) {
+    await expect(recovery.getByRole("link", { name: "Recalculate " + year })).toHaveAttribute("href", "/dashboard/calculations?year=" + year);
+  }
+  await expect(summary).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /download.*(csv|pdf)/i })).toHaveCount(0);
+  await page.goto("/dashboard/reports");
+  await expect(page.getByLabel("Tax year")).toHaveValue("2025-26");
+  await expect(page.getByText("There are no saved calculations yet.")).toHaveCount(0);
+  await page.getByLabel("Tax year").selectOption("2024-25");
+  await expect(page.getByRole("heading", { name: "Reports to recalculate" })).toBeVisible();
+  state.calculations = [published];
+  state.staleReportYears = ["2025-26"];
+  await page.reload();
+  await expect(summary).toBeVisible();
+  await expect(recovery.getByRole("link")).toHaveCount(1);
+  await recovery.getByRole("link", { name: "Recalculate 2025-26" }).click();
+  await expect(page.getByLabel("Tax year")).toHaveValue("2025-26");
 });
 
 test("a rate-limited checkout return explains when to retry and restores the selected paid PDF", async ({
@@ -447,4 +528,42 @@ test("a fee-bearing sale reconciles across Calculations and Reports, including l
   await expect(summary).toContainText("Recalculate this year to include them.");
   await expect(summary.getByText("Selling costs", { exact: true }).locator("..").locator("dd")).toHaveText("Unavailable");
   await expect(summary).toContainText("Net gain £33.00");
+});
+
+test("a grouped disposal opens both sales and the matched purchase at their broker receipt rows", async ({ page }) => {
+  const receipt = "70a556e2-626e-4e98-93eb-b0fc68bd3cbe";
+  const trades = [
+    { ...purchase, id: "a".repeat(64), date: sale.date },
+    { ...sale, id: "b".repeat(64) },
+    { ...sale, id: "c".repeat(64) },
+  ];
+  await workspace(page, trades, true);
+  await page.route("**/api/v2/workspace", async (route) => {
+    const body = route.request().postDataJSON();
+    if (body.action === "disposal-sources") {
+      expect(new Set(body.keys)).toEqual(new Set(trades.map((t) => t.id)));
+      return route.fulfill({ json: trades.map((t, i) => ({
+        key: t.id, label: "Synthetic broker", broker: "hl", record: 27 + i,
+        instrument: "Synthetic ordinary share", reference: "trade-" + i,
+        statementReference: "note-" + i, importReference: receipt,
+      })) });
+    }
+    if (body.action === "import-detail") {
+      expect(body.record).toBe(28);
+      expect(body.importId).toBe(receipt);
+      return route.fulfill({ json: { records: [{ record: 28, status: "accepted", reason: "Included sale" }], legacy: false, page: 2, pageSize: 25, total: 28 } });
+    }
+    return route.fallback();
+  });
+  await page.goto("/dashboard/calculations?year=2024-25");
+  const detail = page.locator("details:visible").filter({ has: page.locator("summary", { hasText: sale.securityId }) }).first();
+  await detail.locator("summary").click();
+  await expect(detail.getByText("Matched purchase", { exact: true })).toBeVisible();
+  await expect(detail.getByText("Sale", { exact: true })).toHaveCount(2);
+  await expect(detail).toContainText("Synthetic ordinary share");
+  await expect(detail).toContainText("Statement note-1");
+  await detail.getByRole("link", { name: /record 28$/ }).click();
+  await expect(page.getByRole("heading", { name: "Import receipt" })).toBeVisible();
+  await expect(page.locator("#receipt-record-28")).toBeFocused();
+  await expect(page.getByRole("link", { name: "Back to calculation" })).toHaveAttribute("href", "/dashboard/calculations?year=2024-25");
 });

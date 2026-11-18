@@ -5,6 +5,7 @@ export interface ReportIssue {
     | "REPORT_TOO_LARGE"
     | "REPORT_NEEDS_REFRESH"
     | "REPORT_UNAVAILABLE"
+    | "NO_DISPOSALS"
     | "PENDING_IMPORTS";
   message: string;
 }

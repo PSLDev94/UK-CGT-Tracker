@@ -23,6 +23,10 @@ export function safeReturnPath(value?: string | null): string {
       return "/dashboard";
     const params = new URLSearchParams();
     for (const [key, val] of url.searchParams) {
+      if (url.pathname === "/dashboard/history" && (
+        (key === "receipt" && /^[0-9a-f-]{36}$/i.test(val)) ||
+        (key === "record" && /^[1-9]\d{0,7}$/.test(val))
+      )) params.set(key, val);
       if (
         (url.pathname === "/billing" ||
           url.pathname === "/dashboard/reports") &&

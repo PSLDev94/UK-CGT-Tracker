@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { useHydrated } from "./use-hydrated";
 import { authHref, safeReturnPath } from "./return-path";
 import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
 import { authApi, ApiError } from "./api";
@@ -61,6 +62,7 @@ export function AuthForm({
   verificationNotice?: "failed" | "complete";
 }) {
   const router = useRouter();
+  const ready = useHydrated();
   const destination = safeReturnPath(nextPath);
   const annualBilling = destination.split("?")[0] === "/billing";
   const href = (path: string) => authHref(path, destination);
@@ -266,10 +268,11 @@ export function AuthForm({
         <p>This reset link is missing or invalid.</p>
       ) : (
         <form
+          method="post"
           noValidate
           onSubmit={submit}
           className="form-stack"
-          aria-busy={busy}
+          aria-busy={!ready || busy}
         >
           {mode === "sign-up" && (
             <Field
@@ -312,13 +315,39 @@ export function AuthForm({
               error={errors.confirmation}
             />
           )}
+          {mode === "sign-up" && (
+            <p className="caption">
+              Read our{" "}
+              <Link
+                className="underline"
+                href="/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Privacy policy
+              </Link>{" "}
+              and{" "}
+              <Link
+                className="underline"
+                href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Terms of service
+              </Link>{" "}
+              (open in new tabs).
+            </p>
+          )}
           <Button
             type="submit"
             busy={busy}
-            disabled={mode === "reset" && !!message}
+            disabled={!ready || (mode === "reset" && !!message)}
           >
             {busy ? "Please wait…" : copy[mode].action}
           </Button>
+          <noscript>
+            <p className="caption">Enable JavaScript to use this form.</p>
+          </noscript>
         </form>
       )}
       <div className="actions">

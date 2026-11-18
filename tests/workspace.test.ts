@@ -74,6 +74,34 @@ describe("authenticated PostgreSQL application workflow", () => {
     );
   });
 
+  it("counts only new sales from the requested receipt on either side of 6 April and protects its PDF purchase", async () => {
+    const s = await setup("receipt-year-owner");
+    const other = await setup("receipt-year-other");
+    const [header, buy] = csv.trim().split("\n");
+    const purchase = await prepare(s.user, s.account.id, [header, buy].join("\n"));
+    await workspace.commitImport(s.user, purchase.draftId, purchase.revision);
+    const receipt = async (id: string, user = s.user) =>
+      (await workspace.overview(user, false, false, id)).savedReceipt;
+    expect(await receipt(purchase.draftId)).toMatchObject({ accepted_count: 1, disposalYears: [] });
+    const target = { year: "2024-25", format: "summary" } as const;
+    await workspace.calculate(s.user, {
+      portfolioId: s.portfolio.id, taxYear: target.year, historyThrough: "2025-05-05", confirmedAccountIds: [s.account.id],
+    });
+    for (const format of ["summary", "evidence"] as const) {
+      expect(await workspace.selectedReportIssue(s.user, { ...target, format }, "purchase")).toMatchObject({ code: "NO_DISPOSALS" });
+      expect(await workspace.selectedReportIssue(s.user, { ...target, format }, "download")).toBeNull();
+    }
+    const sale = (id: number, date: string) => `s${id},${date},SELL,US0378331005,1,20,0,GBP,1,ORDINARY_SHARE`;
+    const mixed = await prepare(s.user, s.account.id, [header, buy, sale(1, "2024-04-05"), sale(2, "2024-04-06"), sale(3, "2024-05-07")].join("\n"));
+    await workspace.commitImport(s.user, mixed.draftId, mixed.revision);
+    expect(await receipt(mixed.draftId)).toMatchObject({
+      accepted_count: 3, disposalYears: [{ year: "2024-25", count: 2 }, { year: "2023-24", count: 1 }],
+    });
+    expect(await receipt(mixed.draftId, other.user)).toBeNull();
+    await workspace.reverseImport(s.user, mixed.draftId, "Test receipt reversal");
+    expect(await receipt(mixed.draftId)).toBeNull();
+  });
+
   it("does not read or mutate another user’s accounts, drafts or imports", async () => {
     const a = await setup("alice-workflow");
     const b = await setup("bob-workflow");
@@ -100,6 +128,28 @@ describe("authenticated PostgreSQL application workflow", () => {
       workspace.importDetail(b.user, draft.draftId, 1),
     ).rejects.toMatchObject({ status: 404 });
     expect((await workspace.overview(b.user)).imports).toHaveLength(0);
+  });
+
+  it("opens a linked source record beyond the first receipt page, including legacy imports", async () => {
+    const s = await setup("receipt-record-link");
+    const other = await setup("receipt-record-link-other");
+    const [header, buy] = csv.trim().split("\n");
+    const file = [header, ...Array.from({ length: 32 }, (_, i) => buy!.replace("synthetic-buy", "buy-" + i))].join("\n");
+    const draft = await prepare(s.user, s.account.id, file);
+    await workspace.commitImport(s.user, draft.draftId, draft.revision);
+    const record = draft.review.records[31]!.record;
+    async function verifyLinkedPage() {
+      const receipt = await workspace.importDetail(s.user, draft.draftId, 1, record);
+      expect(receipt.page).toBe(2);
+      expect(receipt.records.find((row) => row.record === record)?.tradeDetail?.executionReference).toBe("buy-31");
+    }
+    await verifyLinkedPage();
+    await expect(workspace.importDetail(other.user, draft.draftId, 1, record)).rejects.toMatchObject({ status: 404 });
+    await expect(workspace.importDetail(s.user, draft.draftId, 1, 900)).rejects.toMatchObject({ status: 404 });
+    await database.pg.exec("RESET ROLE");
+    await database.pg.query("UPDATE cgt.imports SET record_receipts = '[]' WHERE id = $1", [draft.draftId]);
+    await database.pg.exec("SET ROLE cgt_app");
+    await verifyLinkedPage();
   });
 
   it("reconciles every record, commits once and removes the raw CSV", async () => {
@@ -289,6 +339,42 @@ describe("authenticated PostgreSQL application workflow", () => {
         )
       ).outcome,
     ).toBe("committed");
+  });
+
+  it("names reports before saving and preserves recovery per year until that year is recalculated", async () => {
+    const s = await setup("report-year-recovery");
+    const otherDevice = new Workspace(new OwnedDatabase(database.db));
+    const first = await prepare(s.user, s.account.id);
+    expect(first.affectedReportYears).toEqual([]);
+    await workspace.commitImport(s.user, first.draftId, first.revision);
+    const input = {
+      portfolioId: s.portfolio.id, historyThrough: "2026-05-05", confirmedAccountIds: [s.account.id],
+    };
+    const years = ["2025-26", "2024-25"];
+    const oldIds = [];
+    for (const taxYear of years) oldIds.push((await workspace.calculate(s.user, { ...input, taxYear })).runId);
+    const earlier = csv.replaceAll("2024-", "2023-").replaceAll("synthetic-", "earlier-");
+    const addition = await prepare(s.user, s.account.id, earlier);
+    expect(addition.affectedReportYears).toEqual(years);
+    expect((await otherDevice.reviewImport(s.user, addition.draftId)).affectedReportYears).toEqual(years);
+    expect((await workspace.overview(s.user)).staleReportYears).toEqual([]);
+    await otherDevice.discardDraft(s.user, addition.draftId);
+    expect((await workspace.overview(s.user)).calculations.map((c) => c.tax_year)).toEqual(years);
+
+    const retry = await prepare(s.user, s.account.id, earlier);
+    await workspace.commitImport(s.user, retry.draftId, retry.revision);
+    expect(await otherDevice.overview(s.user, false, true)).toMatchObject({
+      calculations: [], staleReportYears: years,
+    });
+    for (const runId of oldIds) {
+      await expect(otherDevice.reportSnapshot(s.user, runId)).rejects.toMatchObject({ code: "REPORT_UNAVAILABLE" });
+    }
+    await otherDevice.calculate(s.user, { ...input, taxYear: "2024-25" });
+    const refreshed = await workspace.overview(s.user);
+    expect(refreshed.staleReportYears).toEqual(["2025-26"]);
+    expect(refreshed.calculations.map((c) => c.tax_year)).toEqual(["2024-25"]);
+    const freshOwner = await owner("report-year-recovery-isolated");
+    expect((await workspace.overview(freshOwner)).staleReportYears).toEqual([]);
   });
 
   it("accepts today in London just after BST midnight but rejects tomorrow", async () => {

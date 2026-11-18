@@ -7,6 +7,7 @@ import { reviewCsv, tradesFromReview } from "../src/domain/imports/review";
 import { pageForReviewIndex, reviewPage } from "../src/server/workspace-api";
 import { longFreetradeStatement, mixedFreetradeStatement } from "./helpers/freetrade-statement";
 import { calculateGains } from "../src/domain/cgt/calculate";
+import { TAX_YEARS } from "../src/domain/values";
 import type { HistoryImport, Overview, Preview } from "../src/ui/workspace-types";
 
 test("billing keeps test status explicit and recovers from interrupted requests", async ({
@@ -279,6 +280,13 @@ async function mockWorkspace(
             created_at: "2026-11-16T12:00:00Z",
           },
         ];
+        state.savedReceipt = {
+          ...state.imports[0]!,
+          disposalYears: Object.entries(TAX_YEARS).map(([year, { start, end }]) => ({
+            year, count: tradesFromReview(wholeReview!).filter((trade) =>
+              trade.side === "SELL" && trade.date >= start && trade.date <= end).length,
+          })).filter(({ count }) => count > 0),
+        };
         state.drafts = [];
         return route.fulfill({
           json: { outcome: "committed", importId: draftId },
@@ -305,6 +313,8 @@ async function mockWorkspace(
         ];
         return route.fulfill({ json: { runId: "result-1", result } });
       }
+      case "disposal-sources":
+        return route.fulfill({ json: [] });
       case "reverse-import": {
         const receipt = state.imports.find((item) => item.id === body.importId)!;
         receipt.status = "reversed";
@@ -494,7 +504,7 @@ test("account → review → conflict → commit → calculate → reverse", asy
   const disposal = page.locator("details:visible")
     .filter({ has: page.locator("summary").filter({ hasText: "US0378331005" }) });
   await disposal.locator("summary").click();
-  await expect(disposal.getByText(/Section 104 pool: 50 shares/)).toBeVisible();
+  await expect(disposal.getByText(/Section 104 pool · 50 shares/)).toBeVisible();
   await page.screenshot({
     path: ".private/screenshots/calculation-desktop.png",
     fullPage: true,
@@ -939,6 +949,9 @@ test("restored reports export saved evidence and settings retain edits after fai
     });
   });
   await page.goto("/dashboard/reports");
+  for (const name of ["Download summary PDF", "Download evidence PDF"]) {
+    await expect(page.getByRole("button", { name, exact: true })).toBeInViewport();
+  }
   const downloaded = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download CSV evidence" }).click();
   const download = await downloaded;
@@ -1281,8 +1294,8 @@ test("phone shows the focused next step after saving and calculating", async ({ 
   const saved = page.getByRole("heading", {name:"Transactions saved"});
   await expect(saved).toBeFocused();
   await expect(saved).toBeInViewport();
-  await page.getByRole("link", {name:"Calculate gains",exact:true}).click();
-  await page.getByLabel("Tax year", {exact:true}).selectOption("2024-25");
+  await page.getByRole("link", {name:"Calculate gains for 2024-25",exact:true}).click();
+  await expect(page.getByLabel("Tax year", {exact:true})).toHaveValue("2024-25");
   await page.getByLabel("History complete through").fill("2025-05-05");
   await page.getByRole("checkbox", {name:"My Invest",exact:true}).check();
   await page.getByRole("button", {name:"Calculate gains",exact:true}).click();
@@ -1416,7 +1429,10 @@ test("oversized evidence shows usable alternatives before payment and after a re
   page,
 }) => {
   const { state } = await mockWorkspace(page, { account: true });
-  const result = calculateGains([], {
+  const trades = tradesFromReview(reviewCsv(csv, {
+    broker: "trading212", accountId, accountType: "GIA", format: "canonical-v1",
+  }));
+  const result = calculateGains(trades, {
     taxYear: "2024-25",
     historyThrough: "2025-05-05",
   });

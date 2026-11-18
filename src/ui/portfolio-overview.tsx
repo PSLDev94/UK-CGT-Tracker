@@ -46,7 +46,8 @@ export function PortfolioOverview({
   return (
     <section className="panel max-w-3xl">
       <h2>{title}</h2>
-      {saved?.summary && !draft && (
+      {saved && !saved.disposals.length && !draft && <p className="font-semibold">No disposals in this tax year</p>}
+      {saved?.summary && saved.disposals.length > 0 && !draft && (
         <p className="text-3xl font-bold text-blue-800 tabular-nums">
           {money(saved.summary.netGainGBP)}{" "}
           <span className="text-sm text-gray-600 font-medium">

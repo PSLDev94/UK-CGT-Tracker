@@ -42,12 +42,16 @@ export function ImportReceiptIdentity({ item }: { item: HistoryImport }) {
 export function ImportHistoryDetail({
   importId,
   children,
+  sourceRecord,
+  initiallyOpen = false,
 }: {
   importId: string;
-  children: ReactNode;
+  children?: ReactNode;
+  sourceRecord?: number;
+  initiallyOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [page, setPage] = useState(1);
+  const [open, setOpen] = useState(initiallyOpen);
+  const [page, setPage] = useState<number | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [error, setError] = useState("");
@@ -55,7 +59,7 @@ export function ImportHistoryDetail({
     if (!open) return;
     const controller = new AbortController();
     workspaceApi<Receipt>(
-      { action: "import-detail", importId, page },
+      { action: "import-detail", importId, page: page ?? 1, record: page === null ? sourceRecord : undefined },
       controller.signal,
     )
       .then((result) => {
@@ -65,7 +69,12 @@ export function ImportHistoryDetail({
         if (!controller.signal.aborted) setError(caught.message);
       });
     return () => controller.abort();
-  }, [open, page, importId, attempt]);
+  }, [open, page, importId, attempt, sourceRecord]);
+  useEffect(() => {
+    if (receipt && sourceRecord !== undefined && page === null) {
+      document.getElementById(`receipt-record-${sourceRecord}`)?.focus();
+    }
+  }, [receipt, sourceRecord, page]);
   const move = (next: number) => {
     setError("");
     setReceipt(null);
@@ -74,6 +83,7 @@ export function ImportHistoryDetail({
   return (
     <details
       className="import-history-detail min-w-0 break-words"
+      open={open}
       onToggle={(e) => setOpen(e.currentTarget.open)}
     >
       <summary>View import details</summary>
@@ -102,6 +112,8 @@ export function ImportHistoryDetail({
                 {receipt.records.map((row) => (
                   <div
                     key={row.record}
+                    id={row.record === sourceRecord ? `receipt-record-${row.record}` : undefined}
+                    tabIndex={row.record === sourceRecord ? -1 : undefined}
                     className="border-b border-gray-200 py-2"
                   >
                     <dt className="font-semibold">
@@ -118,18 +130,18 @@ export function ImportHistoryDetail({
                 <div className="pagination">
                   <Button
                     variant="secondary"
-                    disabled={page === 1}
-                    onClick={() => move(page - 1)}
+                    disabled={receipt.page === 1}
+                    onClick={() => move(receipt.page - 1)}
                   >
                     Previous rows
                   </Button>
                   <span>
-                    Page {page} of {Math.ceil(receipt.total / receipt.pageSize)}
+                    Page {receipt.page} of {Math.ceil(receipt.total / receipt.pageSize)}
                   </span>
                   <Button
                     variant="secondary"
-                    disabled={page * receipt.pageSize >= receipt.total}
-                    onClick={() => move(page + 1)}
+                    disabled={receipt.page * receipt.pageSize >= receipt.total}
+                    onClick={() => move(receipt.page + 1)}
                   >
                     Next rows
                   </Button>

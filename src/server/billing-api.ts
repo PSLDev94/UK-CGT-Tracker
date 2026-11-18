@@ -28,6 +28,7 @@ export function createBillingHandler(
   selectedReportIssue: (
     identity: Awaited<ReturnType<typeof authenticate>>,
     target: ReportDestination,
+    purpose: "purchase" | "download",
   ) => Promise<ReportIssue | null>,
 ) {
   return async (request: Request) => {
@@ -81,18 +82,19 @@ export function createBillingHandler(
           binding === owner ? reportDestination(year, format) : null;
         const checkedReport =
           target ?? (input.returning === true ? returnReport : null);
+        const status = await billing.status(identity);
         return privateResponse({
-          ...(await billing.status(identity)),
+          ...status,
           returnReport,
           checkedReport,
           reportIssue: checkedReport
-            ? await selectedReportIssue(identity, checkedReport)
+            ? await selectedReportIssue(identity, checkedReport, status.entitled ? "download" : "purchase")
             : null,
         });
       }
       if (input.action === "checkout" || input.action === "portal") {
         if (input.action === "checkout" && target) {
-          const issue = await selectedReportIssue(identity, target);
+          const issue = await selectedReportIssue(identity, target, "purchase");
           if (issue) throw new AppError(409, issue.code, issue.message);
         }
         const response = privateResponse(await billing[input.action](identity));

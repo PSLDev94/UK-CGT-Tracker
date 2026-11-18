@@ -21,12 +21,17 @@ export interface SavedImport {
 export interface HistoryImport extends SavedImport {
   firstTrade: Pick<ImportTradeDetail, "date" | "side" | "quantity" | "securityId"> | null;
 }
+export type SavedReceipt = Pick<SavedImport, "id" | "account_id" | "accepted_count"> & {
+  disposalYears: { year: string; count: number }[];
+};
 export interface Overview {
   portfolio: { id: string; name: string; revision: number };
   accounts: BrokerAccount[];
   imports: SavedImport[];
+  savedReceipt?: SavedReceipt | null;
   importCount?: number;
   drafts: { id: string; account_id: string; expires_at: string }[];
+  staleReportYears?: string[];
   calculations: {
     id: string;
     tax_year: string;
@@ -42,6 +47,7 @@ export interface Preview {
   accountId: string;
   revision: number;
   reviewVersion?: number;
+  affectedReportYears?: string[];
   review: Omit<ImportReview, "records"> & {
     records: (ImportRecord & { tradeDetail?: ImportTradeDetail })[];
     page: number;

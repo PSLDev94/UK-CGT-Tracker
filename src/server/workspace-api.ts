@@ -83,9 +83,16 @@ export function createWorkspaceHandler(
         await workspace.consumeRequest(identity, "calculate");
       const text = (name: string) => stringField(input, name);
       switch (input.action) {
+        case "disposal-sources": {
+          const keys = input.keys;
+          if (!Array.isArray(keys) || keys.length > 25 || keys.some((k) => typeof k !== "string" || !k.length || k.length > 128))
+            throw new AppError(400, "INVALID_SOURCE_KEYS", "Choose up to 25 valid source trades.");
+          return privateResponse(await workspace.reportSources(identity, keys));
+        }
         case "import-detail":
           return privateResponse(
-            await workspace.importDetail(identity, text("importId"), Number(input.page ?? 1)),
+            await workspace.importDetail(identity, text("importId"), Number(input.page ?? 1),
+              input.record === undefined ? undefined : Number(input.record)),
           );
         case "import-history":
           return privateResponse(
@@ -95,6 +102,7 @@ export function createWorkspaceHandler(
           const overview = await workspace.overview(
             identity, input.surface === "accounts",
             input.surface === "reports" || input.surface === "calculations",
+            input.surface === "imports" && input.receiptId ? text("receiptId") : undefined,
           );
           if (input.surface === "reports") recordJourney("reports_opened");
           return privateResponse(overview);

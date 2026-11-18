@@ -2,7 +2,7 @@
 import { latestCalculation } from "./latest-calculation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { FileText, Download } from "lucide-react";
+import { Download } from "lucide-react";
 import { api, ApiError, workspaceApi } from "./api";
 import type { Overview } from "./workspace-types";
 import type { BillingStatus } from "@/server/billing";
@@ -15,6 +15,7 @@ import { displayDate, netOutcome } from "./format";
 import type { ReportKind } from "../domain/reports/report";
 import { sa108Collection, sa108Edition } from "@/domain/reports/filing-guidance";
 import { SaleAmounts } from "./sale-amounts";
+import { ReportRecovery } from "./report-recovery";
 
 const cards = [
   {
@@ -22,14 +23,12 @@ const cards = [
     title: "CGT Summary PDF",
     text: "A short statement of your gains, losses, costs and account coverage.",
     name: "summary PDF",
-    icon: FileText,
   },
   {
     kind: "evidence",
     title: "Calculation Evidence PDF",
     text: "Disposals, matching rules, Section 104 pools and traceable transaction references.",
     name: "evidence PDF",
-    icon: FileText,
   },
 ] as const;
 interface Feedback {
@@ -109,7 +108,7 @@ export function RestoredReports({
       .then((d) => {
         if (!controller.signal.aborted) {
           setData(d);
-          setYear(requestedYear || latestCalculation(d.calculations)?.tax_year || "");
+          setYear(requestedYear || latestCalculation(d.calculations)?.tax_year || d.staleReportYears?.[0] || "");
         }
       })
       .catch((e) => {
@@ -136,6 +135,8 @@ export function RestoredReports({
     billingError,
   ]);
   const calculation = data?.calculations.find((c) => c.tax_year === year);
+  const staleYears = data?.staleReportYears ?? [];
+  const reportYears = [...(data?.calculations.map((run) => run.tax_year) ?? []), ...staleYears].sort().reverse();
   const draft = data?.drafts[0];
   const uploadPath = year
     ? `/dashboard/upload?year=${encodeURIComponent(year)}`
@@ -166,6 +167,17 @@ export function RestoredReports({
       });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
+        if (body?.error?.code === "REPORT_UNAVAILABLE") {
+          // Another session may have saved new trades or recalculated this year.
+          setData(null);
+          try {
+            const current = await workspaceApi<Overview>({ action: "overview", surface: "reports" }, controller.signal);
+            if (!controller.signal.aborted) setData(current);
+          } catch {
+            if (!controller.signal.aborted) setError("Your saved reports changed. Reload to see the current years.");
+          }
+          return;
+        }
         setFeedback({
           kind,
           error: true,
@@ -211,19 +223,13 @@ export function RestoredReports({
           <Link className={linkClass} href={draft ? fixPath : uploadPath}>
             Resolve preview
           </Link>
-        ) : feedback.code === "REPORT_UNAVAILABLE" ? (
-          <Link
-            className={linkClass}
-            href={`/dashboard/calculations?year=${encodeURIComponent(year)}`}
-          >
-            Recalculate this year
-          </Link>
         ) : null}
       </Notice>
     );
   }
 
   const result = calculation?.result;
+  const noDisposals = result?.disposals.length === 0;
   const differences = result ? roundingDifferences(result) : [];
   const confirmed =
     calculation?.coverage_confirmed && result?.status === "complete";
@@ -257,7 +263,7 @@ export function RestoredReports({
               id="export-year"
               label="Tax year"
               value={year}
-              disabled={!data.calculations.length || !!busy}
+              disabled={!reportYears.length || !!busy}
               onChange={(e) => {
                 const choice = e.target.value;
                 setYear(choice);
@@ -269,17 +275,18 @@ export function RestoredReports({
                 );
               }}
             >
-              {!calculation && (
+              {!reportYears.includes(year) && (
                 <option value={year}>{year || "No saved calculations"}</option>
               )}
-              {data.calculations.map((c) => (
-                <option key={c.id} value={c.tax_year}>
-                  {c.tax_year}
+              {reportYears.map((optionYear) => (
+                <option key={optionYear} value={optionYear}>
+                  {optionYear}{staleYears.includes(optionYear) ? " · Needs recalculation" : ""}
                 </option>
               ))}
             </SelectField>
           </div>
-          {draft || !calculation ? (
+          <ReportRecovery years={staleYears} draftId={draft?.id} />
+          {(draft || !calculation) && !staleYears.includes(year) ? (
             <Notice tone="warning">
               {draft
                 ? "A saved preview needs your review before reports can be downloaded."
@@ -304,10 +311,18 @@ export function RestoredReports({
                 Last saved calculation · {year}
               </h2>
               <p className="text-xl font-bold tabular-nums">
-                {result.summary
+                {noDisposals
+                  ? "No disposals in this tax year"
+                  : result.summary
                   ? `${netOutcome(result.summary.netGainGBP)} ${money(result.summary.netGainGBP.replace(/^-/, ""))}`
                   : "Total awaiting complete history"}
               </p>
+              {noDisposals && (
+                <p>
+                  The saved history contains no share sales in {year}. Choose the year of your sale
+                  or <Link className={linkClass} href={uploadPath}>upload a file containing sales</Link>.
+                </p>
+              )}
               <p>
                 {confirmed
                   ? "Complete calculation with confirmed account coverage."
@@ -333,7 +348,139 @@ export function RestoredReports({
                   {downloadFeedback("csv")}
                 </div>
               )}
-              {result.summary && (
+              {calculation && !draft && (!noDisposals || entitlement?.entitled) && (
+                <div role="group" aria-label="PDF reports" className="flex flex-wrap items-start gap-x-3 gap-y-2">
+                  {cards.map((card) => {
+                    const target = { year, format: card.kind };
+                    const issue =
+                      card.kind === "evidence"
+                        ? calculation.evidenceIssue === undefined
+                          ? evidenceIssue(calculation.result)
+                          : calculation.evidenceIssue
+                        : null;
+                    const locked =
+                      entitlement &&
+                      (!entitlement.entitled ||
+                        (feedback?.kind === card.kind &&
+                          feedback.code === "SUBSCRIPTION_REQUIRED"));
+                    return (
+                      <section
+                        tabIndex={-1}
+                        id={`report-${card.kind}`}
+                        key={card.kind}
+                        aria-label={card.title}
+                        className="scroll-mt-4 min-w-0 max-w-full"
+                      >
+                        {requestedYear === year &&
+                          requestedFormat === card.kind &&
+                          !issue &&
+                          !(outcome === "returned" && billingError) &&
+                          outcome && (
+                            <Notice
+                              tone={
+                                outcome === "cancelled"
+                                  ? "info"
+                                  : entitlement?.entitled
+                                    ? "success"
+                                    : "info"
+                              }
+                            >
+                              {outcome === "cancelled"
+                                ? "Checkout cancelled. Your report selection has been kept."
+                                : entitlement?.entitled
+                                  ? "Payment confirmed. Your PDF is ready."
+                                  : "Checking PDF access."}
+                            </Notice>
+                          )}
+                        {issue ? (
+                          <Notice tone="warning">
+                            {issue.message}{" "}
+                            {issue.code === "REPORT_TOO_LARGE" ? (
+                              <>
+                                <a href="#report-csv" className={linkClass}>
+                                  Free CSV evidence
+                                </a>
+                                {" · "}
+                                <a href="#report-summary" className={linkClass}>
+                                  Summary PDF{" "}
+                                  {entitlement?.entitled
+                                    ? "(included)"
+                                    : `(${ANNUAL_REPORT_PRICE}/year)`}
+                                </a>
+                              </>
+                            ) : (
+                              <Link
+                                className={linkClass}
+                                href={`/dashboard/calculations?year=${year}`}
+                              >
+                                Recalculate this year
+                              </Link>
+                            )}
+                          </Notice>
+                        ) : locked ? (
+                          <Link
+                            className="button primary"
+                            href={billingUrl(target)}
+                          >
+                            {entitlement.needsReview
+                              ? "Review subscription"
+                              : ![
+                                    "none",
+                                    "canceled",
+                                    "incomplete_expired",
+                                  ].includes(entitlement.status)
+                                ? "Manage PDF access"
+                                : `Get ${card.name} · ${ANNUAL_REPORT_PRICE}/year`}
+                          </Link>
+                        ) : billingError ? (
+                          <>
+                            <Notice tone="warning">
+                              PDF access could not be confirmed. {billingError}
+                            </Notice>
+                            <Button
+                              variant="secondary"
+                              onClick={() => {
+                                setBillingError("");
+                                void checkBilling();
+                              }}
+                            >
+                              Retry PDF access
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            disabled={!!busy || !entitlement}
+                            busy={busy === card.kind}
+                            onClick={() => void download(card.kind)}
+                          >
+                            <Download size={16} aria-hidden="true" />
+                            {busy === card.kind
+                              ? "Preparing report…"
+                              : !entitlement
+                                ? "Checking access…"
+                                : `Download ${card.name}`}
+                          </Button>
+                        )}
+                        {downloadFeedback(card.kind)}
+                      </section>
+                    );
+                  })}
+                </div>
+              )}
+              {!draft && (!noDisposals || entitlement?.entitled) && (
+                <details className="text-sm">
+                  <summary>What each PDF includes</summary>
+                  <dl className="mt-2 space-y-2">
+                    {cards.map((card) => (
+                      <div key={card.kind}>
+                        <dt className="font-semibold">{card.title}</dt>
+                        <dd>{card.text}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </details>
+              )}
+              {result.summary && !noDisposals && (
                 <div className="space-y-3">
                   <SaleAmounts
                     breakdown={result.saleBreakdown}
@@ -420,133 +567,6 @@ export function RestoredReports({
                 <FilingGuidance year={year} />
               </div>
             </section>
-          )}
-          {calculation && !draft && (
-            <div className="grid md:grid-cols-2 gap-6">
-              {cards.map((card) => {
-                const target = { year, format: card.kind };
-                const issue =
-                  card.kind === "evidence"
-                    ? calculation.evidenceIssue === undefined
-                      ? evidenceIssue(calculation.result)
-                      : calculation.evidenceIssue
-                    : null;
-                const locked =
-                  entitlement &&
-                  (!entitlement.entitled ||
-                    (feedback?.kind === card.kind &&
-                      feedback.code === "SUBSCRIPTION_REQUIRED"));
-                return (
-                  <section
-                    tabIndex={-1}
-                    id={`report-${card.kind}`}
-                    key={card.kind}
-                    className="scroll-mt-4 bg-white rounded-xl border p-5 flex flex-col"
-                  >
-                    <card.icon
-                      aria-hidden="true"
-                      size={24}
-                      className="text-blue-600 mb-4"
-                    />
-                    <h2 className="text-lg font-bold mb-2">{card.title}</h2>
-                    <p className="text-sm text-gray-600 mb-5 flex-1">
-                      {card.text}
-                    </p>
-                    {requestedYear === year &&
-                      requestedFormat === card.kind &&
-                      !issue &&
-                      !(outcome === "returned" && billingError) &&
-                      outcome && (
-                        <Notice
-                          tone={
-                            outcome === "cancelled"
-                              ? "info"
-                              : entitlement?.entitled
-                                ? "success"
-                                : "info"
-                          }
-                        >
-                          {outcome === "cancelled"
-                            ? "Checkout cancelled. Your report selection has been kept."
-                            : entitlement?.entitled
-                              ? "Payment confirmed. Your PDF is ready."
-                              : "Checking PDF access."}
-                        </Notice>
-                      )}
-                    {issue ? (
-                      <Notice tone="warning">
-                        {issue.message}{" "}
-                        {issue.code === "REPORT_TOO_LARGE" ? (
-                          <>
-                            <a href="#report-csv" className={linkClass}>
-                              Free CSV evidence
-                            </a>
-                            {" · "}
-                            <a href="#report-summary" className={linkClass}>
-                              Summary PDF{" "}
-                              {entitlement?.entitled
-                                ? "(included)"
-                                : `(${ANNUAL_REPORT_PRICE}/year)`}
-                            </a>
-                          </>
-                        ) : (
-                          <Link
-                            className={linkClass}
-                            href={`/dashboard/calculations?year=${year}`}
-                          >
-                            Recalculate this year
-                          </Link>
-                        )}
-                      </Notice>
-                    ) : locked ? (
-                      <Link
-                        className="button primary"
-                        href={billingUrl(target)}
-                      >
-                        {entitlement.needsReview
-                          ? "Review subscription"
-                          : ![
-                                "none",
-                                "canceled",
-                                "incomplete_expired",
-                              ].includes(entitlement.status)
-                            ? "Manage PDF access"
-                            : `Get ${card.name} · ${ANNUAL_REPORT_PRICE}/year`}
-                      </Link>
-                    ) : billingError ? (
-                      <>
-                        <Notice tone="warning">
-                          PDF access could not be confirmed. {billingError}
-                        </Notice>
-                        <Button
-                          variant="secondary"
-                          onClick={() => {
-                            setBillingError("");
-                            void checkBilling();
-                          }}
-                        >
-                          Retry PDF access
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        disabled={!!busy || !entitlement}
-                        busy={busy === card.kind}
-                        onClick={() => void download(card.kind)}
-                      >
-                        <Download size={16} aria-hidden="true" />
-                        {busy === card.kind
-                          ? "Preparing report…"
-                          : !entitlement
-                            ? "Checking access…"
-                            : `Download ${card.name}`}
-                      </Button>
-                    )}
-                    {downloadFeedback(card.kind)}
-                  </section>
-                );
-              })}
-            </div>
           )}
         </>
       )}

@@ -110,9 +110,24 @@ test("the allowance is available before income and distinguishes a loss, full al
   await gains.fill("2999.99");
   await expect(result.getByText("Approaching allowance limit")).toBeVisible();
   await expect(result.getByText("99% of allowance used")).toBeVisible();
-  await gains.fill("3000");
+  await expect(card("Exemption Remaining")).toContainText("£0.01");
+  await expect(income).toHaveCount(0);
+  await gains.fill("3000.00");
   await expect(result.getByText("Allowance fully used")).toBeVisible();
   await expect(card("Taxable Gain")).toContainText("£0.00");
+
+  await gains.fill("3000.01");
+  await expect(result.getByText(/Over allowance/)).toBeVisible();
+  await expect(card("Taxable Gain")).toContainText("£0.01");
+  await expect(income).toBeEditable();
+  for (const amount of ["2999.999", "3000.001"]) {
+    await gains.fill(amount);
+    await expect(gains).toHaveAccessibleDescription(/pounds and pence/);
+    await expect(gains).toBeFocused();
+    await expect(card("Taxable Gain")).toHaveCount(0);
+    await expect(result.getByText(/% of allowance used/)).toHaveCount(0);
+    await expect(income).toHaveCount(0);
+  }
 
   await gains.fill("4000");
   await expect(card("Taxable Gain")).toContainText("£1,000.00");

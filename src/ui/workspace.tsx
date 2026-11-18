@@ -37,6 +37,8 @@ import {
 } from "./primitives";
 import { ImportHistoryDetail, ImportReceiptIdentity } from "./import-history-detail";
 import { ImportReviewPanel } from "./import-review";
+import { ReportRecovery } from "./report-recovery";
+import { SavedImportNextSteps } from "./saved-import-next-steps";
 import { CalculationResult } from "./calculation-result";
 import { useModal, useNavigationGuard, LeaveDialog } from "./navigation-guard";
 import type { HistoryImport, Overview, Preview } from "./workspace-types";
@@ -115,12 +117,8 @@ function WorkspaceBody({
   if (selectedAccount) uploadParams.set("account", selectedAccount.id);
   const uploadLocation = "/dashboard/upload" + (uploadParams.size ? "?" + uploadParams : "");
   const brokerHelp = "/supported-brokers?" + new URLSearchParams({ from: safeReturnPath(uploadLocation) });
-  const savedImportId = params.get("saved");
-  const justSaved =
-    savedImportId &&
-    data?.imports.find(
-      (item) => item.id === savedImportId && item.status === "committed",
-    );
+  const savedImportId = view === "imports" ? params.get("saved") : null;
+  const justSaved = data?.savedReceipt?.id === savedImportId ? data.savedReceipt : null;
   const [failedDraft, setFailedDraft] = useState<string | null>(null);
   const [previewAttempt, setPreviewAttempt] = useState(0);
   const [previewFile, setPreviewFile] = useState<{
@@ -187,17 +185,17 @@ function WorkspaceBody({
     requestAnimationFrame(() => messageRef.current?.focus());
   }, []);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (receiptId = savedImportId) => {
     const generation = ++reloadGeneration.current;
     const [overview, imports] = await Promise.all([
-      workspaceApi<Overview>({ action: "overview", surface: view }),
+      workspaceApi<Overview>({ action: "overview", surface: view, ...(receiptId && { receiptId }) }),
       view === "history" ? workspaceApi<History>({ action: "import-history", page: historyPage.current }) : null,
     ]);
     if (generation === reloadGeneration.current) {
       setData(overview);
       setHistory(imports);
     }
-  }, [view]);
+  }, [view, savedImportId]);
 
   const initialise = useCallback(() => {
     return authApi<{ user: { name: string } } | null>("get-session")
@@ -647,21 +645,16 @@ function WorkspaceBody({
                     >
                       Transactions saved
                     </h2>
-                    <p>
-                      {justSaved.accepted_count} included in{" "}
-                      {accountName(justSaved.account_id)}. Calculate again to
-                      include these records.
-                    </p>
-                    <div className="actions">
-                      <Link
-                        className="button primary"
-                        href={withRecoveryYear("/dashboard/calculations")}
-                      >
-                        Calculate gains
-                      </Link>
-                      <Link href={withRecoveryYear("/dashboard/upload")}>Add another file</Link>
-                    </div>
+                    <SavedImportNextSteps
+                      receipt={justSaved}
+                      accountName={accountName(justSaved.account_id)}
+                      requestedYear={Object.hasOwn(TAX_YEARS, requestedYear) ? requestedYear : undefined}
+                      uploadPath={withRecoveryYear("/dashboard/upload")}
+                    />
                   </section>
+                )}
+                {justSaved && !requestedDraft && (
+                  <ReportRecovery years={data.staleReportYears ?? []} draftId={data.drafts[0]?.id} />
                 )}
                 {requestedDraft &&
                   preview?.draftId !== requestedDraft &&
@@ -923,7 +916,7 @@ function WorkspaceBody({
                         );
                         setPreview(null);
                         setPreviewFile(null);
-                        await reload();
+                        await reload(result.importId);
                         setMessage(
                           result.outcome === "already_committed"
                             ? "This import was already saved. No duplicate transactions were added."

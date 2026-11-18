@@ -17,7 +17,7 @@ export function ReportPricing({
 }) {
   const signedIn = usePublicAccount();
   return (
-    <div className="grid gap-5 sm:grid-cols-2 text-left">
+    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 text-left [overflow-wrap:anywhere]">
       {[
         {
           paid: false,
@@ -40,7 +40,7 @@ export function ReportPricing({
       ].map((plan) => (
         <div
           key={plan.name}
-          className="flex flex-col rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8"
+          className="flex min-w-0 flex-col rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8"
         >
           <Heading className="mb-3 text-lg font-semibold text-gray-900">
             {plan.name}
@@ -61,7 +61,7 @@ export function ReportPricing({
                   aria-hidden
                   className="mt-0.5 h-5 w-5 shrink-0 text-green-700"
                 />
-                {item}
+                <span className="min-w-0">{item}</span>
               </li>
             ))}
           </ul>

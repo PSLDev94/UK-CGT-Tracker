@@ -73,19 +73,19 @@ export function PublicNav({ backToUpload }: { backToUpload?: string } = {}) {
       aria-label="Main navigation"
       className="border-b sticky top-0 bg-white/80 backdrop-blur-md z-50 transition-all"
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16 items-center">
+      <div className="max-w-7xl mx-auto px-[16px] sm:px-6 lg:px-8">
+        <div className="flex min-h-16 flex-wrap items-center justify-between gap-y-1 py-1">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="bg-blue-600 p-1.5 rounded-lg shadow-sm shadow-blue-200">
-              <PieChart className="w-5 h-5 text-white" strokeWidth={2.5} />
+          <Link href="/" className="flex items-center gap-[10px]">
+            <div className="bg-blue-600 p-[6px] rounded-lg shadow-sm shadow-blue-200">
+              <PieChart className="w-[20px] h-[20px] text-white" strokeWidth={2.5} />
             </div>
             <div className="text-xl font-bold tracking-tight text-gray-900">
               CGT<span className="text-blue-600">Tracker</span>
             </div>
           </Link>
 
-          <div className="flex gap-1 sm:gap-4 items-center">
+          <div className="ml-auto flex min-w-0 max-w-full items-center gap-1 sm:gap-4">
             {/* Free Tools Dropdown — desktop only (hover + click) */}
             <div ref={dropdownRef} className="relative hidden lg:block">
               <button
@@ -163,7 +163,7 @@ export function PublicNav({ backToUpload }: { backToUpload?: string } = {}) {
             {/* Sign up free — always visible */}
             <Link
               href={signedIn ? (backToUpload ?? "/dashboard") : "/signup"}
-              className="min-h-11 inline-flex items-center text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium transition-all shadow-sm hover:shadow active:scale-95"
+              className="min-h-11 min-w-0 inline-flex items-center text-center text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium transition-all shadow-sm hover:shadow active:scale-95"
             >
               {signedIn
                 ? backToUpload
@@ -179,7 +179,7 @@ export function PublicNav({ backToUpload }: { backToUpload?: string } = {}) {
               ref={mobileButton}
               aria-controls="public-mobile"
               onClick={() => setMobileOpen((v) => !v)}
-              className="lg:hidden min-h-11 min-w-11 inline-flex items-center justify-center p-2 text-gray-600 hover:text-gray-900 transition-colors"
+              className="lg:hidden min-h-11 min-w-11 shrink-0 inline-flex items-center justify-center p-2 text-gray-600 hover:text-gray-900 transition-colors"
               aria-label={mobileOpen ? "Close menu" : "Open menu"}
             >
               {mobileOpen ? (
@@ -198,7 +198,7 @@ export function PublicNav({ backToUpload }: { backToUpload?: string } = {}) {
           {/* Panel */}
           <div
             id="public-mobile"
-            className="absolute max-h-[calc(100dvh-4rem)] overflow-y-auto left-0 right-0 top-16 bg-white border-b shadow-lg z-50 lg:hidden animate-slide-down"
+            className="absolute max-h-[calc(100dvh-100%)] overflow-y-auto left-0 right-0 top-full bg-white border-b shadow-lg z-50 lg:hidden animate-slide-down"
           >
             <div className="max-w-7xl mx-auto px-4 py-3">
               {/* Main nav links */}

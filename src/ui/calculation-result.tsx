@@ -5,11 +5,7 @@ import type { Calculation } from "../domain/cgt/types";
 import { missingAcquisitionGuidance } from "../domain/cgt/types";
 import { displayDate, netOutcome } from "./format";
 import { SaleAmounts } from "./sale-amounts";
-const rules = {
-  SAME_DAY: "Same day",
-  THIRTY_DAY: "Within 30 days",
-  SECTION_104: "Section 104 pool",
-};
+import { DisposalDetail } from "./disposal-detail";
 export function CalculationResult({
   result,
   coverage,
@@ -21,6 +17,7 @@ export function CalculationResult({
   confirmedAccounts: string[];
   settingsEdited: boolean;
 }) {
+  const noDisposals = result.disposals.length === 0;
   const savedInputs = (
     <p className="caption">
       Last saved calculation · History through{" "}
@@ -74,7 +71,7 @@ export function CalculationResult({
       {result.status === "provisional" && (
         <Notice tone="warning">
           This is provisional. The year-end look-ahead needs history through{" "}
-          {result.requiredHistoryThrough}.
+          {displayDate(result.requiredHistoryThrough)}.
         </Notice>
       )}
       {!!result.issues.length && (
@@ -99,7 +96,10 @@ export function CalculationResult({
           </Link>
         </Notice>
       )}
-      {result.summary && (
+      {noDisposals && <Notice>
+        <strong>No disposals in this tax year.</strong> Check the tax year or upload the sales you want to calculate.
+      </Notice>}
+      {result.summary && !noDisposals && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           {[
             [
@@ -131,11 +131,11 @@ export function CalculationResult({
       </p>
       <Link
         className={
-          result.status === "blocked" ? "button secondary" : "button primary"
+          noDisposals || result.status === "blocked" ? "button secondary" : "button primary"
         }
         href={"/dashboard/reports?year=" + encodeURIComponent(result.taxYear)}
       >
-        {result.status === "blocked" ? "View draft reports" : "View reports"}{" "}
+        {noDisposals ? "View calculation evidence" : result.status === "blocked" ? "View draft reports" : "View reports"}{" "}
         for {result.taxYear}
       </Link>
       {result.summary && (
@@ -164,10 +164,9 @@ export function CalculationResult({
               No disposals fall in this tax year within the imported history.
             </p>
           )}
-          {result.disposals.map((d, i) => (
-            <details key={`${d.securityId}-${i}`} className="mb-2">
-              <summary className="cursor-pointer">
-                <span className="break-all">{d.securityId}</span> · {d.date}
+          {result.disposals.map((d) => (
+            <DisposalDetail disposal={d} year={result.taxYear} key={`${d.securityId}-${d.date}`} className="mb-2">
+                <span className="break-all">{d.securityId}</span> · {displayDate(d.date)}
                 <br />
                 <strong className="tabular-nums">
                   {money(d.gainGBP)}
@@ -177,22 +176,7 @@ export function CalculationResult({
                   : new Decimal(d.gainGBP).lt(0)
                     ? "loss"
                     : "gain"}
-              </summary>
-              <dl className="my-3 grid grid-cols-2 gap-2 tabular-nums">
-                <dt>Quantity</dt>
-                <dd className="text-right">{d.quantity}</dd>
-              </dl>
-              <SaleAmounts breakdown={d.saleBreakdown} net={d.proceedsGBP} matched={d.allowableCostGBP} />
-              <ul className="match-list">
-                {d.matches.map((m, j) => (
-                  <li key={j}>
-                    {rules[m.rule]}: {m.quantity} shares
-                    {m.acquisitionDate ? " bought " + m.acquisitionDate : ""}.
-                    Cost: {money(m.costGBP)}.
-                  </li>
-                ))}
-              </ul>
-            </details>
+            </DisposalDetail>
           ))}
         </div>
         <div
@@ -228,9 +212,9 @@ export function CalculationResult({
                   </td>
                 </tr>
               ) : (
-                result.disposals.map((d, i) => (
-                  <tr key={`${d.securityId}-${i}`} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap">{d.date}</td>
+                result.disposals.map((d) => (
+                  <tr key={`${d.securityId}-${d.date}`} className="hover:bg-gray-50">
+                    <td className="whitespace-nowrap">{displayDate(d.date)}</td>
                     <td className="font-medium text-gray-900">
                       {d.securityId}
                     </td>
@@ -239,23 +223,9 @@ export function CalculationResult({
                     <td className="number">{d.saleBreakdown ? money(d.saleBreakdown.totalAllowableCostsGBP) : "Unavailable"}</td>
                     <td className="number font-medium">{money(d.gainGBP)}</td>
                     <td>
-                      <details className="border-0 p-0 min-w-56">
-                        <summary>
-                          {d.date} · {d.securityId} · {money(d.gainGBP)}
-                        </summary>
-                        <SaleAmounts breakdown={d.saleBreakdown} net={d.proceedsGBP} matched={d.allowableCostGBP} />
-                        <ul className="match-list mt-3">
-                          {d.matches.map((m, j) => (
-                            <li key={j}>
-                              {rules[m.rule]}: {m.quantity} shares
-                              {m.acquisitionDate
-                                ? ` bought ${m.acquisitionDate}`
-                                : ""}
-                              . Cost: {money(m.costGBP)}.
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
+                      <DisposalDetail disposal={d} year={result.taxYear} className="border-0 p-0 min-w-56">
+                        {displayDate(d.date)} · {d.securityId} · {money(d.gainGBP)}
+                      </DisposalDetail>
                     </td>
                   </tr>
                 ))
@@ -267,7 +237,7 @@ export function CalculationResult({
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
         <div className="px-6 py-4 border-b">
           <h3 className="text-lg font-semibold text-gray-900 m-0">
-            Section 104 Pools at {result.poolAsOf}
+            Section 104 Pools at {displayDate(result.poolAsOf)}
           </h3>
         </div>
         <div

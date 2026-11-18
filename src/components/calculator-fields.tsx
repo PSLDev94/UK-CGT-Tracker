@@ -1,11 +1,7 @@
 "use client";
 
-import { type ReactNode, useSyncExternalStore } from "react";
-
-// The static form must stay read-only until React can retain the first edit.
-const subscribe = () => () => {};
-const clientReady = () => true;
-const serverReady = () => false;
+import type { ReactNode } from "react";
+import { useHydrated } from "@/ui/use-hydrated";
 
 export function CalculatorFields({
   label,
@@ -16,7 +12,7 @@ export function CalculatorFields({
   className: string;
   children: ReactNode;
 }) {
-  const ready = useSyncExternalStore(subscribe, clientReady, serverReady);
+  const ready = useHydrated();
   return (
     <fieldset
       aria-label={label}

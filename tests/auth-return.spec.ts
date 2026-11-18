@@ -32,6 +32,29 @@ test("signup confirmation replaces the form and preserves the requested report",
   await expect(page.getByLabel("Email address")).toBeEditable();
 });
 
+test("the signup form waits for JavaScript before accepting a submission", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext({
+    javaScriptEnabled: false,
+    baseURL,
+  });
+  try {
+    const page = await context.newPage();
+    await page.goto("/signup?next=%2Fdashboard%2Fupload");
+    await expect(page.locator("form")).toHaveAttribute("method", "post");
+    await expect(
+      page.getByRole("button", { name: "Create account" }),
+    ).toBeDisabled();
+    await expect(
+      page.getByText("Enable JavaScript to use this form."),
+    ).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
 test("the missing reset-token screen offers a working recovery path", async ({
   page,
 }) => {
@@ -62,6 +85,25 @@ test("the annual plan offers registration and sign-in with the billing destinati
   await expect(
     page.getByText(/Continue to billing.*£49 per year/),
   ).toBeVisible();
+  const email = page.getByLabel("Email address");
+  const password = page.getByLabel("Password", { exact: true });
+  await email.fill("investor@example.test");
+  await password.fill("example password 123");
+  for (const [name, heading] of [
+    ["Privacy policy", "Privacy & your data"],
+    ["Terms of service", "Service information"],
+  ]) {
+    const popup = page.waitForEvent("popup");
+    await page.getByRole("link", { name }).click();
+    const policyPage = await popup;
+    await expect(
+      policyPage.getByRole("heading", { name: heading }),
+    ).toBeVisible();
+    await policyPage.close();
+    await expect(email).toHaveValue("investor@example.test");
+    await expect(password).toHaveValue("example password 123");
+    expect(new URL(page.url()).searchParams.get("next")).toBe("/billing");
+  }
   await page.goBack();
   await login.click();
   await expect(
@@ -73,6 +115,35 @@ test("the annual plan offers registration and sign-in with the billing destinati
   await expect(
     page.getByRole("link", { name: "Create account" }),
   ).toHaveAttribute("href", "/account/sign-up?next=%2Fbilling");
+});
+
+test("each public calculator carries its upload action through signup and sign-in", async ({
+  page,
+}) => {
+  for (const tool of [
+    "bed-and-breakfast-calculator",
+    "section-104-calculator",
+    "cgt-allowance-checker",
+  ]) {
+    await page.goto("/tools/" + tool);
+    const upload = page.getByRole("link", { name: "Upload your CSV free" });
+    await expect(upload).toHaveAttribute(
+      "href",
+      "/signup?next=%2Fdashboard%2Fupload",
+    );
+    await upload.click();
+    const signIn = page.getByRole("link", { name: "Back to sign in" });
+    await signIn.click();
+    await expect(
+      page.getByRole("heading", { name: "Sign in to your account" }),
+    ).toBeVisible();
+    expect(new URL(page.url()).searchParams.get("next")).toBe(
+      "/dashboard/upload",
+    );
+    await expect(
+      page.getByRole("link", { name: "Need another verification email?" }),
+    ).toHaveAttribute("href", "/account/verify?next=%2Fdashboard%2Fupload");
+  }
 });
 
 test("a protected deep link exposes only the two account choices before sign-in", async ({

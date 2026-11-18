@@ -59,6 +59,7 @@ export function reportCsv(snapshot: ReportSnapshot): string {
   const rows: ReportCell[][] = [
     ["CGT Tracker calculation evidence", reportStatus(snapshot)],
     ["Tax year", r.taxYear],
+    ...(!r.disposals.length ? [["Disposals", "No disposals in this tax year"]] : []),
     ["Calculation reference", snapshot.id],
     ["Input fingerprint", snapshot.input_digest],
     ["Engine", r.engineVersion],
