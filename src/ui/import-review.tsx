@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { ImportDetailsForm } from "./import-details-form";
 import type { SupportingDetails } from "../domain/imports/supporting-details";
 import { Button, Notice } from "./primitives";
@@ -31,7 +32,7 @@ export function ImportReviewPanel({
   expiry?: string;
   broker: string;
   busy: boolean;
-  onPage: (page: number) => void;
+  onPage: (page: number, onLoaded?: () => void) => void;
   onCommit: () => void;
   onDiscard: () => void;
   onDetails: (record: number, details: SupportingDetails) => Promise<void>;
@@ -44,13 +45,11 @@ export function ImportReviewPanel({
   const title = useRef<HTMLHeadingElement>(null);
   const row = review.records.find((r) => r.record === editing);
   const pages = Math.max(1, Math.ceil(review.counts.total / review.pageSize));
-  const next = review.records.find(
-    (r) => r.canSupplyDetails && r.status === "needs_review",
-  );
+  const next = review.nextUnresolved;
   useEffect(() => () => onDirty(false), [onDirty]);
   useEffect(() => {
     title.current?.focus();
-  }, [editing, preview.draftId]);
+  }, [row?.record, preview.draftId]);
   const changeDirty = (value: boolean) => {
     setDirty(value);
     onDirty(value);
@@ -62,7 +61,9 @@ export function ImportReviewPanel({
   return (
     <section className="panel" aria-labelledby="review-title">
       <h2 id="review-title" ref={title} tabIndex={-1}>
-        {row ? `Resolve record ${row.record}` : "Review before saving"}
+        {row
+          ? `${row.canSupplyDetails ? "Resolve" : "Review"} record ${row.record}`
+          : "Review before saving"}
       </h2>
       <p>
         <strong>{fileLabel}</strong> · {accountLabel}
@@ -70,19 +71,30 @@ export function ImportReviewPanel({
       {row ? (
         <>
           <p>{row.reason}</p>
-          <ImportDetailsForm
-            key={row.record}
-            row={row}
-            broker={broker}
-            busy={busy}
-            onDirty={changeDirty}
-            onSave={async (record, details) => {
-              await onDetails(record, details);
-              changeDirty(false);
-              setSaved(record);
-              setEditing(null);
-            }}
-          />
+          {row.canSupplyDetails ? (
+            <ImportDetailsForm
+              key={row.record}
+              row={row}
+              broker={broker}
+              busy={busy}
+              onDirty={changeDirty}
+              onSave={async (record, details) => {
+                await onDetails(record, details);
+                changeDirty(false);
+                setSaved(record);
+                setEditing(null);
+              }}
+            />
+          ) : (
+            <p>
+              Check this record against the original statement and the{" "}
+              <Link href={`/supported-brokers#${broker}`}>
+                broker export instructions
+              </Link>
+              . If you need a replacement export, upload the complete file with
+              every source row.
+            </p>
+          )}
           <Button
             disabled={dirty || busy}
             variant="secondary"
@@ -128,7 +140,7 @@ export function ImportReviewPanel({
                 : review.counts.duplicate === review.counts.total &&
                     review.counts.total > 0
                   ? "Every record in this file was already imported. Discard this preview to keep your existing records."
-                  : "This file cannot be saved yet. Check the unresolved records and the original export. Keep all source rows in the file."}
+                  : next ? `Record ${next.record}: ${next.reason}` : "This file cannot be saved yet. Check the original export and keep all source rows in the file."}
             </Notice>
           )}
           <div className="actions">
@@ -139,8 +151,15 @@ export function ImportReviewPanel({
               </Button>
             )}
             {next && (
-              <Button busy={busy} onClick={() => edit(next.record)}>
-                Resolve record {next.record}
+              <Button
+                busy={busy}
+                onClick={() => {
+                  if (next.page === review.page) edit(next.record);
+                  else onPage(next.page, () => edit(next.record));
+                }}
+              >
+                {next.canSupplyDetails ? "Resolve" : "Review"} record{" "}
+                {next.record}
               </Button>
             )}
             <Button busy={busy} variant="secondary" onClick={onDiscard}>
@@ -208,7 +227,8 @@ export function ImportReviewPanel({
                           {item.trade.quantity} shares · {item.trade.securityId}
                         </p>
                       )}
-                      {item.canSupplyDetails && (
+                      {(item.canSupplyDetails ||
+                        item.status === "needs_review") && (
                         <button
                           type="button"
                           disabled={busy}

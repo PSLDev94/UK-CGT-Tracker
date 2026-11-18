@@ -3,6 +3,12 @@ import Decimal from 'decimal.js'
 // Never inherit precision or rounding changes made elsewhere in the application.
 export const Money = Decimal.clone({ precision: 40, rounding: Decimal.ROUND_HALF_UP })
 
+export function netOutcome(value: string): string {
+  const rounded = new Money(value).toDecimalPlaces(2)
+  if (rounded.isZero()) return 'Break-even'
+  return rounded.isNegative() ? 'Net loss' : 'Net gain'
+}
+
 export function decimal(value: string, label: string): Decimal {
   if (!/^(?:0|[1-9]\d*)(?:\.\d{1,12})?$/.test(value) || value.length > 40) {
     throw new Error(`${label} must be a non-negative decimal string (up to 12 decimal places).`)

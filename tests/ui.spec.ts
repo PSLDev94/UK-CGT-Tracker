@@ -4,6 +4,8 @@ import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { readFileSync } from "node:fs";
 import { reviewCsv, tradesFromReview } from "../src/domain/imports/review";
+import { pageForReviewIndex, reviewPage } from "../src/server/workspace-api";
+import { longFreetradeStatement } from "./helpers/freetrade-statement";
 import { calculateGains } from "../src/domain/cgt/calculate";
 import type { Overview, Preview } from "../src/ui/workspace-types";
 
@@ -150,6 +152,7 @@ async function mockWorkspace(
     calculations: [],
   };
   let currentPreview: Preview | null = null;
+  let wholeReview: ReturnType<typeof reviewCsv> | null = null;
   let currentCsv = "";
   let currentDetails: import("../src/domain/imports/supporting-details").ImportDetails =
     {};
@@ -211,16 +214,12 @@ async function mockWorkspace(
           format: body.format,
           ordinarySharesConfirmed: body.ordinarySharesConfirmed,
         });
+        wholeReview = review;
         currentPreview = {
           draftId,
           accountId,
           revision: state.portfolio.revision,
-          review: {
-            ...review,
-            page: 1,
-            pageSize: 100,
-            issueCount: review.issues.length,
-          },
+          review: reviewPage(review, 1),
         };
         state.drafts = [
           {
@@ -242,20 +241,18 @@ async function mockWorkspace(
           ordinarySharesConfirmed: ordinaryConfirmed,
           supportingDetails: currentDetails,
         });
+        wholeReview = review;
         currentPreview = {
           ...currentPreview!,
           reviewVersion: (currentPreview?.reviewVersion ?? 0) + 1,
-          review: {
-            ...review,
-            page: 1,
-            pageSize: 100,
-            issueCount: review.issues.length,
-          },
+          review: reviewPage(review, pageForReviewIndex(review.records.findIndex((row) => row.record === body.record))),
         };
         return route.fulfill({ json: currentPreview });
       }
       case "review-import":
-        return route.fulfill({ json: currentPreview });
+        return route.fulfill({ json: {
+          ...currentPreview, review: reviewPage(wholeReview!, body.page ?? 1),
+        } });
       case "discard-draft":
         state.drafts = [];
         return route.fulfill({ json: { discarded: true } });
@@ -1009,6 +1006,53 @@ test("original menus restore keyboard focus on Escape", async ({ page }) => {
   ).toBeFocused();
 });
 
+test("a long import opens its late blocker from page one and returns to the repaired record's page", async ({ page }) => {
+  const { state, calls } = await mockWorkspace(page, { account: true });
+  state.accounts[0]!.broker = "freetrade";
+  await page.goto("/dashboard/upload");
+  await page.getByLabel("CSV file", { exact: true }).setInputFiles({
+    name: "long-freetrade.csv", mimeType: "text/csv",
+    buffer: Buffer.from(longFreetradeStatement("QA-LONG")),
+  });
+  await page.getByRole("checkbox", { name: /For a native broker export/ }).check();
+  await page.getByRole("button", { name: "Review file", exact: true }).click();
+  await expect(page.getByText("Page 1 of 3", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Save \d/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "Resolve record 202", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Resolve record 202" })).toBeFocused();
+  await page.getByLabel("GBP per currency unit", { exact: true }).fill("0.8");
+  await page.getByLabel("Price units in the export", { exact: true }).selectOption("major");
+  await page.getByLabel("Dealing fees and transaction taxes", { exact: true }).fill("5.625");
+  await page.getByLabel("Supporting statement or contract-note reference", { exact: true }).fill("Synthetic FX contract note 202");
+  await page.getByRole("checkbox", { name: /I checked the currency/ }).check();
+  await page.getByRole("button", { name: "Check and save supporting details" }).click();
+  await expect(page.getByText("Page 3 of 3", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Details checked for record 202/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save 201 transactions" })).toBeEnabled();
+  expect(calls).not.toContain("import-history");
+});
+
+test("Accounts and Upload skip paginated history and explain a local CSV selection after navigation", async ({ page }) => {
+  const { calls } = await mockWorkspace(page, { account: true });
+  await page.goto("/dashboard/accounts");
+  await page.locator('main a[href*="/dashboard/upload"]').first().click();
+  const picker = page.getByLabel("CSV file", { exact: true });
+  await picker.setInputFiles(file);
+  await expect(page.getByText(/If you use Back, Forward or reload/)).toBeVisible();
+  page.on("dialog", (dialog) => dialog.accept());
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "Broker accounts", exact: true, level: 1 })).toBeVisible();
+  await page.goForward();
+  await expect(picker).toBeVisible();
+  if (await picker.inputValue()) await expect(page.getByText(/Selected: sample-trades.csv/)).toBeVisible();
+  else await expect(page.getByText("Choose your CSV again to continue.", { exact: false })).toBeVisible();
+  expect(calls).not.toContain("prepare-import");
+  expect(calls).not.toContain("import-history");
+  await page.goto("/dashboard/history");
+  await expect(page.getByRole("heading", { name: "No saved imports yet." })).toBeVisible();
+  expect(calls).toContain("import-history");
+});
+
 test("assisted HL import preserves source evidence, validates details and enables an explicit commit", async ({
   page,
 }) => {
@@ -1160,4 +1204,124 @@ test("phone shows the focused next step after saving and calculating", async ({ 
   await expect(result).toBeFocused();
   await expect(result).toBeInViewport();
   await expect(page.locator(".net-gain").getByText("£391.00")).toBeInViewport();
+});
+
+test("report support restores the selected document and rejects invalid return parameters", async ({
+  page,
+}) => {
+  await mockWorkspace(page);
+  await page.route("**/api/v2/billing", (route) =>
+    route.fulfill({
+      json: {
+        status: "active",
+        entitled: false,
+        needsReview: true,
+        canManage: true,
+        testMode: true,
+      },
+    }),
+  );
+  await page.goto("/billing?year=2024-25&format=evidence");
+  await page.getByRole("link", { name: "Contact billing support" }).click();
+  await expect(page.getByLabel("What can we help with?")).toHaveValue(
+    "billing",
+  );
+  await page.getByRole("link", { name: "Back to billing" }).click();
+  await expect(
+    page.getByRole("link", { name: "Back to 2024-25 report" }),
+  ).toHaveAttribute(
+    "href",
+    "/dashboard/reports?year=2024-25&format=evidence#report-evidence",
+  );
+  await page.goto(
+    "/dashboard/contact?topic=billing&year=unknown&format=evidence",
+  );
+  await expect(
+    page.getByRole("link", { name: "Back to billing" }),
+  ).toHaveAttribute("href", "/billing");
+});
+
+test("tablet navigation leaves the task heading in view and Escape closes the focused toggle", async ({
+  page,
+}) => {
+  await mockWorkspace(page, { account: true });
+  await page.goto("/dashboard/accounts");
+  for (const width of [767, 768, 800, 801]) {
+    await page.setViewportSize({ width, height: 900 });
+    const heading = page.getByRole("heading", { level: 1 });
+    await expect(heading).toBeVisible();
+    expect((await heading.boundingBox())!.y).toBeLessThan(180);
+    if (width <= 800) {
+      const toggle = page.getByRole("button", { name: "Open sidebar menu" });
+      expect((await toggle.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+      await toggle.focus();
+      await page.keyboard.press("Enter");
+      await expect(
+        page.getByRole("navigation", { name: "Dashboard" }),
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(toggle).toBeFocused();
+      await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    } else {
+      await expect(
+        page.getByRole("navigation", { name: "Dashboard" }),
+      ).toBeVisible();
+    }
+  }
+});
+
+test("draft reports explain missing purchases beside the free export and keep the recovery year", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { state } = await mockWorkspace(page, { account: true });
+  await page.route("**/api/v2/billing", (route) =>
+    route.fulfill({ json: { status: "none", entitled: false } }),
+  );
+  const result = calculateGains(
+    [
+      {
+        id: "unmatched-sale",
+        securityId: "GB0000000001",
+        date: "2024-08-01",
+        side: "SELL",
+        quantity: "1",
+        considerationGBP: "5",
+        feesGBP: "0",
+      },
+    ],
+    { taxYear: "2024-25", historyThrough: "2025-05-05" },
+  );
+  state.calculations = [
+    { id: "blocked", tax_year: "2024-25", result, coverage_confirmed: false },
+  ];
+  await page.goto("/dashboard/reports?year=2024-25");
+  const summary = page.getByRole("region", { name: "Calculation summary" });
+  await expect(summary).toContainText("Total awaiting complete history");
+  await expect(summary).toContainText("A net total is withheld");
+  await expect(
+    summary.getByRole("link", { name: "Upload earlier acquisitions" }),
+  ).toHaveAttribute("href", "/dashboard/upload?year=2024-25");
+  const csvButton = summary.getByRole("button", {
+    name: "Download CSV evidence",
+  });
+  expect((await csvButton.boundingBox())!.y).toBeLessThan(844);
+  await expect(
+    page.getByRole("link", { name: "Get evidence PDF · £49/year" }),
+  ).toBeVisible();
+});
+
+test("pricing serves both sample reports without signing in", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/pricing");
+  for (const name of ["summary", "evidence"]) {
+    const sample = page.getByRole("link", { name: `Sample ${name} PDF` });
+    await expect(sample).toBeVisible();
+    const response = await request.get((await sample.getAttribute("href"))!);
+    expect(response.status()).toBe(200);
+    expect(response.headers()["content-type"]).toContain("application/pdf");
+    expect((await response.body()).subarray(0, 5).toString()).toBe("%PDF-");
+  }
 });

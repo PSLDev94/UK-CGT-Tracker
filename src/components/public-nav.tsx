@@ -157,12 +157,12 @@ export function PublicNav() {
               Log in
             </Link>
 
-            {/* Try the preview — always visible */}
+            {/* Sign up free — always visible */}
             <Link
               href="/signup"
-              className="text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium transition-all shadow-sm hover:shadow active:scale-95"
+              className="min-h-11 inline-flex items-center text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium transition-all shadow-sm hover:shadow active:scale-95"
             >
-              Try the preview
+              Sign up free
             </Link>
 
             {/* Mobile hamburger button — rightmost on mobile */}
@@ -172,7 +172,7 @@ export function PublicNav() {
               ref={mobileButton}
               aria-controls="public-mobile"
               onClick={() => setMobileOpen((v) => !v)}
-              className="lg:hidden p-2 text-gray-600 hover:text-gray-900 transition-colors"
+              className="lg:hidden min-h-11 min-w-11 inline-flex items-center justify-center p-2 text-gray-600 hover:text-gray-900 transition-colors"
               aria-label={mobileOpen ? "Close menu" : "Open menu"}
             >
               {mobileOpen ? (
@@ -254,7 +254,7 @@ export function PublicNav() {
                 href="/signup"
                 className="block mt-2 text-center bg-blue-600 text-white px-4 py-3 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
               >
-                Try the preview
+                Sign up free
               </Link>
             </div>
           </div>

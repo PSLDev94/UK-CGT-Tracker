@@ -6,6 +6,7 @@ import { Calculator, TrendingDown } from "lucide-react";
 import { workspaceApi } from "./api";
 import type { Overview } from "./workspace-types";
 import { Notice, money } from "./primitives";
+import { displayDate } from "./format";
 export function RestoredHarvesting() {
   const [data, setData] = useState<Overview | null>(null);
   const [year, setYear] = useState("");
@@ -27,7 +28,11 @@ export function RestoredHarvesting() {
       active = false;
     };
   }, []);
-  const result = data?.calculations.find((c) => c.tax_year === year)?.result;
+  const savedRun = data?.calculations.find((c) => c.tax_year === year);
+  const result = savedRun?.result;
+  const calculationHref = year
+    ? "/dashboard/calculations?year=" + encodeURIComponent(year)
+    : "/dashboard/calculations";
   const pools =
     result?.status === "complete"
       ? result.pools.filter((p) => new Decimal(p.quantity).gt(0))
@@ -102,10 +107,20 @@ export function RestoredHarvesting() {
         </select>
         {result && (
           <p className="caption">
-            Snapshot at {result.poolAsOf}.{" "}
+            Snapshot at {displayDate(result.poolAsOf)}.{" "}
+            {savedRun?.coverage_confirmed && "Account coverage confirmed. "}
             {result.status !== "complete" &&
               "Complete the calculation's missing history before using its pools."}
           </p>
+        )}
+        {savedRun && !savedRun.coverage_confirmed && (
+          <Notice tone="warning">
+            Account coverage is unconfirmed for {year}. Confirm the accounts and
+            recalculate before estimating a scenario.{" "}
+            <Link className="underline" href={calculationHref}>
+              Review account coverage
+            </Link>
+          </Notice>
         )}
         <div
           className="overflow-x-auto"
@@ -137,6 +152,7 @@ export function RestoredHarvesting() {
                         inputMode="decimal"
                         className="border rounded px-2 py-2 w-36"
                         value={p.input}
+                        disabled={!savedRun?.coverage_confirmed}
                         onChange={(e) =>
                           setPrices({
                             ...prices,
@@ -162,11 +178,7 @@ export function RestoredHarvesting() {
                       : "A saved calculation provides the holdings for this scenario."}{" "}
                     <Link
                       className="text-blue-700 underline"
-                      href={
-                        year
-                          ? "/dashboard/calculations?year=" + year
-                          : "/dashboard/calculations"
-                      }
+                      href={calculationHref}
                     >
                       Open calculations
                     </Link>

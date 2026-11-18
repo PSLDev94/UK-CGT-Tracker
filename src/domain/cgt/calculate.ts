@@ -1,6 +1,7 @@
 import type Decimal from 'decimal.js'
 import { calendarDate, decimal, Money, plusDays, TAX_YEARS, type TaxYear } from '../values'
 import type { Calculation, CalculationIssue, Disposal, Match, OpeningPool, Trade } from './types'
+import { missingAcquisitionGuidance } from './types'
 
 export const ENGINE_VERSION = '2.0.0-alpha.1'
 
@@ -134,7 +135,7 @@ export function calculateGains(
       if (missing) issues.push({
         code: 'MISSING_ACQUISITION_HISTORY', securityId, date: day.date,
         quantity: day.sell.remaining.toString(),
-        message: 'Import earlier acquisitions or supply a verified opening pool. No zero-cost gain has been assumed.',
+        message: missingAcquisitionGuidance,
       })
       if (day.date >= year.start) disposals.push({
         securityId, date: day.date, sourceIds: [...day.sell.ids], quantity: day.sell.quantity.toString(),

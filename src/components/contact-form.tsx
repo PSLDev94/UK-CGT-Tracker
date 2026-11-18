@@ -15,13 +15,16 @@ import {
 import { contactTopics, isContactTopic } from "@/ui/contact-topics";
 import { PublicFooter } from "@/components/public-footer";
 import { PublicNav } from "@/components/public-nav";
+import { billingUrl, type ReportDestination } from "@/domain/reports/destination";
 
 export function ContactForm({
   dashboard = false,
   initialTopic,
+  returnReport,
 }: {
   dashboard?: boolean;
   initialTopic?: string;
+  returnReport?: ReportDestination | null;
 }) {
   const requestId = useRef<string | null>(null);
   const [topic, setTopic] = useState(
@@ -31,7 +34,7 @@ export function ContactForm({
     ? initialTopic === "deletion"
       ? "/dashboard/settings"
       : initialTopic === "billing"
-        ? "/billing"
+        ? (returnReport ? billingUrl(returnReport) : "/billing")
         : "/dashboard"
     : "/";
   const backLabel = dashboard

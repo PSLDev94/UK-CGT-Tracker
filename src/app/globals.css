@@ -304,6 +304,11 @@
     color: var(--color-ink);
     min-height: 2.8rem;
   }
+  .workspace select,
+  .field select {
+    height: 2.8rem;
+    min-height: 44px;
+  }
   .field input[aria-invalid="true"],
   .field select[aria-invalid="true"] {
     border-color: var(--color-danger);
@@ -325,6 +330,7 @@
     margin: 0.65rem 0;
   }
   .password-field .text-button {
+    min-height: 44px;
     font-size: 0.85rem;
   }
   .notice {
@@ -1163,6 +1169,12 @@
     margin-top: 2rem;
     margin-bottom: 0.75rem;
     line-height: 1.4;
+  }
+
+  .guide-article p,
+  .guide-article ul,
+  .guide-article ol {
+    max-inline-size: 72ch;
   }
 
   .guide-article p {

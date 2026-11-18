@@ -2,6 +2,8 @@ import Decimal from "decimal.js";
 import Link from "next/link";
 import { money, Notice } from "./primitives";
 import type { Calculation } from "../domain/cgt/types";
+import { missingAcquisitionGuidance } from "../domain/cgt/types";
+import { displayDate, netOutcome } from "./format";
 const rules = {
   SAME_DAY: "Same day",
   THIRTY_DAY: "Within 30 days",
@@ -10,16 +12,42 @@ const rules = {
 export function CalculationResult({
   result,
   coverage,
+  confirmedAccounts,
+  settingsEdited,
 }: {
   result: Calculation;
   coverage: boolean;
+  confirmedAccounts: string[];
+  settingsEdited: boolean;
 }) {
+  const savedInputs = (
+    <p className="caption">
+      Last saved calculation · History through{" "}
+      {displayDate(result.historyThrough)}.{" "}
+      {confirmedAccounts.length
+        ? "Confirmed accounts: " + confirmedAccounts.join(", ") + "."
+        : "No accounts confirmed."}
+    </p>
+  );
+  if (settingsEdited) {
+    return (
+      <section aria-label="Last saved calculation" className="panel">
+        <h2>{result.taxYear} share gains</h2>
+        {savedInputs}
+        <p>
+          Recalculate with the edited settings to see the updated figures and
+          report.
+        </p>
+      </section>
+    );
+  }
   return (
     <section
       id="calculation-summary"
       aria-label="Calculation result"
       className="space-y-6 mb-8"
     >
+      {savedInputs}
       <div className="flex flex-wrap gap-3 justify-between items-center">
         <h2
           id="calculation-result-heading"
@@ -54,19 +82,27 @@ export function CalculationResult({
           <ul>
             {result.issues.map((issue, i) => (
               <li key={i}>
-                {issue.securityId} · {issue.date}: {issue.message}
+                {issue.securityId} · {displayDate(issue.date)} ·{" "}
+                {issue.quantity} unmatched shares
               </li>
             ))}
           </ul>
+          <p>{missingAcquisitionGuidance}</p>
+          <Link
+            className="button primary"
+            href={
+              "/dashboard/upload?year=" + encodeURIComponent(result.taxYear)
+            }
+          >
+            Upload earlier acquisitions
+          </Link>
         </Notice>
       )}
       {result.summary && (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
           {[
             [
-              new Decimal(result.summary.netGainGBP).lt(0)
-                ? "Net loss"
-                : "Net gain",
+              netOutcome(result.summary.netGainGBP),
               result.summary.netGainGBP,
               "text-blue-900",
             ],
@@ -80,7 +116,7 @@ export function CalculationResult({
           ].map(([label, value, tone]) => (
             <div
               key={label}
-              className={`p-6 rounded-xl border shadow-sm ${label.startsWith("Net") ? "bg-blue-50 border-blue-200 net-gain" : "bg-white"}`}
+              className={`p-6 rounded-xl border shadow-sm ${label.startsWith("Net") || label === "Break-even" ? "bg-blue-50 border-blue-200 net-gain" : "bg-white"}`}
             >
               <h3 className="text-sm font-medium text-gray-600 mb-1">
                 {label}
@@ -93,16 +129,18 @@ export function CalculationResult({
         </div>
       )}
       <p className="caption">
-        History through {result.historyThrough} ·{" "}
         {coverage
           ? "Account coverage confirmed"
           : "Account coverage incomplete"}
       </p>
       <Link
-        className="button primary"
+        className={
+          result.status === "blocked" ? "button secondary" : "button primary"
+        }
         href={"/dashboard/reports?year=" + encodeURIComponent(result.taxYear)}
       >
-        View reports for {result.taxYear}
+        {result.status === "blocked" ? "View draft reports" : "View reports"}{" "}
+        for {result.taxYear}
       </Link>
       <p className="caption">
         Gains and losses, not tax owed. Personal allowances, reliefs and other
@@ -273,8 +311,8 @@ export function CalculationResult({
         </div>
       </div>
       <p className="caption">
-        History through {result.historyThrough}. Pool snapshot:{" "}
-        {result.poolAsOf}. Calculation version: {result.engineVersion}.
+        Pool snapshot at {displayDate(result.poolAsOf)}. Calculation version{" "}
+        {result.engineVersion}.
       </p>
     </section>
   );

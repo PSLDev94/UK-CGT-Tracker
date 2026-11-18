@@ -10,6 +10,7 @@ import {
 import { Workspace } from "../src/server/workspace";
 import { createReportHandler } from "../src/server/reports-api";
 import { PDFDocument } from "pdf-lib";
+import { reportPageText } from "./helpers/pdf-text";
 import Papa from "papaparse";
 
 const csv = readFileSync(
@@ -368,6 +369,21 @@ describe("authenticated PostgreSQL application workflow", () => {
     });
   });
 
+  it("counts all imports in the Accounts summary beyond the recent receipts limit", async () => {
+    const s = await setup("account-receipt-count");
+    await new OwnedDatabase(database.db).run(s.user, (tx) =>
+      query(tx, `INSERT INTO cgt.imports
+          (account_id, owner_id, file_digest, parser_version, status, record_count,
+           accepted_count, excluded_count, duplicate_count, review_count)
+        SELECT $1, $2, lpad(i::text, 64, '0'), 'fixture', CASE WHEN i = 1 THEN 'reversed' ELSE 'committed' END,
+          1, 1, 0, 0, 0 FROM generate_series(1, 101) AS i`, [s.account.id, s.user.ownerId]),
+    );
+    const overview = await workspace.overview(s.user, true);
+    expect(overview.imports).toHaveLength(100);
+    expect(overview.importCount).toBe(101);
+    expect(await workspace.overview(s.user)).not.toHaveProperty("importCount");
+  });
+
   it("rejects privileged runtime credentials and accepts a dedicated least-privilege login", async () => {
     await expect(assertRuntimeRole(database.db, "cgt_app")).rejects.toThrow(
       /Unsafe/,
@@ -625,7 +641,7 @@ describe("report ownership and assisted draft concurrency", () => {
 // Run the public application service and real schema for each supported native path.
 // This catches gaps hidden by pure-parser tests: evidence versions, persistence,
 // duplicate retries, published snapshots and audited reversals.
-import { brokerCases, fixture, fixtureDetails } from "./helpers/broker-corpus";
+import { brokerCases, fixture, fixtureRows, fixtureDetails } from "./helpers/broker-corpus";
 it.each(brokerCases)(
   "persists the complete $file upload-to-report journey",
   async (c) => {
@@ -715,6 +731,19 @@ it.each(brokerCases)(
       const document = await PDFDocument.load(await response.arrayBuffer());
       expect(document.getTitle()).toContain("2024-25");
       expect(document.getPageCount()).toBeGreaterThan(0);
+      if (kind === "evidence") {
+        const text = reportPageText(document);
+        const sale = fixtureRows(c)[1]!;
+        const supporting = fixtureDetails(c)["3"];
+        const referenceColumn = { trading212: "ID", freetrade: "Order ID", hl: "Reference",
+          ii: "Reference", ibkr: "TradeID", ajbell: "" }[c.broker];
+        const expectedExecution = referenceColumn ? sale[referenceColumn] : supporting?.transactionId;
+        expect(expectedExecution).toBeTruthy();
+        expect(text).toContain(`file row 3\nExecution reference: ${expectedExecution}`);
+        if (supporting) expect(text).toContain(`Statement reference: ${supporting.reference}`);
+        else expect(text).not.toContain("Statement reference:");
+        expect(text).toContain(`Trace reference: ${run.result.disposals[0]!.sourceIds[0]}`);
+      }
     }
     entitled.mockResolvedValue(false);
     expect((await download("summary")).status).toBe(402);

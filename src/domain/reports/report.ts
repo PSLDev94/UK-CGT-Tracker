@@ -1,4 +1,8 @@
-import type { Calculation } from "../cgt/types";
+import {
+  missingAcquisitionGuidance,
+  type Calculation,
+  type CalculationIssue,
+} from "../cgt/types";
 import { csvCell } from "../imports/review";
 
 export interface ReportSource {
@@ -8,6 +12,7 @@ export interface ReportSource {
   record: number;
   instrument: string | null;
   reference: string | null;
+  statementReference?: string | null;
 }
 export interface ReportSnapshot {
   sources?: ReportSource[];
@@ -19,6 +24,24 @@ export interface ReportSnapshot {
   result: Calculation;
 }
 export type ReportKind = "csv" | "summary" | "evidence";
+// Stored calculations can contain older wording for a missing acquisition.
+export const reportIssueMessage = (issue: CalculationIssue) =>
+  issue.code === "MISSING_ACQUISITION_HISTORY"
+    ? missingAcquisitionGuidance
+    : issue.message;
+
+type ReportCell = string | { decimal: string };
+const numberCell = (value: string | null): ReportCell =>
+  value === null ? "UNRESOLVED" : { decimal: value };
+
+function encodeCell(cell: ReportCell): string {
+  if (typeof cell === "string") return csvCell(cell);
+  // Only stored numeric fields get this exception to spreadsheet text escaping.
+  // Quantities and pool costs may use Decimal's exponential representation.
+  return /^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/.test(cell.decimal)
+    ? `"${cell.decimal}"`
+    : csvCell(cell.decimal);
+}
 export function reportStatus(snapshot: ReportSnapshot) {
   return snapshot.result.status === "complete" && snapshot.coverage_confirmed
     ? "Complete calculation - check before filing"
@@ -27,7 +50,7 @@ export function reportStatus(snapshot: ReportSnapshot) {
 /** Exports the stored calculation, never a second calculation with different rounding. */
 export function reportCsv(snapshot: ReportSnapshot): string {
   const r = snapshot.result;
-  const rows: string[][] = [
+  const rows: ReportCell[][] = [
     ["CGT Tracker calculation evidence", reportStatus(snapshot)],
     ["Tax year", r.taxYear],
     ["Calculation reference", snapshot.id],
@@ -54,11 +77,11 @@ export function reportCsv(snapshot: ReportSnapshot): string {
     ...r.disposals.map((d) => [
       d.date,
       d.securityId,
-      d.quantity,
-      d.proceedsGBP,
-      d.allowableCostGBP ?? "UNRESOLVED",
-      d.gainGBP ?? "UNRESOLVED",
-      d.unmatchedQuantity,
+      numberCell(d.quantity),
+      numberCell(d.proceedsGBP),
+      numberCell(d.allowableCostGBP),
+      numberCell(d.gainGBP),
+      numberCell(d.unmatchedQuantity),
       d.sourceIds.join("; "),
     ]),
     [],
@@ -76,24 +99,36 @@ export function reportCsv(snapshot: ReportSnapshot): string {
         d.date,
         d.securityId,
         m.rule,
-        m.quantity,
-        m.costGBP,
+        numberCell(m.quantity),
+        numberCell(m.costGBP),
         m.acquisitionDate ?? "",
         m.acquisitionIds?.join("; ") ?? "Section 104 pool",
       ]),
     ),
     [],
     ["Pool date", "ISIN", "Quantity", "Pool cost GBP"],
-    ...r.pools.map((p) => [r.poolAsOf, p.securityId, p.quantity, p.costGBP]),
+    ...r.pools.map((p) => [
+      r.poolAsOf,
+      p.securityId,
+      numberCell(p.quantity),
+      numberCell(p.costGBP),
+    ]),
     [],
     ["Issue", "ISIN", "Date", "Quantity"],
-    ...r.issues.map((i) => [i.message, i.securityId, i.date, i.quantity]),
+    ...r.issues.map((i) => [
+      reportIssueMessage(i),
+      i.securityId,
+      i.date,
+      numberCell(i.quantity),
+    ]),
   ];
   if (r.summary)
     rows.push(
       [],
       ["Summary (GBP)", "Amount"],
-      ...Object.entries(r.summary).map(([k, v]) => [k, v]),
+      ...Object.entries(r.summary).map(([k, v]) => [k, numberCell(v)]),
     );
-  return "\uFEFF" + rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+  return (
+    "\uFEFF" + rows.map((row) => row.map(encodeCell).join(",")).join("\r\n")
+  );
 }

@@ -311,12 +311,16 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
       headers.map((header, i) => [header, values[i]?.trim() ?? ""]),
     );
     const supportingDetails = options.supportingDetails?.[String(record)];
+    const isNativeTrade = !!adapter?.isTrade(source);
     const detailMetadata = adapter
       ? {
           source,
           supportingDetails,
           canSupplyDetails:
-            adapter.isTrade(source) &&
+            isNativeTrade &&
+            options.ordinarySharesConfirmed === true &&
+            values.length === headers.length &&
+            !repeatedIds.has(source[adapter.idColumn]!) &&
             (["hl", "ii", "ajbell"].includes(options.broker) ||
               (options.broker === "ibkr" && source.CurrencyPrimary !== "GBP") ||
               (options.broker === "freetrade" &&
@@ -339,6 +343,10 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
       )
         throw new Error(
           "This native file repeats a trade ID. It may contain several executions or duplicate rows; review it before importing.",
+        );
+      if (isNativeTrade && options.ordinarySharesConfirmed !== true)
+        throw new Error(
+          "Confirm that every traded instrument in this file is an ordinary share. If your broker evidence confirms this, discard the preview, select the file again and tick the ordinary-share confirmation. If you are unsure, leave the file in review.",
         );
       const row = (
         adapter ? adapter.normalize(source, supportingDetails) : source
@@ -368,9 +376,7 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
         return;
       }
       if (adapter && options.ordinarySharesConfirmed !== true)
-        throw new Error(
-          "Confirm that every traded instrument in this file is an ordinary share. The export does not establish asset classification.",
-        );
+        throw new Error("Check this activity against the original broker statement before importing.");
       if (row.Type !== "BUY" && row.Type !== "SELL")
         throw new Error(
           "Unrecognised activity. Transfers, corporate actions, reinvestments and other events need explicit handling.",

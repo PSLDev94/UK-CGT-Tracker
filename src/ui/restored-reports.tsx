@@ -1,13 +1,14 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { FileText, Table, Download } from "lucide-react";
+import { FileText, Download } from "lucide-react";
 import { api, workspaceApi } from "./api";
 import type { Overview } from "./workspace-types";
 import type { BillingStatus } from "@/server/billing";
 import { Notice, Button, SelectField, money } from "./primitives";
 import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
 import { billingUrl, type PdfFormat } from "../domain/reports/destination";
+import { displayDate, netOutcome } from "./format";
 import type { ReportKind } from "../domain/reports/report";
 
 const cards = [
@@ -24,13 +25,6 @@ const cards = [
     text: "Disposals, matching rules, Section 104 pools and traceable transaction references.",
     name: "evidence PDF",
     icon: FileText,
-  },
-  {
-    kind: "csv",
-    title: "Calculation Export (CSV)",
-    text: "All disposals, matches, pool balances and unresolved issues in spreadsheet format. Free to download.",
-    name: "CSV evidence",
-    icon: Table,
   },
 ] as const;
 interface Feedback {
@@ -114,8 +108,11 @@ export function RestoredReports({
   ]);
   const calculation = data?.calculations.find((c) => c.tax_year === year);
   const draft = data?.drafts[0];
+  const uploadPath = year
+    ? `/dashboard/upload?year=${encodeURIComponent(year)}`
+    : "/dashboard/upload";
   const fixPath = draft
-    ? `/dashboard/upload?draft=${encodeURIComponent(draft.id)}`
+    ? `/dashboard/upload?${new URLSearchParams({ draft: draft.id, ...(year ? { year } : {}) })}`
     : year
       ? `/dashboard/calculations?year=${encodeURIComponent(year)}`
       : "/dashboard/calculations";
@@ -174,6 +171,27 @@ export function RestoredReports({
       request.current = null;
       if (!controller.signal.aborted) setBusy(null);
     }
+  }
+
+  function downloadFeedback(kind: ReportKind) {
+    if (feedback?.kind !== kind) return null;
+    return (
+      <Notice tone={feedback.error ? "error" : "success"}>
+        {feedback.text}{" "}
+        {feedback.code === "PENDING_IMPORTS" ? (
+          <Link className={linkClass} href={draft ? fixPath : uploadPath}>
+            Resolve preview
+          </Link>
+        ) : feedback.code === "REPORT_UNAVAILABLE" ? (
+          <Link
+            className={linkClass}
+            href={`/dashboard/calculations?year=${encodeURIComponent(year)}`}
+          >
+            Recalculate this year
+          </Link>
+        ) : null}
+      </Notice>
+    );
   }
 
   const result = calculation?.result;
@@ -252,12 +270,39 @@ export function RestoredReports({
               aria-label="Calculation summary"
               className="rounded-xl border bg-white p-5 sm:p-6 space-y-3"
             >
-              <h2 className="text-xl font-semibold">{year} calculation</h2>
+              <h2 className="text-xl font-semibold">
+                Last saved calculation · {year}
+              </h2>
               <p className="text-xl font-bold tabular-nums">
                 {result.summary
-                  ? `Net ${result.summary.netGainGBP.startsWith("-") ? "loss" : "gain"} ${money(result.summary.netGainGBP.replace(/^-/, ""))}`
+                  ? `${netOutcome(result.summary.netGainGBP)} ${money(result.summary.netGainGBP.replace(/^-/, ""))}`
                   : "Total awaiting complete history"}
               </p>
+              <p>
+                {confirmed
+                  ? "Complete calculation with confirmed account coverage."
+                  : "Draft calculation. History or account coverage is incomplete."}{" "}
+                History through {displayDate(result.historyThrough)}.
+              </p>
+              {!draft && (
+                <div id="report-csv">
+                  <Button
+                    variant="secondary"
+                    disabled={!!busy}
+                    busy={busy === "csv"}
+                    onClick={() => void download("csv")}
+                  >
+                    <Download size={16} aria-hidden="true" />
+                    {busy === "csv"
+                      ? "Preparing CSV…"
+                      : "Download CSV evidence"}
+                  </Button>
+                  <p className="mt-1 text-sm text-gray-600">
+                    Free spreadsheet of disposals, matches, pools and issues.
+                  </p>
+                  {downloadFeedback("csv")}
+                </div>
+              )}
               {result.summary && (
                 <dl className="flex flex-wrap gap-x-7 gap-y-2 text-sm">
                   {[
@@ -275,17 +320,36 @@ export function RestoredReports({
                   ))}
                 </dl>
               )}
-              <p>
-                {confirmed
-                  ? "Complete calculation with confirmed account coverage."
-                  : "Draft calculation. History or account coverage is incomplete."}{" "}
-                History through{" "}
-                {new Intl.DateTimeFormat("en-GB", {
-                  dateStyle: "long",
-                  timeZone: "UTC",
-                }).format(new Date(result.historyThrough + "T00:00:00Z"))}
-                .
-              </p>
+              {!confirmed && (
+                <div className="text-sm">
+                  {result.status === "blocked" ? (
+                    <>
+                      <p>
+                        Draft exports list the unmatched sales and available
+                        evidence. A net total is withheld until the missing
+                        purchases can be matched.
+                      </p>
+                      <Link className={linkClass} href={uploadPath}>
+                        Upload earlier acquisitions
+                      </Link>
+                    </>
+                  ) : (
+                    <>
+                      <p>
+                        {result.status === "provisional"
+                          ? "Draft exports use the saved history cutoff. Later purchases could change the matches and total."
+                          : "Draft exports use the saved trades. The total may change if other taxable accounts are missing."}
+                      </p>
+                      <Link
+                        className={linkClass}
+                        href={`/dashboard/calculations?year=${encodeURIComponent(year)}`}
+                      >
+                        Review coverage for {year}
+                      </Link>
+                    </>
+                  )}
+                </div>
+              )}
               {accounts?.length ? (
                 <p className="text-sm text-gray-600">
                   Confirmed accounts:{" "}
@@ -304,13 +368,10 @@ export function RestoredReports({
             </section>
           )}
           {calculation && !draft && (
-            <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-2 gap-6">
               {cards.map((card) => {
-                const isPdf = card.kind !== "csv";
-                const target =
-                  card.kind === "csv" ? null : { year, format: card.kind };
+                const target = { year, format: card.kind };
                 const locked =
-                  isPdf &&
                   entitlement &&
                   (!entitlement.entitled ||
                     (feedback?.kind === card.kind &&
@@ -350,7 +411,7 @@ export function RestoredReports({
                               : "Checking PDF access."}
                         </Notice>
                       )}
-                    {target && locked ? (
+                    {locked ? (
                       <Link
                         className="button primary"
                         href={billingUrl(target)}
@@ -365,7 +426,7 @@ export function RestoredReports({
                             ? "Manage PDF access"
                             : `Get ${card.name} · ${ANNUAL_REPORT_PRICE}/year`}
                       </Link>
-                    ) : isPdf && billingError ? (
+                    ) : billingError ? (
                       <>
                         <Notice tone="warning">
                           PDF access could not be confirmed.
@@ -382,32 +443,19 @@ export function RestoredReports({
                       </>
                     ) : (
                       <Button
-                        disabled={!!busy || (isPdf && !entitlement)}
+                        disabled={!!busy || !entitlement}
                         busy={busy === card.kind}
                         onClick={() => void download(card.kind)}
                       >
                         <Download size={16} aria-hidden="true" />
                         {busy === card.kind
                           ? "Preparing report…"
-                          : isPdf && !entitlement
+                          : !entitlement
                             ? "Checking access…"
                             : `Download ${card.name}`}
                       </Button>
                     )}
-                    {feedback?.kind === card.kind && (
-                      <Notice tone={feedback.error ? "error" : "success"}>
-                        {feedback.text}{" "}
-                        {feedback.code === "PENDING_IMPORTS" ? (
-                          <Link className={linkClass} href="/dashboard/upload">
-                            Resolve preview
-                          </Link>
-                        ) : feedback.code === "REPORT_UNAVAILABLE" ? (
-                          <Link className={linkClass} href={fixPath}>
-                            Recalculate this year
-                          </Link>
-                        ) : null}
-                      </Notice>
-                    )}
+                    {downloadFeedback(card.kind)}
                   </section>
                 );
               })}

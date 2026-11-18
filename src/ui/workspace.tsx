@@ -84,6 +84,12 @@ function focusHeading(heading: HTMLElement | null) {
   heading.scrollIntoView({ block: "start", behavior: "instant" });
 }
 
+// Remember only that the user chose a file in this history entry. The CSV and
+// its name stay out of browser storage and are never restored across sign-ins.
+function markPendingFile(selected: boolean) {
+  window.history.replaceState({ ...window.history.state, cgtPendingFile: selected }, "");
+}
+
 export function WorkspaceScreen(props: { initialView?: WorkspaceView }) {
   return (
     <Suspense fallback={<p role="status">Loading workspace…</p>}>
@@ -106,6 +112,7 @@ function WorkspaceBody({
     focusHeading(document.getElementById(focusRequest.heading));
   }, [focusRequest]);
   const [history, setHistory] = useState<History | null>(null);
+  const historyPage = useRef(1);
   const [userName, setUserName] = useState("");
   const view = initialView;
   const params = useSearchParams();
@@ -159,9 +166,31 @@ function WorkspaceBody({
       ? requestedYear
       : (latestRun?.tax_year ?? "2025-26")
   ) as TaxYear;
+  const currentCalculation = data?.calculations.find((c) => c.tax_year === taxYear);
+  const savedDate = currentCalculation?.result.historyThrough ?? "";
+  const savedAccounts = currentCalculation?.coverage_accounts ??
+    (currentCalculation?.coverage_confirmed ? data!.accounts.map((account) => account.id) : []);
+  const [calculationDraft, setCalculationDraft] = useState<{
+    year: string;
+    historyThrough: string;
+    confirmedAccountIds: string[];
+  } | null>(null);
+  const draft = calculationDraft?.year === taxYear ? calculationDraft : null;
+  const historyThrough = draft?.historyThrough ?? savedDate;
+  const confirmedAccountIds = draft?.confirmedAccountIds ?? savedAccounts;
+  const settingsEdited = historyThrough !== savedDate ||
+    confirmedAccountIds.length !== savedAccounts.length ||
+    confirmedAccountIds.some((id) => !savedAccounts.includes(id));
+  const withRecoveryYear = (path: string) => Object.hasOwn(TAX_YEARS, requestedYear)
+    ? path + (path.includes("?") ? "&" : "?") + "year=" + encodeURIComponent(requestedYear)
+    : path;
+  function editCalculation(date: string, accounts: string[]) {
+    setCalculationDraft({ year: taxYear, historyThrough: date, confirmedAccountIds: accounts });
+    setMessage("");
+  }
   const [formDirty, setDirty] = useState(false);
   const [detailsDirty, setDetailsDirty] = useState(false);
-  const dirty = formDirty || detailsDirty;
+  const dirty = formDirty || detailsDirty || (view === "calculations" && settingsEdited);
   const [reverse, setReverse] = useState<SavedImport | null>(null);
   const [leaveAction, setLeaveAction] = useState<(() => void) | null>(null);
   const reverseDialog = useRef<HTMLDialogElement>(null);
@@ -183,14 +212,14 @@ function WorkspaceBody({
   const reload = useCallback(async () => {
     const generation = ++reloadGeneration.current;
     const [overview, imports] = await Promise.all([
-      workspaceApi<Overview>({ action: "overview" }),
-      workspaceApi<History>({ action: "import-history", page: 1 }),
+      workspaceApi<Overview>({ action: "overview", surface: view }),
+      view === "history" ? workspaceApi<History>({ action: "import-history", page: historyPage.current }) : null,
     ]);
     if (generation === reloadGeneration.current) {
       setData(overview);
       setHistory(imports);
     }
-  }, []);
+  }, [view]);
 
   const initialise = useCallback(() => {
     return authApi<{ user: { name: string } } | null>("get-session")
@@ -298,6 +327,14 @@ function WorkspaceBody({
     }
   }
 
+  function openHistoryPage(page: number) {
+    void perform(async () => {
+      const result = await workspaceApi<History>({ action: "import-history", page });
+      historyPage.current = result.page;
+      setHistory(result);
+    });
+  }
+
   async function addAccount(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget,
@@ -328,7 +365,7 @@ function WorkspaceBody({
       form.reset();
       setDirty(false);
       router.push(
-        "/dashboard/upload?account=" + encodeURIComponent(account.id),
+        withRecoveryYear("/dashboard/upload?account=" + encodeURIComponent(account.id)),
       );
     });
   }
@@ -375,10 +412,11 @@ function WorkspaceBody({
       });
       setPreviewFile({ id: result.draftId, name: file!.name });
       setPreview(result);
+      markPendingFile(false);
       window.history.pushState(
         null,
         "",
-        "/dashboard/upload?draft=" + encodeURIComponent(result.draftId),
+        withRecoveryYear("/dashboard/upload?draft=" + encodeURIComponent(result.draftId)),
       );
       setOrdinarySharesConfirmed(false);
       setFile(null);
@@ -416,6 +454,7 @@ function WorkspaceBody({
         confirmedAccountIds: values.getAll("confirmedAccountIds"),
       });
       await reload();
+      setCalculationDraft(null);
       setDirty(false);
       setMessage("Calculation saved.");
       setFocusRequest({ heading: "calculation-result-heading" });
@@ -425,6 +464,7 @@ function WorkspaceBody({
   const signOut = () =>
     void perform(async () => {
       await authApi("sign-out", {});
+      if (file) markPendingFile(false);
       setData(null);
       setPreview(null);
       setFile(null);
@@ -434,9 +474,6 @@ function WorkspaceBody({
     });
   const accountName = (id: string) =>
     data?.accounts.find((a) => a.id === id)?.label ?? "Broker account";
-  const currentCalculation = data?.calculations.find(
-    (c) => c.tax_year === taxYear,
-  );
   const auditDate = (date: string) =>
     new Intl.DateTimeFormat("en-GB", {
       dateStyle: "medium",
@@ -544,7 +581,7 @@ function WorkspaceBody({
                     <div>
                       <span>Import records</span>
                       <strong>
-                        {(history?.total ?? 0).toLocaleString("en-GB")}
+                        {(data.importCount ?? data.imports.length).toLocaleString("en-GB")}
                       </strong>
                       <small>Including reversed imports</small>
                     </div>
@@ -573,8 +610,8 @@ function WorkspaceBody({
                             </div>
                             <Link
                               href={
-                                "/dashboard/upload?account=" +
-                                encodeURIComponent(a.id)
+                                withRecoveryYear("/dashboard/upload?account=" +
+                                encodeURIComponent(a.id))
                               }
                               aria-label={`Upload CSV for ${a.label}`}
                             >
@@ -658,6 +695,11 @@ function WorkspaceBody({
             )}
             {view === "imports" && (
               <section>
+                {Object.hasOwn(TAX_YEARS, requestedYear) && !justSaved && (
+                  <p className="caption">
+                    After saving the earlier acquisitions, return to your {requestedYear} calculation.
+                  </p>
+                )}
                 {justSaved && !requestedDraft && (
                   <section className="panel">
                     <h2
@@ -676,11 +718,11 @@ function WorkspaceBody({
                     <div className="actions">
                       <Link
                         className="button primary"
-                        href="/dashboard/calculations"
+                        href={withRecoveryYear("/dashboard/calculations")}
                       >
                         Calculate gains
                       </Link>
-                      <Link href="/dashboard/upload">Add another file</Link>
+                      <Link href={withRecoveryYear("/dashboard/upload")}>Add another file</Link>
                     </div>
                   </section>
                 )}
@@ -690,7 +732,7 @@ function WorkspaceBody({
                     <section className="panel">
                       <h2>This preview is unavailable</h2>
                       <p>It may have expired, been saved or been discarded.</p>
-                      <Link href="/dashboard/upload">Choose another file</Link>
+                      <Link href={withRecoveryYear("/dashboard/upload")}>Choose another file</Link>
                     </section>
                   )}
                 {requestedDraft &&
@@ -720,7 +762,7 @@ function WorkspaceBody({
                       Each uploaded file needs a broker and account so its
                       records remain identifiable.
                     </p>
-                    <Link className="button primary" href="/dashboard/accounts">
+                    <Link className="button primary" href={withRecoveryYear("/dashboard/accounts")}>
                       Add broker account
                     </Link>
                   </section>
@@ -804,16 +846,18 @@ function WorkspaceBody({
                               type="file"
                               accept=".csv,text/csv"
                               onChange={(e) => {
-                                setFile(e.target.files?.[0] ?? null);
+                                const selected = e.target.files?.[0] ?? null;
+                                setFile(selected);
+                                markPendingFile(!!selected);
                                 setOrdinarySharesConfirmed(false);
                               }}
                               aria-invalid={!!errors.csv}
                               aria-describedby={`csv-help${errors.csv ? " csv-error" : ""}`}
                             />
                             <small id="csv-help">
-                              One UTF-8 CSV, up to 10 MiB. A local selection is
-                              kept only on this page; reselect it after a
-                              reload.
+                              One UTF-8 CSV, up to 10 MiB. Choose Review file
+                              before leaving. If you use Back, Forward or reload
+                              first, you may need to choose the file again.
                             </small>
                             {errors.csv && (
                               <small id="csv-error" className="field-error">
@@ -826,6 +870,9 @@ function WorkspaceBody({
                               Selected: {file.name} ·{" "}
                               {Math.ceil(file.size / 1024)} KiB
                             </p>
+                          )}
+                          {!file && window.history.state?.cgtPendingFile && (
+                            <Notice>Choose your CSV again to continue. Your earlier selection was not uploaded.</Notice>
                           )}
                         </div>
                         {format === "native" && (
@@ -894,16 +941,17 @@ function WorkspaceBody({
                         ?.broker ?? ""
                     }
                     busy={busy}
-                    onPage={(page) =>
-                      void perform(async () =>
+                    onPage={(page, onLoaded) =>
+                      void perform(async () => {
                         setPreview(
                           await workspaceApi<Preview>({
                             action: "review-import",
                             draftId: preview.draftId,
                             page,
                           }),
-                        ),
-                      )
+                        );
+                        onLoaded?.();
+                      })
                     }
                     onDiscard={() =>
                       void perform(async () => {
@@ -914,8 +962,8 @@ function WorkspaceBody({
                         window.history.replaceState(
                           null,
                           "",
-                          "/dashboard/upload?account=" +
-                            encodeURIComponent(preview.accountId),
+                          withRecoveryYear("/dashboard/upload?account=" +
+                            encodeURIComponent(preview.accountId)),
                         );
                         setPreview(null);
                         setPreviewFile(null);
@@ -943,8 +991,8 @@ function WorkspaceBody({
                         window.history.replaceState(
                           null,
                           "",
-                          "/dashboard/upload?saved=" +
-                            encodeURIComponent(result.importId),
+                          withRecoveryYear("/dashboard/upload?saved=" +
+                            encodeURIComponent(result.importId)),
                         );
                         setPreview(null);
                         setPreviewFile(null);
@@ -974,8 +1022,8 @@ function WorkspaceBody({
                           <a
                             className="button secondary"
                             href={
-                              "/dashboard/upload?draft=" +
-                              encodeURIComponent(d.id)
+                              withRecoveryYear("/dashboard/upload?draft=" +
+                              encodeURIComponent(d.id))
                             }
                           >
                             Open preview
@@ -1000,7 +1048,6 @@ function WorkspaceBody({
                     <form
                       noValidate
                       onSubmit={calculate}
-                      onChange={() => setDirty(true)}
                       className="form-stack"
                     >
                       <div className="form-columns">
@@ -1009,7 +1056,12 @@ function WorkspaceBody({
                           name="taxYear"
                           label="Tax year"
                           value={taxYear}
+                          disabled={busy}
                           onChange={(e) => {
+                            setCalculationDraft(null);
+                            setErrors({});
+                            setError("");
+                            setMessage("");
                             window.history.replaceState(
                               null,
                               "",
@@ -1030,6 +1082,9 @@ function WorkspaceBody({
                           id="historyThrough"
                           name="historyThrough"
                           label="History complete through"
+                          disabled={busy}
+                          value={historyThrough}
+                          onChange={(event) => editCalculation(event.target.value, [])}
                           placeholder="2026-05-05"
                           hint={`Use YYYY-MM-DD. For ${taxYear}, matching can need history through ${plusDays(TAX_YEARS[taxYear].end, 30)}. Confirm only dates covered by your records.`}
                           error={errors.historyThrough}
@@ -1044,6 +1099,11 @@ function WorkspaceBody({
                                 name="confirmedAccountIds"
                                 value={a.id}
                                 type="checkbox"
+                                disabled={busy}
+                                checked={confirmedAccountIds.includes(a.id)}
+                                onChange={(event) => editCalculation(historyThrough, event.target.checked
+                                  ? [...confirmedAccountIds, a.id]
+                                  : confirmedAccountIds.filter((id) => id !== a.id))}
                               />
                               <span>{a.label}</span>
                             </label>
@@ -1055,17 +1115,20 @@ function WorkspaceBody({
                         )}
                       </fieldset>
                       <p className="caption">
-                        Leave an account unchecked if its history is incomplete.
-                        The result will show that account coverage has not been
-                        confirmed.
+                        Confirm each account up to the date above. Changing that date clears the checkboxes.
                       </p>
+                      {settingsEdited && currentCalculation && (
+                        <Notice tone="warning">
+                          Settings changed. Recalculate to update the saved result and reports for {taxYear}.
+                        </Notice>
+                      )}
                       <div>
                         <Button
                           type="submit"
                           busy={busy}
                           disabled={!data.accounts.length}
                         >
-                          {busy ? "Calculating…" : "Calculate gains"}
+                          {busy ? "Calculating…" : currentCalculation ? "Recalculate" : "Calculate gains"}
                         </Button>
                       </div>
                     </form>
@@ -1074,6 +1137,8 @@ function WorkspaceBody({
                     <CalculationResult
                       result={currentCalculation.result}
                       coverage={currentCalculation.coverage_confirmed}
+                      confirmedAccounts={savedAccounts.map(accountName)}
+                      settingsEdited={settingsEdited}
                     />
                   )}
                 </div>
@@ -1082,10 +1147,9 @@ function WorkspaceBody({
             {view === "history" && (
               <section>
                 <section className="panel">
-                  <h2>Import history</h2>
                   {!history?.total ? (
                     <div className="empty">
-                      <h3>No saved imports yet.</h3>
+                      <h2>No saved imports yet.</h2>
                       <p>
                         Review a file, then save its validated transactions to
                         begin your history.
@@ -1096,6 +1160,7 @@ function WorkspaceBody({
                     </div>
                   ) : (
                     <>
+                      <h2>Saved imports ({history.total.toLocaleString("en-GB")})</h2>
                       <ul className="record-list">
                         {history.imports.map((item) => (
                           <li key={item.id}>
@@ -1144,20 +1209,11 @@ function WorkspaceBody({
                           </li>
                         ))}
                       </ul>
-                      <div className="pagination">
+                      {history.total > history.pageSize && <div className="pagination">
                         <Button
                           variant="secondary"
                           disabled={busy || history.page === 1}
-                          onClick={() =>
-                            void perform(async () =>
-                              setHistory(
-                                await workspaceApi<History>({
-                                  action: "import-history",
-                                  page: history.page - 1,
-                                }),
-                              ),
-                            )
-                          }
+                          onClick={() => openHistoryPage(history.page - 1)}
                         >
                           Previous
                         </Button>
@@ -1171,20 +1227,11 @@ function WorkspaceBody({
                             busy ||
                             history.page * history.pageSize >= history.total
                           }
-                          onClick={() =>
-                            void perform(async () =>
-                              setHistory(
-                                await workspaceApi<History>({
-                                  action: "import-history",
-                                  page: history.page + 1,
-                                }),
-                              ),
-                            )
-                          }
+                          onClick={() => openHistoryPage(history.page + 1)}
                         >
                           Next
                         </Button>
-                      </div>
+                      </div>}
                     </>
                   )}
                 </section>

@@ -89,7 +89,7 @@ export default function LandingPage() {
                 href="/signup"
                 className="group bg-blue-600 text-white px-8 py-4 rounded-xl text-lg font-semibold hover:bg-blue-700 transition-all flex items-center justify-center shadow-xl shadow-blue-600/20 hover:shadow-blue-600/30"
               >
-                Try the relaunch preview
+                Create a free account
                 <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </Link>
               <Link
@@ -644,7 +644,7 @@ export default function LandingPage() {
               href="/signup"
               className="inline-flex items-center bg-white text-blue-600 px-10 py-4 rounded-xl text-xl font-bold hover:bg-blue-50 transition-all hover:scale-105 active:scale-95 shadow-xl shadow-blue-900/30"
             >
-              Try the preview <ArrowRight className="ml-3 w-6 h-6" />
+              Create a free account <ArrowRight className="ml-3 w-6 h-6" />
             </Link>
           </div>
         </section>

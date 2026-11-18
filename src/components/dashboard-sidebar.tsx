@@ -58,10 +58,16 @@ export function DashboardSidebar({
   const pathname = usePathname();
   return (
     <aside
+      onKeyDown={(event) => {
+        if (open && event.key === "Escape") {
+          setOpen(false);
+          menuButton.current?.focus();
+        }
+      }}
       aria-label="Workspace navigation"
       className="bg-white border-r border-gray-200 flex flex-col"
     >
-      <div className="p-4 md:p-6 border-b border-gray-100 flex items-center justify-between">
+      <div className="p-4 min-[801px]:p-6 border-b border-gray-100 flex items-center justify-between">
         <Link
           href="/dashboard"
           className="flex gap-2 items-center text-xl font-bold text-gray-900"
@@ -80,20 +86,14 @@ export function DashboardSidebar({
           aria-expanded={open}
           aria-controls="dashboard-navigation"
           aria-label={open ? "Close sidebar menu" : "Open sidebar menu"}
-          className="md:hidden p-2 text-gray-600 rounded-md hover:bg-gray-100"
+          className="min-[801px]:hidden inline-flex items-center justify-center min-h-11 min-w-11 p-2 text-gray-600 rounded-md hover:bg-gray-100"
         >
           {open ? <X size={22} /> : <Menu size={22} />}
         </button>
       </div>
       <div
         id="dashboard-navigation"
-        className={`${open ? "flex" : "hidden"} md:flex flex-col flex-1`}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            setOpen(false);
-            menuButton.current?.focus();
-          }
-        }}
+        className={`${open ? "flex" : "hidden"} min-[801px]:flex flex-col flex-1`}
       >
         <nav className="flex-1 p-4" aria-label="Dashboard">
           {groups.map((group, index) => (

@@ -1,4 +1,13 @@
 import { Money } from "../domain/values";
+export { netOutcome } from "../domain/values";
+
+const dateFormatter = new Intl.DateTimeFormat("en-GB", {
+  dateStyle: "long",
+  timeZone: "UTC",
+});
+export function displayDate(value: string): string {
+  return dateFormatter.format(new Date(value + "T00:00:00Z"));
+}
 
 /** Display-only rounding. Calculations and API evidence retain decimal strings. */
 export function money(value: string | null): string {

@@ -21,6 +21,7 @@ export interface Overview {
   portfolio: { id: string; name: string; revision: number };
   accounts: BrokerAccount[];
   imports: SavedImport[];
+  importCount?: number;
   drafts: { id: string; account_id: string; expires_at: string }[];
   calculations: {
     id: string;
@@ -36,5 +37,15 @@ export interface Preview {
   accountId: string;
   revision: number;
   reviewVersion?: number;
-  review: ImportReview & { page: number; pageSize: number; issueCount: number };
+  review: ImportReview & {
+    page: number;
+    pageSize: number;
+    issueCount: number;
+    nextUnresolved: {
+      record: number;
+      page: number;
+      canSupplyDetails: boolean;
+      reason: string;
+    } | null;
+  };
 }

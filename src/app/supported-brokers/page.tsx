@@ -77,13 +77,7 @@ export default function BrokerSupport() {
         <section className="principles">
           <h1>Find your broker’s CSV export</h1>
           <p className="lead">
-            Import documented layouts from all six brokers. Trading 212 and
-            Freetrade GBP trades can be read automatically; other layouts may
-            require verified details from contract notes. These readers are
-            tested with synthetic examples, not certified against every broker
-            export. Unknown records block saving. Check the full acquisition
-            history of ordinary shares in a taxable account. ISA and pension
-            accounts are outside scope.
+            Choose your broker for export instructions and the records you need.
           </p>
           <nav
             aria-label="Jump to broker"
@@ -99,6 +93,12 @@ export default function BrokerSupport() {
               </a>
             ))}
           </nav>
+          <p className="mb-6 max-w-prose">
+            Use the full trade history for ordinary shares in taxable accounts.
+            Trading 212 and Freetrade GBP trades can be read automatically. Other
+            formats may need contract notes. The examples use synthetic trades.
+            Unknown records block saving. ISA and pension accounts are outside scope.
+          </p>
           <div className="broker-grid">
             {BROKERS.map((b) => (
               <article id={b.id} className="panel scroll-mt-20" key={b.id}>

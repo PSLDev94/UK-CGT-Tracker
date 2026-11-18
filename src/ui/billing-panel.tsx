@@ -243,7 +243,11 @@ export function BillingPanel({
                 available.{" "}
                 <Link
                   className="underline"
-                  href="/dashboard/contact?topic=billing"
+                  href={
+                    destination
+                      ? `/dashboard/contact?${new URLSearchParams({ topic: "billing", year: destination.year, format: destination.format })}`
+                      : "/dashboard/contact?topic=billing"
+                  }
                 >
                   Contact billing support
                 </Link>

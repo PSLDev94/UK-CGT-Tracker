@@ -58,6 +58,25 @@ export function ReportPricing({
               </li>
             ))}
           </ul>
+          {plan.paid && (
+            <div className="mb-6 text-sm text-gray-700">
+              <p>See what each report includes using synthetic trades.</p>
+              <div className="flex flex-wrap gap-x-5">
+                <a
+                  className="inline-flex min-h-11 items-center text-blue-700 underline"
+                  href="/samples/cgt-summary.pdf"
+                >
+                  Sample summary PDF
+                </a>
+                <a
+                  className="inline-flex min-h-11 items-center text-blue-700 underline"
+                  href="/samples/cgt-evidence.pdf"
+                >
+                  Sample evidence PDF
+                </a>
+              </div>
+            </div>
+          )}
           <Link
             className={
               plan.paid

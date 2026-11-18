@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { PDFDocument } from "pdf-lib";
+import Papa from "papaparse";
+import Decimal from "decimal.js";
+import { reportPageText } from "./helpers/pdf-text";
 import { calculateGains } from "../src/domain/cgt/calculate";
 import {
   reportCsv,
@@ -49,6 +52,73 @@ const request = (kind = "csv", extra = {}) =>
     body: JSON.stringify({ kind, runId: snapshot.id, ...extra }),
   });
 describe("auditable report exports", () => {
+  it.each([
+    { name: "gain", proceeds: [15], gains: ["5.00"], net: "5.00" },
+    { name: "loss", proceeds: [5], gains: ["-5.00"], net: "-5.00" },
+    { name: "break-even", proceeds: [10], gains: ["0.00"], net: "0.00" },
+    {
+      name: "mixed",
+      proceeds: [15, 2, 10],
+      gains: ["5.00", "-8.00", "0.00"],
+      net: "-3.00",
+    },
+  ])(
+    "exports numeric $name amounts matching the stored result and both PDFs",
+    async ({ proceeds, gains, net }) => {
+      const trade = { securityId: "GB0008706128", quantity: "1", feesGBP: "0" };
+      const result = calculateGains(
+        [
+          {
+            ...trade,
+            id: "purchase",
+            side: "BUY",
+            date: "2024-04-06",
+            quantity: String(proceeds.length),
+            considerationGBP: String(10 * proceeds.length),
+          },
+          ...proceeds.map((amount, i) => ({
+            ...trade,
+            id: `-${i + 1}`,
+            side: "SELL" as const,
+            date: `2024-08-0${i + 1}`,
+            considerationGBP: String(amount),
+          })),
+        ],
+        { taxYear: "2024-25", historyThrough: "2025-05-05" },
+      );
+      const saved = { ...snapshot, result };
+      const { data, errors } = Papa.parse<string[]>(reportCsv(saved), {
+        delimiter: ",",
+      });
+      expect(errors).toEqual([]);
+      const first = data.findIndex((r) => r[0] === "Date") + 1;
+      const disposals = data.slice(first, first + proceeds.length);
+      expect(disposals.map((r) => r[5])).toEqual(gains);
+      expect(disposals.map((r) => r[7])).toEqual(
+        proceeds.map((_, i) => `'-${i + 1}`),
+      );
+      const sum = disposals.reduce(
+        (total, r) => total.add(r[5]!),
+        new Decimal(0),
+      );
+      expect(sum.toFixed(2)).toBe(net);
+      expect(data).toContainEqual(["netGainGBP", net]);
+      expect(result.summary?.netGainGBP).toBe(net);
+      for (const evidence of [false, true]) {
+        const text = reportPageText(
+          await PDFDocument.load(await reportPdf(saved, evidence)),
+        );
+        expect(text).toContain(
+          `${net === "0.00" ? "Break-even" : net.startsWith("-") ? "Net loss" : "Net gain"}  £${net.replace("-", "")}`,
+        );
+        if (evidence)
+          for (const gain of gains)
+            expect(text).toContain(
+              gain.startsWith("-") ? `-£${gain.slice(1)}` : `£${gain}`,
+            );
+      }
+    },
+  );
   it("exports saved decimal figures, matching details, pools and provenance", () => {
     const csv = reportCsv(snapshot);
     expect(snapshot.result.summary?.netGainGBP).toBe("45.50");
@@ -59,7 +129,7 @@ describe("auditable report exports", () => {
     expect(csv).toContain("sell");
     expect(csv).not.toContain("NaN");
   });
-  it("labels incomplete coverage and blocked figures as drafts, never zeroes", () => {
+  it("labels incomplete coverage and gives current acquisition guidance for saved drafts", async () => {
     expect(reportStatus({ ...snapshot, coverage_confirmed: false })).toContain(
       "DRAFT",
     );
@@ -77,9 +147,19 @@ describe("auditable report exports", () => {
       ],
       { taxYear: "2024-25", historyThrough: "2025-05-05" },
     );
-    const csv = reportCsv({ ...snapshot, result });
+    result.issues[0]!.message = "Add an opening pool.";
+    const saved = { ...snapshot, result };
+    const csv = reportCsv(saved);
     expect(csv).toContain("UNRESOLVED");
     expect(csv).toContain("DRAFT");
+    expect(csv).toContain("Upload the earlier purchases");
+    for (const evidence of [false, true]) {
+      const text = reportPageText(
+        await PDFDocument.load(await reportPdf(saved, evidence)),
+      );
+      expect(text).toContain("Upload the earlier purchases");
+      expect(text).not.toContain("opening pool");
+    }
     expect(result.summary).toBeNull();
   });
   it("neutralises spreadsheet formulas including leading whitespace", () => {

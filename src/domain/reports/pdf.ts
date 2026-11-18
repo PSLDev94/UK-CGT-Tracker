@@ -1,6 +1,11 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { netOutcome } from "../values";
 import { BROKERS } from "../imports/brokers";
-import { reportStatus, type ReportSnapshot } from "./report";
+import {
+  reportIssueMessage,
+  reportStatus,
+  type ReportSnapshot,
+} from "./report";
 
 const humanDate = new Intl.DateTimeFormat("en-GB", {
   dateStyle: "long",
@@ -19,6 +24,7 @@ const rules = {
 export async function reportPdf(
   snapshot: ReportSnapshot,
   evidence = false,
+  { sample = false }: { sample?: boolean } = {},
 ): Promise<Uint8Array> {
   const r = snapshot.result;
   const doc = await PDFDocument.create();
@@ -30,7 +36,13 @@ export async function reportPdf(
       glyphs.has(char.codePointAt(0)!) ? char : "?",
     ).join("");
   const title = evidence ? "Calculation evidence" : "Capital gains summary";
-  doc.setTitle(`CGT Tracker - ${title} ${r.taxYear}`);
+  doc.setTitle(
+    `CGT Tracker - ${sample ? "Synthetic sample - " : ""}${title} ${r.taxYear}`,
+  );
+  if (sample) {
+    doc.setCreationDate(new Date(snapshot.created_at));
+    doc.setModificationDate(new Date(snapshot.created_at));
+  }
   doc.setAuthor("CGT Tracker");
   doc.setLanguage("en-GB");
   const ink = rgb(0.067, 0.094, 0.153),
@@ -42,7 +54,7 @@ export async function reportPdf(
   const left = 44,
     right = 551;
   function header() {
-    page.drawText("CGT Tracker", {
+    page.drawText(sample ? "CGT Tracker  /  Synthetic sample" : "CGT Tracker", {
       x: left,
       y: 802,
       size: 14,
@@ -148,7 +160,7 @@ export async function reportPdf(
   if (r.summary) {
     const net = r.summary.netGainGBP;
     line(
-      `Net ${net.startsWith("-") ? "loss" : "gain"}  ${pounds(net.replace(/^-/, ""))}`,
+      `${netOutcome(net)}  ${pounds(net.replace(/^-/, ""))}`,
       true,
       22,
     );
@@ -156,6 +168,13 @@ export async function reportPdf(
     line("Total pending acquisition history", true, 17);
   }
   line(reportStatus(snapshot), true, 10, blue);
+  if (sample)
+    line(
+      "Illustration using a fictional account and trades.",
+      false,
+      10,
+      muted,
+    );
   y -= 4;
   if (r.summary) {
     amounts(
@@ -233,7 +252,7 @@ export async function reportPdf(
       );
     for (const i of evidence ? r.issues : r.issues.slice(0, 50))
       line(
-        `${i.securityId} · ${date(i.date)} · ${i.message} (${i.quantity} shares)`,
+        `${i.securityId} · ${date(i.date)} · ${reportIssueMessage(i)} (${i.quantity} shares)`,
       );
   }
   heading("Before using these figures");
@@ -265,10 +284,14 @@ export async function reportPdf(
           const broker =
             BROKERS.find((b) => b.id === source.broker)?.name ?? source.broker;
           line(
-            `${side} · ${broker} · ${source.label} · file row ${source.record}${source.reference ? " · " + source.reference : ""}`,
+            `${side} · ${broker} · ${source.label} · file row ${source.record}`,
             false,
             9,
           );
+          if (source.reference)
+            line(`Execution reference: ${source.reference}`, false, 9);
+          if (source.statementReference)
+            line(`Statement reference: ${source.statementReference}`, false, 9);
         }
         line(`${source ? "Trace reference" : side}: ${key}`, false, 8);
       }

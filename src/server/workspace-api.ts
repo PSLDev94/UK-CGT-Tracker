@@ -17,8 +17,17 @@ import { MAX_CSV_BYTES } from "../domain/imports/review";
 // decoded file still has its own 10 MiB cap; allow its bounded wire expansion.
 export const WORKSPACE_BODY_BYTES = 2 * MAX_CSV_BYTES + 64 * 1024;
 
+const pageSize = 100;
+export function pageForReviewIndex(index: number) {
+  return Math.floor(Math.max(0, index) / pageSize) + 1;
+}
+
 export function reviewPage(review: ImportReview, page: number) {
-  const pageSize = 100;
+  // Prioritise records the investor can repair here. Once those are resolved,
+  // take them straight to the first blocker that requires a corrected export.
+  let index = review.records.findIndex((record) => record.status === "needs_review" && record.canSupplyDetails);
+  if (index === -1) index = review.records.findIndex((record) => record.status === "needs_review");
+  const next = review.records[index];
   return {
     ...review,
     records: review.records.slice((page - 1) * pageSize, page * pageSize),
@@ -26,6 +35,9 @@ export function reviewPage(review: ImportReview, page: number) {
     issueCount: review.issues.length,
     page,
     pageSize,
+    nextUnresolved: next
+      ? { record: next.record, page: pageForReviewIndex(index), canSupplyDetails: !!next.canSupplyDetails, reason: next.reason }
+      : null,
   };
 }
 
@@ -65,7 +77,7 @@ export function createWorkspaceHandler(
             await workspace.importHistory(identity, Number(input.page ?? 1)),
           );
         case "overview": {
-          const overview = await workspace.overview(identity);
+          const overview = await workspace.overview(identity, input.surface === "accounts");
           if (input.surface === "reports") recordJourney("reports_opened");
           return privateResponse(overview);
         }
@@ -148,7 +160,7 @@ export function createWorkspaceHandler(
             ...result,
             review: reviewPage(
               result.review,
-              Math.floor(((input.record as number) - 2) / 100) + 1,
+              pageForReviewIndex(result.review.records.findIndex((row) => row.record === input.record)),
             ),
           });
         }

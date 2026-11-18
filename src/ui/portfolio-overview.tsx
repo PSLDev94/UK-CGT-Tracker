@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Overview } from "./workspace-types";
-import { money } from "./format";
+import { displayDate, money, netOutcome } from "./format";
 
 export function PortfolioOverview({
   data,
@@ -32,7 +32,7 @@ export function PortfolioOverview({
     title = `${saved.taxYear} share gains`;
     description =
       saved.status === "complete" && latestRun.coverage_confirmed
-        ? `Matching complete. History through ${saved.historyThrough}.`
+        ? `Matching complete. History through ${displayDate(saved.historyThrough)}.`
         : "Review the history coverage and matching evidence before using these figures.";
     action = "Open latest report";
     href = "/dashboard/reports?year=" + encodeURIComponent(saved.taxYear);
@@ -50,7 +50,7 @@ export function PortfolioOverview({
         <p className="text-3xl font-bold text-blue-800 tabular-nums">
           {money(saved.summary.netGainGBP)}{" "}
           <span className="text-sm text-gray-600 font-medium">
-            net gain or loss
+            {netOutcome(saved.summary.netGainGBP)}
           </span>
         </p>
       )}

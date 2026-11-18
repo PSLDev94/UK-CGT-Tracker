@@ -199,7 +199,7 @@ export class Workspace {
     });
   }
 
-  async overview(identity: Identity) {
+  async overview(identity: Identity, includeImportCount = false) {
     return this.db.run(identity, async (tx) => {
       // Unique owner index serialises concurrent first visits; no advisory key collisions.
       await query(
@@ -220,6 +220,10 @@ export class Workspace {
         `SELECT id, account_id, status, record_count, accepted_count, excluded_count,
         duplicate_count, created_at, reversed_at, reversal_reason FROM cgt.imports ORDER BY created_at DESC, id DESC LIMIT 100`,
       );
+      // The Accounts summary includes older imports beyond the recent list.
+      const importCount = includeImportCount && imports.length === 100
+        ? (await query<{ count: number }>(tx, "SELECT count(*)::int AS count FROM cgt.imports"))[0]!.count
+        : imports.length;
       const calculations = await query(
         tx,
         `SELECT r.id, r.tax_year, r.status, r.history_through, r.result, r.coverage_confirmed, r.coverage_accounts, r.created_at
@@ -233,6 +237,7 @@ export class Workspace {
         portfolio: portfolios[0]!,
         accounts,
         imports,
+        ...(includeImportCount && { importCount }),
         drafts,
         calculations,
       };
@@ -250,11 +255,15 @@ export class Workspace {
         `
       SELECT t.source_key AS key, a.label, a.broker, t.source_record AS record,
         left(coalesce(nullif(f.fields->>'Name',''), nullif(f.fields->>'Stock name',''),
-                      nullif(f.fields->>'Ticker',''), nullif(f.fields->>'Symbol','')),120) AS instrument,
-        left(coalesce(nullif(f.fields->>'ID',''), nullif(f.fields->>'Reference',''),
-                      nullif(f.fields->>'TradeID',''), nullif(f.fields->>'Order ID','')),120) AS reference
+                      nullif(f.fields->>'Ticker',''), nullif(f.fields->>'Symbol',''),
+                      nullif(f.fields->>'Description','')),120) AS instrument,
+        coalesce(nullif(f.fields->>'ID',''), nullif(f.fields->>'Reference',''),
+                 nullif(f.fields->>'TradeID',''), nullif(f.fields->>'Order ID',''),
+                 nullif(btrim(f.details->>'transactionId'),'')) AS reference,
+        nullif(btrim(f.details->>'reference'),'') AS "statementReference"
       FROM cgt.transactions t JOIN cgt.broker_accounts a ON a.id=t.account_id
-      CROSS JOIN LATERAL (SELECT t.provenance->'native'->'fields' AS fields) f
+      CROSS JOIN LATERAL (SELECT t.provenance->'native'->'fields' AS fields,
+                                 t.provenance->'native'->'supportingDetails' AS details) f
       WHERE t.active AND t.source_key=ANY($1::text[])
     `,
         [sourceKeys],

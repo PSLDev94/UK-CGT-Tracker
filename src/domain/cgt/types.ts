@@ -36,6 +36,8 @@ export interface Disposal {
   matches: Match[]
 }
 
+export const missingAcquisitionGuidance = 'Upload the earlier purchases for these shares so their cost can be matched.'
+
 export interface CalculationIssue {
   code: 'MISSING_ACQUISITION_HISTORY'
   securityId: string
