@@ -81,7 +81,7 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d cgt_qualification"
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres -d cgt_qualification"
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
@@ -114,6 +114,7 @@ jobs:
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}
         run: |
+          set -o pipefail
           mkdir /tmp/cgt-archive
           chmod 777 /tmp/cgt-archive
           export BACKUP_ENCRYPTION_KEY="$(openssl rand -hex 32)"
@@ -122,8 +123,11 @@ jobs:
           docker run --rm --entrypoint cat -v /tmp/cgt-archive:/archive cgt-backup:test /archive/restored.dump > /tmp/cgt-qualification.dump
           docker run --detach --name cgt-isolated-restore -e POSTGRES_PASSWORD=disposable-restore-password -e POSTGRES_DB=cgt_restore_qualification postgres:18
           trap 'docker rm --force cgt-isolated-restore >/dev/null' EXIT
+          # The image briefly starts a socket-only server during initialization.
+          # TCP becomes available once the final PostgreSQL process takes over.
           for attempt in $(seq 1 30); do
-            if docker exec cgt-isolated-restore pg_isready -U postgres -d cgt_restore_qualification; then break; fi
+            if docker exec cgt-isolated-restore pg_isready -h 127.0.0.1 -U postgres -d cgt_restore_qualification; then break; fi
+            if [ "$attempt" -eq 30 ]; then exit 1; fi
             sleep 1
           done
           docker exec cgt-isolated-restore psql -U postgres -d cgt_restore_qualification -v ON_ERROR_STOP=1 -c 'CREATE ROLE cgt_app NOLOGIN; CREATE ROLE cgt_auth NOLOGIN; CREATE ROLE cgt_billing NOLOGIN; CREATE ROLE cgt_maintenance NOLOGIN;'
