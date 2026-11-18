@@ -10,6 +10,7 @@ import {
   type ImportDetails,
   type SupportingDetails,
 } from "./supporting-details";
+import { exportedTerms, type ExportedTerms } from "./exported-terms";
 import { HL_HEADERS } from "./additional-brokers";
 
 export const CANONICAL_HEADERS = [
@@ -39,7 +40,12 @@ export interface ImportOptions {
   ordinarySharesConfirmed?: boolean;
   supportingDetails?: ImportDetails;
   /** Stable source key -> normalised-content digest, loaded server-side. */
-  existing?: ReadonlyMap<string, string>;
+  existing?: ReadonlyMap<string, string | SavedExecution>;
+}
+
+export interface SavedExecution {
+  digest: string;
+  supportingDetails?: SupportingDetails;
 }
 
 export interface ImportIssue {
@@ -60,6 +66,8 @@ export interface ImportRecord {
   source?: Record<string, string>;
   supportingDetails?: SupportingDetails;
   canSupplyDetails?: boolean;
+  exportedTerms?: ExportedTerms;
+  statementReference?: string;
   sourceKey?: string;
   digest?: string;
   executionReference?: string;
@@ -311,27 +319,23 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
     const source = Object.fromEntries(
       headers.map((header, i) => [header, values[i]?.trim() ?? ""]),
     );
-    const supportingDetails = options.supportingDetails?.[String(record)];
+    const entered = options.supportingDetails?.[String(record)];
     const isNativeTrade = !!adapter?.isTrade(source);
-    const detailMetadata = adapter
-      ? {
-          source,
-          supportingDetails,
-          canSupplyDetails:
-            isNativeTrade &&
-            options.ordinarySharesConfirmed === true &&
-            values.length === headers.length &&
-            !repeatedIds.has(source[adapter.idColumn]!) &&
-            (["hl", "ii", "ajbell"].includes(options.broker) ||
-              (options.broker === "ibkr" && source.CurrencyPrimary !== "GBP") ||
-              (options.broker === "freetrade" &&
-                source["Instrument Currency"] !== "GBP") ||
-              (options.broker === "trading212" &&
-                !["GBP", "GBX"].includes(
-                  source["Currency (Price / share)"] ?? "",
-                ))),
-        }
-      : {};
+    const canSupplyDetails = isNativeTrade && options.ordinarySharesConfirmed === true &&
+      values.length === headers.length && !repeatedIds.has(source[adapter!.idColumn]!) && (
+        ["hl", "ii", "ajbell"].includes(options.broker) ||
+        (options.broker === "ibkr" && source.CurrencyPrimary !== "GBP") ||
+        (options.broker === "freetrade" && source["Instrument Currency"] !== "GBP") ||
+        (options.broker === "trading212" && !["GBP", "GBX"].includes(source["Currency (Price / share)"] ?? ""))
+      );
+    const terms = canSupplyDetails ? exportedTerms(options.broker, source) : undefined;
+    // These layouts quote instrument prices in explicit units. Older drafts
+    // offered a unit switch that their native readers never applied.
+    const sourceUnits = ["freetrade", "ibkr", "trading212"].includes(options.broker);
+    const supportingDetails = entered && sourceUnits && terms
+      ? { ...entered, priceUnit: terms.priceUnit ?? entered.priceUnit, fees: terms.feesInCurrency ?? entered.fees }
+      : entered;
+    const detailMetadata = adapter ? { source, supportingDetails, exportedTerms: terms, canSupplyDetails } : {};
     try {
       if (values.length !== headers.length)
         throw new Error(
@@ -349,6 +353,15 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
         throw new Error(
           "Confirm that every traded instrument in this file is an ordinary share. If your broker evidence confirms this, discard the preview, select the file again and tick the ordinary-share confirmation. If you are unsure, leave the file in review.",
         );
+      if (detailMetadata.canSupplyDetails && sourceUnits && terms) {
+        const problem = !validISIN(terms.isin ?? "") ? "The exported ISIN is missing or invalid."
+          : !currencies.has(terms.currency ?? "") ? "The instrument currency must be a supported ISO currency."
+          : terms.sourceIssue;
+        if (problem) {
+          detailMetadata.canSupplyDetails = false;
+          throw new Error(`${problem} Check this row against the original broker statement.`);
+        }
+      }
       const row = (
         adapter ? adapter.normalize(source, supportingDetails) : source
       ) as Record<(typeof CANONICAL_HEADERS)[number], string>;
@@ -487,9 +500,33 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
             }
           : {}),
       };
-      const digest = hash(JSON.stringify({ trade, provenance }));
-      const existing = seen.get(sourceKey);
-      if (existing && existing !== digest) {
+      const native = provenance.native;
+      const note = native?.supportingDetails;
+      function digestWith(details: SupportingDetails) {
+        return hash(JSON.stringify({ trade, provenance: {
+          ...provenance, native: { ...native, supportingDetails: fingerprintDetails(details) },
+        } }));
+      }
+      // The original broker row, execution identity, normalized trade and all
+      // material supporting fields stay in the fingerprint. Evidence labels
+      // describe a document; changing that label does not amend an execution.
+      const materialDetails = (d: SupportingDetails): SupportingDetails => ({
+        ...d, reference: "", transactionId: options.broker === "ajbell" ? d.transactionId : "",
+        priceUnit: sourceUnits ? terms?.priceUnit ?? d.priceUnit : d.priceUnit,
+        fees: decimal(terms?.feesInCurrency ?? d.fees, "Fees").toFixed(),
+        gbpPerUnit: decimal(d.gbpPerUnit, "GBP per unit").toFixed(),
+      });
+      const digest = note ? digestWith(materialDetails(note)) : hash(JSON.stringify({ trade, provenance }));
+      const saved = seen.get(sourceKey);
+      const savedDigest = typeof saved === "string" ? saved : saved?.digest;
+      let matches = savedDigest === digest;
+      const previous = typeof saved === "object" && saved.supportingDetails;
+      // Older saves hashed the complete note. Recreate their exact hash using
+      // its saved spelling, only after the two financial declarations agree.
+      if (!matches && previous && note && digestWith(materialDetails(previous)) === digest) {
+        matches = digestWith(previous) === savedDigest;
+      }
+      if (saved && !matches) {
         issues.push({
           code: "DUPLICATE_CONFLICT",
           record,
@@ -503,13 +540,14 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
           digest,
           reason: "Conflicting transaction ID.",
         });
-      } else if (existing) {
+      } else if (saved) {
         records.push({
           record,
           status: "duplicate",
           sourceKey,
           digest,
-          reason: "This exact transaction has already been included.",
+          ...(note && { statementReference: note.reference }),
+          reason: "This transaction has already been included.",
         });
       } else {
         seen.set(sourceKey, digest);

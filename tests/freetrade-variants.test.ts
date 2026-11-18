@@ -207,3 +207,61 @@ it.each(["MONTHLY_STATEMENT", "TAX_CERTIFICATE"])(
     ).toBe("needs_review");
   },
 );
+
+it("uses exported source currencies, prices and fees without a user unit decision", async () => {
+  const { feesInTradeCurrency } = await import("../src/domain/imports/exported-terms");
+  const rows = foreign();
+  const preview = reviewCsv(Papa.unparse(rows), options);
+  const terms = preview.records[0]!.exportedTerms!;
+  expect(terms).toMatchObject({
+    isin: "US0378331005", accountCurrency: "GBP", currency: "USD",
+    priceUnit: "major", feesGBP: "4.5", gbpPerUnit: "0.8",
+  });
+  expect(feesInTradeCurrency(terms, terms.gbpPerUnit!)).toBe("5.625");
+  const noRate = { ...rows[0], "Base FX Rate": "", "FX Rate": "", "FX Fee (BPS)": "", "FX Fee Amount": "", "Total Amount": "1000" };
+  const missing = reviewCsv(Papa.unparse([noRate]), options).records[0]!.exportedTerms!;
+  expect(missing.gbpPerUnit).toBeUndefined();
+  expect(feesInTradeCurrency(missing, "0.8")).toBe("0");
+  expect(reviewCsv(Papa.unparse([noRate]), {
+    ...options, supportingDetails: { "2": evidence("0") },
+  }).status).toBe("ready");
+  expect(reviewCsv(Papa.unparse(rows), {
+    ...withEvidence, supportingDetails: { ...withEvidence.supportingDetails, "2": { ...evidence("5.625"), priceUnit: "minor" } },
+  }).records[0]?.provenance?.native?.supportingDetails?.priceUnit).toBe("major");
+});
+
+it("blocks genuine changes to a repeated Freetrade execution even when the new cash reconciles", () => {
+  const rows = foreign();
+  const saved = reviewCsv(Papa.unparse(rows), withEvidence).records[0]!;
+  const existing = new Map([[saved.sourceKey!, saved.digest!]]);
+  for (const [change, supplement] of [
+    [{ "Stamp Duty": "1", "Total Amount": "1005.50" }, {fees: "6.875"}],
+    [{ "Quantity": "200", "Price per Share": "6.25", "Price per Share in Account Currency": "5" }, {}],
+    [{ ISIN: "GB0008706128" }, {isin: "GB0008706128"}],
+    [{ Timestamp: "2024-06-01T12:30:00.000Z" }, {}],
+    [{ "FX Fee (BPS)": "50", "FX Fee Amount": "5", "FX Rate": "1.24375", "Total Amount": "1005" }, {fees: "6.25"}],
+    [{ "Base FX Rate": "2", "FX Rate": "1.991", "Price per Share in Account Currency": "6.25",
+       "FX Fee Amount": "2.81", "Total Amount": "627.81" }, {fees: "5.62", gbpPerUnit: "0.5"}],
+  ] as const) {
+    const review = reviewCsv(Papa.unparse([{...rows[0], ...change}, rows[1]!]), {
+      ...withEvidence, existing,
+      supportingDetails: { ...withEvidence.supportingDetails, "2": {...evidence("5.625"), ...supplement} },
+    });
+    expect(review.issues, JSON.stringify(change)).toContainEqual(expect.objectContaining({code: "DUPLICATE_CONFLICT", record: 2}));
+    expect(review.counts.accepted).toBe(1);
+    expect(review.status).toBe("needs_review");
+  }
+});
+
+it.each([
+  [{ ISIN: "missing" }, /exported ISIN/],
+  [{ "Instrument Currency": "ZZZ" }, /instrument currency/],
+  [{ "Base FX Rate": "0" }, /exchange rate/],
+  [{ "Base FX Rate": "unknown" }, /exchange rate/],
+  [{ "FX Fee Amount": "?" }, /FX fee/],
+] as const)("identifies unusable exported fields before opening an editor: %j", (change, explanation) => {
+  const review = reviewCsv(Papa.unparse([{ ...foreign()[0], ...change }]), options);
+  expect(review.records[0]?.status).toBe("needs_review");
+  expect(review.records[0]?.canSupplyDetails).toBe(false);
+  expect(review.records[0]?.reason).toMatch(explanation);
+});

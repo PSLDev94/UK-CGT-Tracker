@@ -143,7 +143,7 @@ const freetrade: NativeAdapter = {
         supplied.isin !== r.ISIN)
     )
       throw new Error(
-        "Verify the foreign-currency execution and supply the ISIN and trade-date GBP conversion in supporting details.",
+        "Check the instrument, GBP cash and fees against your contract note, then add its reference.",
       );
     const rate = foreign
       ? decimal(supplied!.gbpPerUnit, "GBP per unit")
@@ -275,7 +275,7 @@ const trading212: NativeAdapter = {
         supplied.isin !== r.ISIN)
     )
       throw new Error(
-        "Supply the verified foreign-currency ISIN, trade-date GBP conversion and fees from the execution statement.",
+        "Check the instrument, exchange rate and GBP fees against your execution statement, then add its reference.",
       );
     const rate = foreign
       ? decimal(supplied!.gbpPerUnit, "GBP per unit")
@@ -361,7 +361,7 @@ const trading212Current: NativeAdapter = {
         supplied.isin !== r.ISIN)
     )
       throw new Error(
-        "Supply verified currency, ISIN, conversion and total dealing costs for this foreign trade.",
+        "Check the instrument, exchange rate and dealing costs against your execution statement, then add its reference.",
       );
     const rate = foreign
       ? decimal(supplied!.gbpPerUnit, "GBP per unit")

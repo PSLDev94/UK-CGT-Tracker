@@ -3,19 +3,20 @@ import { WorkspaceScreen } from "@/ui/workspace";
 import { DashboardShell } from "@/ui/dashboard-shell";
 import { ImportHistoryDetail } from "@/ui/import-history-detail";
 import { TAX_YEARS } from "@/domain/values";
+import { calculationSourceHref } from "@/ui/disposal-location";
 
 export const metadata = { title: "Import history" };
 
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ receipt?: string; record?: string; year?: string }>;
+  searchParams: Promise<{ receipt?: string; record?: string; year?: string; source?: string }>;
 }) {
-  const { receipt, record, year } = await searchParams;
+  const { receipt, record, year, source } = await searchParams;
   if (!receipt) return <WorkspaceScreen initialView="history" />;
   const calculation =
     year && Object.hasOwn(TAX_YEARS, year)
-      ? `/dashboard/calculations?year=${year}`
+      ? calculationSourceHref(year, source)
       : "/dashboard/calculations";
   return (
     <DashboardShell>

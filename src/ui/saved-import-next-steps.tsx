@@ -4,10 +4,11 @@ import type { SavedReceipt } from "./workspace-types";
 
 const calculationsPath = (year: string) => `/dashboard/calculations?year=${year}`;
 
-export function SavedImportNextSteps({ receipt, accountName, requestedYear, uploadPath }: {
+export function SavedImportNextSteps({ receipt, accountName, requestedYear, staleYears, uploadPath }: {
   receipt: SavedReceipt;
   accountName: string;
   requestedYear?: string;
+  staleYears: string[];
   uploadPath: string;
 }) {
   const { accepted_count: included, disposalYears } = receipt;
@@ -38,7 +39,7 @@ export function SavedImportNextSteps({ receipt, accountName, requestedYear, uplo
                     className={disposalYears.length === 1 || year === requestedYear ? "button primary" : "button secondary"}
                     href={calculationsPath(year)}
                   >
-                    Calculate gains for {year}
+                    {staleYears.includes(year) ? "Recalculate" : "Calculate gains for"} {year}
                   </Link>
                 ) : <span className="caption">Outside the supported calculation years</span>}
               </li>

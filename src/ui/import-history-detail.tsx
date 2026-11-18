@@ -17,6 +17,7 @@ type Receipt = {
     status: "accepted" | "excluded" | "duplicate";
     reason: string;
     tradeDetail?: ImportTradeDetail;
+    statementReference?: string;
   }[];
 };
 
@@ -121,6 +122,7 @@ export function ImportHistoryDetail({
                     </dt>
                     <dd>
                       {row.reason}
+                      {row.statementReference && <p className="caption">Statement reference on this import: {row.statementReference}</p>}
                       {row.tradeDetail && <ImportTradeDetails record={row.record} trade={row.tradeDetail} />}
                     </dd>
                   </div>

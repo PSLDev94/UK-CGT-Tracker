@@ -73,16 +73,16 @@ export function DashboardSidebar({
       aria-label="Workspace navigation"
       className="bg-white border-r border-gray-200 flex flex-col"
     >
-      <div className="p-4 min-[801px]:p-6 border-b border-gray-100 flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 border-b border-gray-100 p-[16px] min-[801px]:p-6">
         <Link
           href="/dashboard"
-          className="flex gap-2 items-center text-xl font-bold text-gray-900"
+          className="flex min-w-0 max-w-full items-center gap-[8px] text-xl font-bold text-gray-900"
         >
-          <span className="bg-blue-600 p-1.5 rounded-lg">
+          <span className="shrink-0 rounded-lg bg-blue-600 p-[6px]">
             <PieChart size={18} className="text-white" aria-hidden="true" />
           </span>
-          <span>
-            CGT<span className="text-blue-600">Tracker</span>
+          <span className="min-w-0 [overflow-wrap:anywhere]">
+            CGT<wbr /><span className="text-blue-600">Tracker</span>
           </span>
         </Link>
         <button
@@ -92,7 +92,7 @@ export function DashboardSidebar({
           aria-expanded={open}
           aria-controls="dashboard-navigation"
           aria-label={open ? "Close sidebar menu" : "Open sidebar menu"}
-          className="min-[801px]:hidden inline-flex items-center justify-center min-h-11 min-w-11 p-2 text-gray-600 rounded-md hover:bg-gray-100"
+          className="ms-auto inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md p-[8px] text-gray-600 hover:bg-gray-100 min-[801px]:hidden"
         >
           {open ? <X size={22} /> : <Menu size={22} />}
         </button>

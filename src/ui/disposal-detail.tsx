@@ -1,11 +1,12 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Disposal } from "../domain/cgt/types";
 import type { ReportSource } from "../domain/reports/report";
 import { workspaceApi } from "./api";
 import { displayDate, money } from "./format";
 import { SaleAmounts } from "./sale-amounts";
+import { calculationSourceHref, disposalSourceKeys } from "./disposal-location";
 
 const rules = {
   SAME_DAY: "Same day",
@@ -17,20 +18,18 @@ const pageSize = 25;
 function DisposalSources({
   disposal,
   year,
+  position,
+  returnSource,
 }: {
   disposal: Disposal;
   year: string;
+  position: string;
+  returnSource?: number;
 }) {
-  const keys = useMemo(
-    () => [
-      ...new Set([
-        ...disposal.sourceIds,
-        ...disposal.matches.flatMap((match) => match.acquisitionIds ?? []),
-      ]),
-    ],
-    [disposal],
-  );
-  const [page, setPage] = useState(0);
+  const keys = useMemo(() => disposalSourceKeys(disposal), [disposal]);
+  const [page, setPage] = useState(() => Math.floor((returnSource ?? 0) / pageSize));
+  const returnLink = useRef<HTMLAnchorElement>(null);
+  const restored = useRef(false);
   const [attempt, setAttempt] = useState(0);
   const [rows, setRows] = useState<ReportSource[] | null>(null);
   const [error, setError] = useState("");
@@ -53,6 +52,14 @@ function DisposalSources({
       });
     return () => controller.abort();
   }, [requested, attempt]);
+  useEffect(() => {
+    const link = returnLink.current;
+    if (rows && !restored.current && link?.getClientRects().length) {
+      restored.current = true;
+      link.focus({ preventScroll: true });
+      link.scrollIntoView({ block: "center", inline: "nearest" });
+    }
+  }, [rows]);
   function move(next: number) {
     setRows(null);
     setError("");
@@ -82,6 +89,8 @@ function DisposalSources({
         <ul className="space-y-2">
           {requested.map((key, i) => {
             const source = rows.find((row) => row.key === key);
+            const index = page * pageSize + i;
+            const location = position + "." + index;
             const role = disposal.sourceIds.includes(key)
               ? "Sale"
               : "Matched purchase";
@@ -100,13 +109,19 @@ function DisposalSources({
                       <>
                         <br />
                         <Link
+                          ref={index === returnSource ? returnLink : undefined}
                           className="text-blue-700 underline"
+                          onNavigate={() => {
+                            // Preserve the source on the calculation's own Back/Forward entry.
+                            window.history.replaceState(null, "", calculationSourceHref(year, location));
+                          }}
                           href={
                             "/dashboard/history?" +
                             new URLSearchParams({
                               receipt: source.importReference,
                               record: String(source.record),
                               year,
+                              source: location,
                             })
                           }
                         >
@@ -148,17 +163,30 @@ function DisposalSources({
 export function DisposalDetail({
   disposal,
   year,
+  position,
+  returnSource,
   children,
   className,
 }: {
   disposal: Disposal;
   year: string;
+  position: string;
+  returnSource?: number;
   children: ReactNode;
   className: string;
 }) {
   const [open, setOpen] = useState(false);
+  const details = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const element = details.current;
+    if (returnSource === undefined || !element?.getClientRects().length) return;
+    element.open = true;
+    // Keep a focus destination even if this source can no longer be loaded.
+    element.querySelector("summary")?.focus();
+  }, [returnSource]);
   return (
     <details
+      ref={details}
       className={className}
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
@@ -186,7 +214,13 @@ export function DisposalDetail({
               </li>
             ))}
           </ul>
-          <DisposalSources disposal={disposal} year={year} />
+          <DisposalSources
+            key={returnSource ?? "browse"}
+            disposal={disposal}
+            year={year}
+            position={position}
+            returnSource={returnSource}
+          />
         </>
       )}
     </details>

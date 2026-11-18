@@ -73,7 +73,7 @@ export default async function LandingPage() {
       {/* Navigation */}
       <PublicNav />
 
-      <main id="main">
+      <main id="main" className="[overflow-wrap:anywhere]">
         {/* Premium Hero Section */}
         <section className="relative pt-12 pb-14 sm:pt-24 sm:pb-24 overflow-hidden px-4">
           {/* Background Gradients */}
@@ -147,7 +147,7 @@ export default async function LandingPage() {
               {/* Dashboard Content */}
               <div className="p-4 sm:p-8">
                 {/* Summary Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
+                <div className="home-card-pairs flex flex-wrap sm:grid sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8 max-[350px]:[&>*]:px-2">
                   <div className="bg-white border border-gray-100 rounded-xl p-3 sm:p-5 shadow-sm hover:border-gray-200 transition-colors">
                     <div className="text-sm text-gray-500 mb-1 font-medium">
                       Total Gains
@@ -263,7 +263,7 @@ export default async function LandingPage() {
                 supporting details from contract notes; unknown layouts stay blocked.
               </p>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="home-card-pairs flex flex-wrap sm:grid sm:grid-cols-3 lg:grid-cols-6 gap-4">
               {BROKERS.map((broker) => (
                 <Link key={broker.id} href={`/supported-brokers#${broker.id}`} className="relative group">
                   <div className="bg-white rounded-xl border border-gray-200 p-5 text-center hover:shadow-lg hover:border-gray-300 transition-all duration-300 hover:-translate-y-0.5">

@@ -39,7 +39,9 @@ import { ImportHistoryDetail, ImportReceiptIdentity } from "./import-history-det
 import { ImportReviewPanel } from "./import-review";
 import { ReportRecovery } from "./report-recovery";
 import { SavedImportNextSteps } from "./saved-import-next-steps";
+import { displayDate } from "./format";
 import { CalculationResult } from "./calculation-result";
+import { readDisposalLocation } from "./disposal-location";
 import { useModal, useNavigationGuard, LeaveDialog } from "./navigation-guard";
 import type { HistoryImport, Overview, Preview } from "./workspace-types";
 
@@ -144,15 +146,20 @@ function WorkspaceBody({
       : (latestRun?.tax_year ?? "2025-26")
   ) as TaxYear;
   const currentCalculation = data?.calculations.find((c) => c.tax_year === taxYear);
+  const previousInputs = !currentCalculation &&
+    data?.previousCalculationInputs?.find((input) => input.taxYear === taxYear);
+  const disposalLocation = readDisposalLocation(params.get("source"));
   const savedDate = currentCalculation?.result.historyThrough ?? "";
   const savedAccounts = currentCalculation?.coverage_accounts ??
     (currentCalculation?.coverage_confirmed ? data!.accounts.map((account) => account.id) : []);
   const [calculationDraft, setCalculationDraft] = useState<{
     year: string;
+    revision: number;
     historyThrough: string;
     confirmedAccountIds: string[];
   } | null>(null);
-  const draft = calculationDraft?.year === taxYear ? calculationDraft : null;
+  const draft = calculationDraft?.year === taxYear && calculationDraft.revision === data?.portfolio.revision
+    ? calculationDraft : null;
   const historyThrough = draft?.historyThrough ?? savedDate;
   const confirmedAccountIds = draft?.confirmedAccountIds ?? savedAccounts;
   const settingsEdited = historyThrough !== savedDate ||
@@ -162,7 +169,7 @@ function WorkspaceBody({
     ? path + (path.includes("?") ? "&" : "?") + "year=" + encodeURIComponent(requestedYear)
     : path;
   function editCalculation(date: string, accounts: string[]) {
-    setCalculationDraft({ year: taxYear, historyThrough: date, confirmedAccountIds: accounts });
+    if (data) setCalculationDraft({ year: taxYear, revision: data.portfolio.revision, historyThrough: date, confirmedAccountIds: accounts });
     setMessage("");
   }
   const [formDirty, setDirty] = useState(false);
@@ -390,13 +397,22 @@ function WorkspaceBody({
       return;
     }
     await perform(async () => {
-      await workspaceApi({
-        action: "calculate",
-        portfolioId: data!.portfolio.id,
-        taxYear,
-        historyThrough,
-        confirmedAccountIds: values.getAll("confirmedAccountIds"),
-      });
+      try {
+        await workspaceApi({
+          action: "calculate",
+          portfolioId: data!.portfolio.id,
+          portfolioRevision: data!.portfolio.revision,
+          taxYear,
+          historyThrough,
+          confirmedAccountIds: values.getAll("confirmedAccountIds"),
+        });
+      } catch (caught) {
+        if (caught instanceof ApiError && caught.code === "PORTFOLIO_CHANGED") {
+          setCalculationDraft(null);
+          await reload();
+        }
+        throw caught;
+      }
       await reload();
       setCalculationDraft(null);
       setDirty(false);
@@ -649,12 +665,17 @@ function WorkspaceBody({
                       receipt={justSaved}
                       accountName={accountName(justSaved.account_id)}
                       requestedYear={Object.hasOwn(TAX_YEARS, requestedYear) ? requestedYear : undefined}
-                      uploadPath={withRecoveryYear("/dashboard/upload")}
+                      staleYears={data.staleReportYears ?? []}
+                      uploadPath={withRecoveryYear("/dashboard/upload?" + new URLSearchParams({ account: justSaved.account_id }))}
                     />
                   </section>
                 )}
                 {justSaved && !requestedDraft && (
-                  <ReportRecovery years={data.staleReportYears ?? []} draftId={data.drafts[0]?.id} />
+                  <ReportRecovery
+                    years={data.staleReportYears ?? []}
+                    draftId={data.drafts[0]?.id}
+                    linkedYears={[...justSaved.disposalYears.map(({ year }) => year), requestedYear].filter((year) => Object.hasOwn(TAX_YEARS, year))}
+                  />
                 )}
                 {requestedDraft &&
                   preview?.draftId !== requestedDraft &&
@@ -989,11 +1010,16 @@ function WorkspaceBody({
                   </div>
                   {currentCalculation && (
                     <CalculationResult
+                      runId={currentCalculation.id}
+                      location={disposalLocation}
                       result={currentCalculation.result}
                       coverage={currentCalculation.coverage_confirmed}
                       confirmedAccounts={savedAccounts.map(accountName)}
                       settingsEdited={settingsEdited}
                     />
+                  )}
+                  {disposalLocation && !currentCalculation && (
+                    <Notice>The saved calculation for this receipt is no longer available. Recalculate this year to see the current disposals.</Notice>
                   )}
                   <section className="panel">
                     <h2>Calculation settings</h2>
@@ -1007,6 +1033,32 @@ function WorkspaceBody({
                       onSubmit={calculate}
                       className="form-stack"
                     >
+                      {previousInputs && (
+                        <section aria-label="Previous calculation settings" className="space-y-2 rounded-lg border p-4">
+                          <h3>Previous calculation settings</h3>
+                          <p>History through <strong>{displayDate(previousInputs.historyThrough)}</strong>.</p>
+                          {previousInputs.confirmedAccountIds.length ? (
+                            <>
+                              <p>Previously confirmed accounts</p>
+                              <ul className="grid list-disc gap-x-8 gap-y-1 pl-5 sm:grid-cols-2">
+                                {previousInputs.confirmedAccountIds.map((id) => (
+                                  <li key={id}>{data.accounts.find((account) => account.id === id)?.label ?? "Account no longer available"}</li>
+                                ))}
+                              </ul>
+                            </>
+                          ) : <p>No account confirmations were recorded.</p>}
+                          <p>Review the changed history and confirm coverage again below.</p>
+                          <Button
+                            variant="secondary"
+                            disabled={busy || historyThrough === previousInputs.historyThrough}
+                            onClick={() => {
+                              editCalculation(previousInputs.historyThrough, []);
+                              setErrors({});
+                              document.getElementById("historyThrough")?.focus();
+                            }}
+                          >Use previous date</Button>
+                        </section>
+                      )}
                       <div className="calculation-cutoff">
                         <Field
                           id="historyThrough"

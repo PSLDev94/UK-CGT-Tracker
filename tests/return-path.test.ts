@@ -27,4 +27,13 @@ describe("workspace return destinations", () => {
     ])
       expect(safeReturnPath(target)).toBe("/dashboard");
   });
+  it("preserves the saved source position only on receipt and calculation routes", () => {
+    const source = "cdebd356-7070-4f24-8167-0d8dc49432cc.5.26";
+    for (const path of ["/dashboard/history", "/dashboard/calculations"]) {
+      const target = path + "?year=2024-25&source=" + source;
+      expect(safeReturnPath(target)).toBe(target);
+      expect(safeReturnPath(path + "?source=run.0.-1")).toBe(path);
+    }
+    expect(safeReturnPath("/billing?source=" + source)).toBe("/billing");
+  });
 });

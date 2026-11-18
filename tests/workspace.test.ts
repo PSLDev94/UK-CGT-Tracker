@@ -353,6 +353,9 @@ describe("authenticated PostgreSQL application workflow", () => {
     const years = ["2025-26", "2024-25"];
     const oldIds = [];
     for (const taxYear of years) oldIds.push((await workspace.calculate(s.user, { ...input, taxYear })).runId);
+    // Reusing inputs republishes their immutable run, even if a later run exists.
+    await workspace.calculate(s.user, { ...input, taxYear: "2024-25", historyThrough: "2025-05-05", confirmedAccountIds: [] });
+    expect((await workspace.calculate(s.user, { ...input, taxYear: "2024-25" })).runId).toBe(oldIds[1]);
     const earlier = csv.replaceAll("2024-", "2023-").replaceAll("synthetic-", "earlier-");
     const addition = await prepare(s.user, s.account.id, earlier);
     expect(addition.affectedReportYears).toEqual(years);
@@ -362,19 +365,33 @@ describe("authenticated PostgreSQL application workflow", () => {
     expect((await workspace.overview(s.user)).calculations.map((c) => c.tax_year)).toEqual(years);
 
     const retry = await prepare(s.user, s.account.id, earlier);
+    const oldRevision = (await workspace.overview(s.user)).portfolio.revision;
     await workspace.commitImport(s.user, retry.draftId, retry.revision);
-    expect(await otherDevice.overview(s.user, false, true)).toMatchObject({
-      calculations: [], staleReportYears: years,
-    });
+    const stale = await otherDevice.overview(s.user, false, true);
+    expect(stale.calculations).toEqual([]);
+    expect(stale.staleReportYears).toEqual(years);
+    expect(stale.previousCalculationInputs).toEqual(years.map((taxYear) => ({
+      taxYear, historyThrough: input.historyThrough, confirmedAccountIds: [s.account.id],
+    })));
     for (const runId of oldIds) {
       await expect(otherDevice.reportSnapshot(s.user, runId)).rejects.toMatchObject({ code: "REPORT_UNAVAILABLE" });
     }
+    for (const format of ["summary", "evidence"] as const)
+      expect(await otherDevice.selectedReportIssue(s.user, { year: "2024-25", format })).toMatchObject({ code: "REPORT_UNAVAILABLE" });
+    await expect(otherDevice.calculate(s.user, { ...input, taxYear: "2024-25", portfolioRevision: oldRevision }))
+      .rejects.toMatchObject({ code: "PORTFOLIO_CHANGED" });
+    // Earlier deployments deleted this pointer when an import invalidated a year.
+    await new OwnedDatabase(database.db).run(s.user, (tx) =>
+      query(tx, "DELETE FROM cgt.published_calculations WHERE portfolio_id=$1 AND tax_year='2025-26'", [s.portfolio.id]));
     await otherDevice.calculate(s.user, { ...input, taxYear: "2024-25" });
     const refreshed = await workspace.overview(s.user);
     expect(refreshed.staleReportYears).toEqual(["2025-26"]);
+    expect(refreshed.previousCalculationInputs).toEqual([
+      { taxYear: "2025-26", historyThrough: input.historyThrough, confirmedAccountIds: [s.account.id] },
+    ]);
     expect(refreshed.calculations.map((c) => c.tax_year)).toEqual(["2024-25"]);
     const freshOwner = await owner("report-year-recovery-isolated");
-    expect((await workspace.overview(freshOwner)).staleReportYears).toEqual([]);
+    expect(await workspace.overview(freshOwner)).toMatchObject({ staleReportYears: [], previousCalculationInputs: [] });
   });
 
   it("accepts today in London just after BST midnight but rejects tomorrow", async () => {
@@ -994,3 +1011,54 @@ it.each(brokerCases)(
     ).rejects.toMatchObject({ code: "NO_TRANSACTIONS" });
   },
 );
+
+describe("assisted cumulative broker exports", () => {
+  for (const variant of ["current-hl", "current-ii", "current-ajbell", "legacy-major", "legacy-minor"]) {
+    it(`saves only new executions and preserves both supporting notes for ${variant}`, async () => {
+      const { createHash } = await import("node:crypto");
+      const { fingerprintDetails } = await import("../src/domain/imports/supporting-details");
+      const broker = variant.startsWith("legacy") ? "freetrade" : variant.split("-")[1];
+      const c = brokerCases.find((entry) => entry.broker === broker && Object.keys(fixtureDetails(entry)).length)!;
+      const investor = await owner(`assisted-repeat-${variant}`);
+      const { portfolio } = await workspace.overview(investor);
+      const account = await workspace.addAccount(investor, {
+        portfolioId: portfolio.id, broker: c.broker, label: "Synthetic GIA", accountType: "GIA",
+      });
+      const details = fixtureDetails(c);
+      const prepareRows = (rows: Record<string, string>[]) => workspace.prepareImport(investor, {
+        accountId: account.id, csv: Papa.unparse(rows), format: "native", ordinarySharesConfirmed: true,
+      });
+      const rows = fixtureRows(c);
+      const buy = await prepareRows([rows[0]!]);
+      const first = await workspace.supplyImportDetails(investor, buy.draftId, 2, details["2"]!, 0);
+      expect((await workspace.commitImport(investor, buy.draftId, first.revision, 1)).outcome).toBe("committed");
+      if (variant.startsWith("legacy")) {
+        // Reconstruct the transaction exactly as deployed before the fix, including
+        // the old contradictory minor-unit declaration in its unmodified jsonb.
+        const record = first.review.records[0]!;
+        const original = fingerprintDetails({ ...details["2"]!, priceUnit: variant.endsWith("minor") ? "minor" : "major" });
+        const provenance = { ...record.provenance!, native: { ...record.provenance!.native!, supportingDetails: original } };
+        const digest = createHash("sha256").update(JSON.stringify({trade: record.trade, provenance})).digest("hex");
+        await database.pg.exec("RESET ROLE");
+        try {
+          await database.pg.query("UPDATE cgt.transactions SET content_digest=$1, provenance=jsonb_set(provenance,'{native,supportingDetails}',$2::jsonb) WHERE import_id=$3",
+            [digest, JSON.stringify(original), buy.draftId]);
+        } finally { await database.pg.exec("SET ROLE cgt_app"); }
+      }
+      const cumulative = await prepareRows(rows);
+      const revised = { ...details["2"]!, reference: details["2"]!.reference + " (personal copy)" };
+      await workspace.supplyImportDetails(investor, cumulative.draftId, 2, revised, 0);
+      const ready = await workspace.supplyImportDetails(investor, cumulative.draftId, 3, details["3"]!, 1);
+      expect(ready.review.counts, JSON.stringify(ready.review.issues)).toMatchObject({ duplicate: 1, accepted: 1, needsReview: 0 });
+      expect((await workspace.commitImport(investor, cumulative.draftId, ready.revision, 2)).outcome).toBe("committed");
+      const prior = await workspace.importDetail(investor, buy.draftId, 1);
+      expect(prior.records[0]?.tradeDetail?.statementReference).toBe(details["2"]!.reference);
+      const receipt = await workspace.importDetail(investor, cumulative.draftId, 1);
+      expect(receipt.records[0]).toMatchObject({ status: "duplicate", statementReference: revised.reference });
+      const run = await workspace.calculate(investor, {
+        portfolioId: portfolio.id, taxYear: "2024-25", historyThrough: "2025-05-05", confirmedAccountIds: [account.id],
+      });
+      expect(run.result.summary?.netGainGBP).toBe(c.gain);
+    });
+  }
+});

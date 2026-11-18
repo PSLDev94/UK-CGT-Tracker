@@ -33,6 +33,8 @@ const cutoff = "2025-05-05";
 
 test("saved receipts offer only their disposal years and preserve an explicit different year", async ({ page }) => {
   const { state } = await workspace(page, [], true);
+  state.accounts.push({ ...account, id: "other", label: "Other account" });
+  state.staleReportYears = ["2025-26", "2024-25", "2022-23"];
   state.savedReceipt = {
     id: "receipt", account_id: account.id, accepted_count: 4,
     disposalYears: [{ year: "2024-25", count: 2 }, { year: "2023-24", count: 1 }],
@@ -43,12 +45,23 @@ test("saved receipts offer only their disposal years and preserve an explicit di
   await expect(years).toContainText("2023-24 · 1 sale");
   await expect(page.getByText("You previously selected 2025-26. This import contains no sales in that year.")).toBeVisible();
   await expect(page.getByRole("link", { name: "Return to 2025-26 calculation" })).toHaveAttribute("href", "/dashboard/calculations?year=2025-26");
+  for (const year of ["2025-26", "2024-25", "2023-24", "2022-23"])
+    await expect(page.locator(`a[href="/dashboard/calculations?year=${year}"]`)).toHaveCount(1);
+  await expect(years.getByRole("link", { name: "Recalculate 2024-25" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Add another file" })).toHaveAttribute("href",
+    "/dashboard/upload?account=account&year=2025-26");
   await years.getByRole("link", { name: "Calculate gains for 2023-24" }).click();
   await expect(page.getByLabel("Tax year", { exact: true })).toHaveValue("2023-24");
   state.savedReceipt.disposalYears = [];
   await page.goto("/dashboard/upload?saved=receipt");
   await expect(page.getByText(/This file added purchases only/)).toBeVisible();
   await expect(page.getByRole("link", { name: /Calculate gains for/ })).toHaveCount(0);
+  await page.getByRole("link", { name: "Add another file" }).click();
+  await expect(page).toHaveURL(/\/dashboard\/upload\?account=account$/);
+  const accountField = page.getByLabel("Broker account", { exact: true });
+  await expect(accountField).toHaveValue(account.id);
+  await accountField.selectOption("other");
+  await expect(accountField).toHaveValue("other");
 });
 
 test("Reports distinguishes no disposals from a real break-even sale before offering PDFs", async ({ page }) => {
@@ -70,6 +83,11 @@ test("Reports distinguishes no disposals from a real break-even sale before offe
   await page.reload();
   await expect(summary.getByText("Break-even £0.00", { exact: true })).toBeVisible();
   await expect(page.locator("#report-summary").getByRole("link", { name: /Get summary PDF/ })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/dashboard/calculations?year=2024-25");
+  const disposal = page.locator("details:visible > summary").filter({ hasText: sale.securityId });
+  await expect(disposal).toContainText("Break-even £0.00");
+  await expect(disposal).not.toContainText("gain");
 });
 
 async function workspace(page: Page, trades: Trade[], confirmed: boolean) {
@@ -157,7 +175,11 @@ async function workspace(page: Page, trades: Trade[], confirmed: boolean) {
       case "commit-import":
         trades.push(...importedTrades);
         state.drafts = [];
+        state.portfolio.revision++;
         state.staleReportYears = state.calculations.map((c) => c.tax_year);
+        state.previousCalculationInputs = state.calculations.map((c) => ({
+          taxYear: c.tax_year, historyThrough: c.result.historyThrough, confirmedAccountIds: c.coverage_accounts ?? [],
+        }));
         state.calculations = [];
         state.imports = [
           {
@@ -283,15 +305,25 @@ test("missing purchase recovery preserves the year through upload, preview, save
     .getByRole("button", { name: "Save 1 transaction", exact: true })
     .click();
   await expect(page).toHaveURL(/saved=saved&year=2024-25/);
-  await expect(page.getByRole("region", { name: "Reports to recalculate" })
-    .getByRole("link", { name: "Recalculate 2024-25" })).toHaveAttribute("href", "/dashboard/calculations?year=2024-25");
+  await expect(page.locator('a[href="/dashboard/calculations?year=2024-25"]')).toHaveCount(1);
+  await expect(page.getByRole("region", { name: "Reports to recalculate" })).toContainText("2024-25");
   await page
     .getByRole("link", { name: "Return to 2024-25 calculation", exact: true })
     .click();
   await expect(page.getByLabel("Tax year", { exact: true })).toHaveValue(
     "2024-25",
   );
-  await page.getByLabel("History complete through").fill(cutoff);
+  const reference = page.getByRole("region", { name: "Previous calculation settings" });
+  await expect(reference).toContainText("5 May 2025");
+  await expect(reference.getByRole("listitem")).toHaveText([account.label]);
+  const date = page.getByLabel("History complete through");
+  await expect(date).toHaveValue("");
+  await expect(page.getByRole("checkbox", { name: account.label, exact: true })).not.toBeChecked();
+  await expect(page.locator(".net-gain")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "View reports for 2024-25" })).toHaveCount(0);
+  await reference.getByRole("button", { name: "Use previous date" }).click();
+  await expect(date).toHaveValue(cutoff);
+  await expect(page.getByRole("checkbox", { name: account.label, exact: true })).not.toBeChecked();
   await page
     .getByRole("checkbox", { name: account.label, exact: true })
     .check();
@@ -300,12 +332,47 @@ test("missing purchase recovery preserves the year through upload, preview, save
     .click();
   await expect(page.locator(".net-gain")).toContainText("Net loss");
   await expect(page.locator(".net-gain")).toContainText("£5.00");
+  await expect(reference).toHaveCount(0);
   await page.goto("/dashboard/tax-loss-harvesting");
   await expect(page.getByText(/Account coverage confirmed/)).toBeVisible();
   await page.getByLabel("Your scenario price (£) for " + sale.securityId).fill("20");
   await expect(
     page.getByRole("heading", { name: "Illustrative Holding Scenarios" }),
   ).toBeVisible();
+});
+
+test("a change on another device discards unsaved coverage and requires a fresh confirmation", async ({ page }) => {
+  const { state, datedSubmissions } = await workspace(page, [purchase, sale], true);
+  const run = state.calculations[0]!;
+  const newAccount = { ...account, id: "new-account", label: "New broker account" };
+  await page.route("**/api/v2/workspace", async (route) => {
+    const body = route.request().postDataJSON();
+    if (body.action !== "calculate") return route.fallback();
+    expect(body.portfolioRevision).toBe(state.portfolio.revision);
+    state.portfolio.revision++;
+    state.calculations = [];
+    state.accounts.push(newAccount);
+    state.previousCalculationInputs = [{
+      taxYear: run.tax_year, historyThrough: run.result.historyThrough, confirmedAccountIds: [account.id],
+    }];
+    return route.fulfill({ status: 409, json: { error: {
+      code: "PORTFOLIO_CHANGED", message: "Your portfolio changed. Review the updated history and confirm your accounts again before calculating.",
+    } } });
+  });
+  await page.goto("/dashboard/calculations?year=2024-25");
+  await page.getByLabel("History complete through").fill("2025-06-03");
+  await page.getByRole("checkbox", { name: account.label, exact: true }).check();
+  await page.getByRole("button", { name: "Recalculate", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Your portfolio changed." })).toBeVisible();
+  const reference = page.getByRole("region", { name: "Previous calculation settings" });
+  await expect(reference.getByRole("listitem")).toHaveText([account.label]);
+  await expect(page.getByLabel("History complete through")).toHaveValue("");
+  await expect(page.locator("input[name=confirmedAccountIds]:checked")).toHaveCount(0);
+  await expect(page.getByRole("checkbox", { name: newAccount.label })).toBeVisible();
+  await expect(page.locator(".net-gain")).toHaveCount(0);
+  await page.getByLabel("Tax year", { exact: true }).selectOption("2023-24");
+  await expect(reference).toHaveCount(0);
+  expect(datedSubmissions).toEqual([]);
 });
 
 test("Reports keeps year-specific recovery after an import on another device and a fresh sidebar visit", async ({ page }) => {
@@ -530,14 +597,15 @@ test("a fee-bearing sale reconciles across Calculations and Reports, including l
   await expect(summary).toContainText("Net gain £33.00");
 });
 
-test("a grouped disposal opens both sales and the matched purchase at their broker receipt rows", async ({ page }) => {
+test("a grouped disposal restores the exact sale or purchase link after a receipt, including browser history", async ({ page }) => {
   const receipt = "70a556e2-626e-4e98-93eb-b0fc68bd3cbe";
   const trades = [
     { ...purchase, id: "a".repeat(64), date: sale.date },
     { ...sale, id: "b".repeat(64) },
     { ...sale, id: "c".repeat(64) },
   ];
-  await workspace(page, trades, true);
+  const earlier = [purchase, { ...sale, date: "2024-08-01" }].map(t => ({ ...t, securityId: "GB0008706128" }));
+  const { state } = await workspace(page, [...earlier, ...trades], true);
   await page.route("**/api/v2/workspace", async (route) => {
     const body = route.request().postDataJSON();
     if (body.action === "disposal-sources") {
@@ -549,9 +617,9 @@ test("a grouped disposal opens both sales and the matched purchase at their brok
       })) });
     }
     if (body.action === "import-detail") {
-      expect(body.record).toBe(28);
+      expect([27, 28]).toContain(body.record);
       expect(body.importId).toBe(receipt);
-      return route.fulfill({ json: { records: [{ record: 28, status: "accepted", reason: "Included sale" }], legacy: false, page: 2, pageSize: 25, total: 28 } });
+      return route.fulfill({ json: { records: [{ record: body.record, status: "accepted", reason: "Included trade" }], legacy: false, page: 2, pageSize: 25, total: 29 } });
     }
     return route.fallback();
   });
@@ -562,8 +630,53 @@ test("a grouped disposal opens both sales and the matched purchase at their brok
   await expect(detail.getByText("Sale", { exact: true })).toHaveCount(2);
   await expect(detail).toContainText("Synthetic ordinary share");
   await expect(detail).toContainText("Statement note-1");
-  await detail.getByRole("link", { name: /record 28$/ }).click();
+  const saleLink = detail.getByRole("link", { name: /record 28$/ });
+  await saleLink.click();
   await expect(page.getByRole("heading", { name: "Import receipt" })).toBeVisible();
   await expect(page.locator("#receipt-record-28")).toBeFocused();
-  await expect(page.getByRole("link", { name: "Back to calculation" })).toHaveAttribute("href", "/dashboard/calculations?year=2024-25");
+  const back = page.getByRole("link", { name: "Back to calculation" });
+  await expect(back).toHaveAttribute("href", /^\/dashboard\/calculations\?year=2024-25&source=run-2024-25\.1\.\d$/);
+  await back.click();
+  await expect(saleLink).toBeFocused();
+  await expect(saleLink).toBeInViewport();
+  await expect(page.locator("details[open]:visible")).toHaveCount(1);
+  const purchaseLink = detail.getByRole("link", { name: /record 27$/ });
+  await purchaseLink.focus();
+  await purchaseLink.press("Enter");
+  await expect(page.locator("#receipt-record-27")).toBeFocused();
+  await page.goBack();
+  await expect(purchaseLink).toBeFocused();
+  await expect(purchaseLink).toBeInViewport();
+  await page.goForward();
+  await expect(page.locator("#receipt-record-27")).toBeFocused();
+  state.calculations[0]!.id = "replacement-run";
+  await back.click();
+  await expect(page.getByText(/This calculation has changed since you opened the receipt/)).toBeVisible();
+  await expect(page.locator("details[open]:visible")).toHaveCount(0);
+  state.calculations = [];
+  await page.reload();
+  await expect(page.getByText(/The saved calculation for this receipt is no longer available/)).toBeVisible();
+  await expect(page.getByLabel("Tax year", { exact: true })).toHaveValue("2024-25");
+});
+
+test("a receipt return restores the linked page in a disposal with more than 25 sources", async ({ page }) => {
+  const sales = Array.from({ length: 26 }, (_, i) => ({ ...sale, id: String(i + 1).padStart(64, "0") }));
+  await workspace(page, [{ ...purchase, date: sale.date, quantity: "26", id: "f".repeat(64) }, ...sales], true);
+  await page.route("**/api/v2/workspace", async (route) => {
+    const body = route.request().postDataJSON();
+    if (body.action !== "disposal-sources") return route.fallback();
+    return route.fulfill({ json: body.keys.map((key: string) => ({
+      key, label: "Synthetic broker", record: key.startsWith("f") ? 1 : Number(key) + 1,
+      importReference: "70a556e2-626e-4e98-93eb-b0fc68bd3cbe",
+    })) });
+  });
+  await page.goto("/dashboard/calculations?year=2024-25&source=run-2024-25.0.26");
+  const detail = page.locator("details[open]:visible");
+  await expect(detail).toContainText("Page 2 of 2");
+  const anchor = detail.getByRole("link", { name: /record 1$/ });
+  await expect(anchor).toBeFocused();
+  await expect(anchor).toBeInViewport();
+  await detail.getByRole("button", { name: "Previous sources" }).click();
+  await expect(detail).toContainText("Page 1 of 2");
+  await expect(detail.getByRole("link")).toHaveCount(25);
 });

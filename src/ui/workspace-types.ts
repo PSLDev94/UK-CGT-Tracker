@@ -32,6 +32,7 @@ export interface Overview {
   importCount?: number;
   drafts: { id: string; account_id: string; expires_at: string }[];
   staleReportYears?: string[];
+  previousCalculationInputs?: { taxYear: string; historyThrough: string; confirmedAccountIds: string[] }[];
   calculations: {
     id: string;
     tax_year: string;

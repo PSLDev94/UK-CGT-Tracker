@@ -6,18 +6,35 @@ import { missingAcquisitionGuidance } from "../domain/cgt/types";
 import { displayDate, netOutcome } from "./format";
 import { SaleAmounts } from "./sale-amounts";
 import { DisposalDetail } from "./disposal-detail";
+import { disposalSourceKeys, type DisposalLocation } from "./disposal-location";
+
+function MobileDisposalOutcome({ gain }: { gain: string | null }) {
+  const amount = <strong className="tabular-nums">{money(gain)}</strong>;
+  if (gain === null) return <>{amount} gain unresolved</>;
+  const outcome = netOutcome(gain);
+  if (outcome === "Break-even") return <>Break-even {amount}</>;
+  return <>{amount} {outcome === "Net loss" ? "loss" : "gain"}</>;
+}
+
 export function CalculationResult({
   result,
+  runId,
+  location,
   coverage,
   confirmedAccounts,
   settingsEdited,
 }: {
   result: Calculation;
+  runId: string;
+  location: DisposalLocation | null;
   coverage: boolean;
   confirmedAccounts: string[];
   settingsEdited: boolean;
 }) {
   const noDisposals = result.disposals.length === 0;
+  const previousDisposal = location?.runId === runId ? result.disposals[location.disposal] : undefined;
+  const target = previousDisposal && location && location.source < disposalSourceKeys(previousDisposal).length
+    ? location : null;
   const savedInputs = (
     <p className="caption">
       Last saved calculation · History through{" "}
@@ -46,6 +63,12 @@ export function CalculationResult({
       className="space-y-6 mb-8"
     >
       {savedInputs}
+      {location && !target && (
+        <Notice>
+          This calculation has changed since you opened the receipt.
+          {!noDisposals && " Select a disposal below to see its current sources."}
+        </Notice>
+      )}
       <div className="flex flex-wrap gap-3 justify-between items-center">
         <h2
           id="calculation-result-heading"
@@ -164,18 +187,18 @@ export function CalculationResult({
               No disposals fall in this tax year within the imported history.
             </p>
           )}
-          {result.disposals.map((d) => (
-            <DisposalDetail disposal={d} year={result.taxYear} key={`${d.securityId}-${d.date}`} className="mb-2">
+          {result.disposals.map((d, index) => (
+            <DisposalDetail
+              key={`${runId}-${index}`}
+              disposal={d}
+              year={result.taxYear}
+              position={`${runId}.${index}`}
+              returnSource={target?.disposal === index ? target.source : undefined}
+              className="mb-2"
+            >
                 <span className="break-all">{d.securityId}</span> · {displayDate(d.date)}
                 <br />
-                <strong className="tabular-nums">
-                  {money(d.gainGBP)}
-                </strong>{" "}
-                {d.gainGBP === null
-                  ? "gain unresolved"
-                  : new Decimal(d.gainGBP).lt(0)
-                    ? "loss"
-                    : "gain"}
+                <MobileDisposalOutcome gain={d.gainGBP} />
             </DisposalDetail>
           ))}
         </div>
@@ -212,8 +235,8 @@ export function CalculationResult({
                   </td>
                 </tr>
               ) : (
-                result.disposals.map((d) => (
-                  <tr key={`${d.securityId}-${d.date}`} className="hover:bg-gray-50">
+                result.disposals.map((d, index) => (
+                  <tr key={`${runId}-${index}`} className="hover:bg-gray-50">
                     <td className="whitespace-nowrap">{displayDate(d.date)}</td>
                     <td className="font-medium text-gray-900">
                       {d.securityId}
@@ -223,7 +246,13 @@ export function CalculationResult({
                     <td className="number">{d.saleBreakdown ? money(d.saleBreakdown.totalAllowableCostsGBP) : "Unavailable"}</td>
                     <td className="number font-medium">{money(d.gainGBP)}</td>
                     <td>
-                      <DisposalDetail disposal={d} year={result.taxYear} className="border-0 p-0 min-w-56">
+                      <DisposalDetail
+                        disposal={d}
+                        year={result.taxYear}
+                        position={`${runId}.${index}`}
+                        returnSource={target?.disposal === index ? target.source : undefined}
+                        className="border-0 p-0 min-w-56"
+                      >
                         {displayDate(d.date)} · {d.securityId} · {money(d.gainGBP)}
                       </DisposalDetail>
                     </td>

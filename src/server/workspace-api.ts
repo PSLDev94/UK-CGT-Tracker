@@ -238,6 +238,7 @@ export function createWorkspaceHandler(
           }
           const calculation = await workspace.calculate(identity, {
               portfolioId: text("portfolioId"),
+              portfolioRevision: input.portfolioRevision === undefined ? undefined : Number(input.portfolioRevision),
               taxYear: text("taxYear"),
               historyThrough: text("historyThrough"),
               confirmedAccountIds: input.confirmedAccountIds,

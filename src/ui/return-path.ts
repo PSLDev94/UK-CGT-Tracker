@@ -1,4 +1,6 @@
 // Only workspace destinations can be resumed after authentication.
+import { readDisposalLocation } from "./disposal-location";
+
 const destinations = new Set([
   "/workspace",
   "/billing",
@@ -23,6 +25,8 @@ export function safeReturnPath(value?: string | null): string {
       return "/dashboard";
     const params = new URLSearchParams();
     for (const [key, val] of url.searchParams) {
+      if (key === "source" && (url.pathname === "/dashboard/calculations" || url.pathname === "/dashboard/history") && readDisposalLocation(val))
+        params.set(key, val);
       if (url.pathname === "/dashboard/history" && (
         (key === "receipt" && /^[0-9a-f-]{36}$/i.test(val)) ||
         (key === "record" && /^[1-9]\d{0,7}$/.test(val))

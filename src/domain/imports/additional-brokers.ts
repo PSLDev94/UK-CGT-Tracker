@@ -283,7 +283,7 @@ export const ibkr: NativeAdapter = {
         )
       )
         throw new Error(
-          "Verify that the Flex base currency is GBP and supply its trade-date GBP conversion rate and ISIN from the statement.",
+          "Check that your Flex statement uses GBP as its base currency and confirms the exported ISIN and trade-date conversion.",
         );
       rate = d.gbpPerUnit;
     }

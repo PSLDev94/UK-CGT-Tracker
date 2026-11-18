@@ -2,6 +2,8 @@
 import { useRef, useState, type FormEvent } from "react";
 import type { ImportRecord } from "../domain/imports/review";
 import type { SupportingDetails } from "../domain/imports/supporting-details";
+import { Money } from "../domain/values";
+import { feesInTradeCurrency } from "../domain/imports/exported-terms";
 import { Button, Field, Notice, SelectField } from "./primitives";
 export function ImportDetailsForm({
   row,
@@ -20,20 +22,11 @@ export function ImportDetailsForm({
     [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const form = useRef<HTMLFormElement>(null);
   const initial = row.supportingDetails;
-  const source = row.source ?? {};
-  const hlPence = broker === "hl" && "Unit cost (p)" in source;
-  const ajPounds = broker === "ajbell" && "Amount (GBP)" in source;
-  const fixedCurrency = hlPence || ajPounds;
-  const fixedUnits = hlPence ? "minor" : ajPounds ? "major" : undefined;
-  const [currency, setCurrency] = useState(
-    initial?.currency ??
-      (fixedCurrency
-        ? "GBP"
-        : source.CurrencyPrimary ||
-          source["Instrument Currency"] ||
-          source["Currency (Price / share)"] ||
-          ""),
-  );
+  const terms = row.exportedTerms ?? {};
+  const initialCurrency = terms.currency ?? initial?.currency ?? "";
+  const [currency, setCurrency] = useState(initialCurrency);
+  const exportedFees =
+    terms.feesGBP !== undefined || terms.feesInCurrency !== undefined;
   const [resetKey, setResetKey] = useState(0);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -44,7 +37,7 @@ export function ImportDetailsForm({
       isin: text("isin"),
       currency: text("currency"),
       gbpPerUnit: text("gbpPerUnit"),
-      fees: text("fees"),
+      fees: feesInTradeCurrency(terms, text("gbpPerUnit")) ?? text("fees"),
       priceUnit: text("priceUnit") as "major" | "minor",
       transactionId: text("transactionId"),
       reference: text("reference"),
@@ -73,11 +66,14 @@ export function ImportDetailsForm({
       errors.netAmountConfirmed = "Confirm the amounts against your statement.";
     setFieldErrors(errors);
     if (Object.keys(errors).length) {
-      (
-        form.current?.elements.namedItem(
-          Object.keys(errors)[0],
-        ) as HTMLElement | null
-      )?.focus();
+      const field = form.current?.elements.namedItem(
+        Object.keys(errors)[0]!,
+      ) as HTMLInputElement | null;
+      if (field && field.type !== "hidden") field.focus();
+      else
+        setError(
+          "The exported trade details are incomplete or invalid. Check the original CSV values against the broker statement and review a corrected file.",
+        );
       return;
     }
     setError("");
@@ -95,17 +91,6 @@ export function ImportDetailsForm({
   }
   return (
     <div className="grid min-w-0 items-start gap-6 lg:grid-cols-2">
-      <details open className="my-3 min-w-0 text-sm">
-        <summary>Original CSV values · record {row.record}</summary>
-        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 my-3">
-          {Object.entries(row.source ?? {}).map(([key, value]) => (
-            <div key={key} className="break-all">
-              <dt className="font-semibold">{key}</dt>
-              <dd>{value || "—"}</dd>
-            </div>
-          ))}
-        </dl>
-      </details>
       <form
         key={resetKey}
         ref={form}
@@ -118,28 +103,30 @@ export function ImportDetailsForm({
       >
         {error && <Notice tone="error">{error}</Notice>}
         <div className="form-columns">
-          <Field
-            id={`isin-${row.record}`}
-            name="isin"
-            error={fieldErrors.isin}
-            label="Verified ISIN"
-            defaultValue={initial?.isin ?? row.source?.ISIN ?? ""}
-            maxLength={12}
-          />
-          {fixedCurrency ? (
-            <p className="caption">
-              Export currency: GBP ·{" "}
-              {hlPence ? "unit cost in pence" : "price in pounds"}.
-            </p>
-          ) : null}
-          {fixedCurrency ? (
-            <input type="hidden" name="currency" value="GBP" />
+          {terms.isin ? (
+            <input type="hidden" name="isin" value={terms.isin} />
+          ) : (
+            <Field
+              id={`isin-${row.record}`}
+              name="isin"
+              error={fieldErrors.isin}
+              label="Verified ISIN"
+              defaultValue={initial?.isin ?? ""}
+              maxLength={12}
+            />
+          )}
+          {terms.currency ? (
+            <input type="hidden" name="currency" value={terms.currency} />
           ) : (
             <Field
               id={`currency-${row.record}`}
               name="currency"
               label="Trade currency"
-              hint="ISO code, e.g. GBP or USD. Confirm the wallet currency."
+              hint={
+                broker === "ii"
+                  ? "Use the currency of the debit or credit in your investment account."
+                  : "Use the three-letter currency code on the contract note."
+              }
               value={currency}
               onChange={(event) =>
                 setCurrency(event.target.value.toUpperCase())
@@ -148,21 +135,25 @@ export function ImportDetailsForm({
               maxLength={3}
             />
           )}
-          {currency === "GBP" ? (
-            <input type="hidden" name="gbpPerUnit" value="1" />
+          {terms.gbpPerUnit || currency === "GBP" ? (
+            <input
+              type="hidden"
+              name="gbpPerUnit"
+              value={terms.gbpPerUnit ?? "1"}
+            />
           ) : (
             <Field
               id={`rate-${row.record}`}
               name="gbpPerUnit"
               error={fieldErrors.gbpPerUnit}
               label="GBP per currency unit"
-              hint="Use 1 for GBP. For foreign trades, use the documented trade-date rate."
-              defaultValue={initial?.gbpPerUnit ?? source.FXRateToBase ?? ""}
+              hint="Use the trade-date rate from your statement."
+              defaultValue={initial?.gbpPerUnit ?? ""}
               inputMode="decimal"
             />
           )}
-          {fixedUnits ? (
-            <input type="hidden" name="priceUnit" value={fixedUnits} />
+          {terms.priceUnit ? (
+            <input type="hidden" name="priceUnit" value={terms.priceUnit} />
           ) : (
             <SelectField
               id={`unit-${row.record}`}
@@ -176,22 +167,24 @@ export function ImportDetailsForm({
               <option value="minor">Pence / hundredths of currency unit</option>
             </SelectField>
           )}
-          <Field
-            id={`fees-${row.record}`}
-            name="fees"
-            error={fieldErrors.fees}
-            label="Dealing fees and transaction taxes"
-            hint="Total in the trade currency. Enter 0 only if the statement confirms no fees."
-            defaultValue={initial?.fees ?? ""}
-            inputMode="decimal"
-          />
+          {!exportedFees && (
+            <Field
+              id={`fees-${row.record}`}
+              name="fees"
+              error={fieldErrors.fees}
+              label="Dealing fees and transaction taxes"
+              hint="Total in the trade currency. Enter 0 only if the statement confirms no fees."
+              defaultValue={initial?.fees ?? ""}
+              inputMode="decimal"
+            />
+          )}
           {broker === "ajbell" && (
             <Field
               id={`execution-${row.record}`}
               name="transactionId"
               error={fieldErrors.transactionId}
               label="Execution reference if missing from export"
-              hint="Required for AJ Bell's six-column layout. Use a unique contract-note reference."
+              hint="Use the unique execution reference from your AJ Bell contract note."
               defaultValue={initial?.transactionId ?? ""}
               maxLength={200}
             />
@@ -202,10 +195,61 @@ export function ImportDetailsForm({
           name="reference"
           error={fieldErrors.reference}
           label="Supporting statement or contract-note reference"
-          hint="Describe the evidence you checked; do not enter account passwords or personal identifiers."
+          hint="Use a reference you can find again on your statement or contract note."
           defaultValue={initial?.reference ?? ""}
           maxLength={500}
         />
+        {terms.isin ? (
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+            <dt>ISIN</dt>
+            <dd>{terms.isin}</dd>
+            {terms.accountCurrency && (
+              <>
+                <dt>Account currency</dt>
+                <dd>{terms.accountCurrency}</dd>
+              </>
+            )}
+            <dt>Instrument currency</dt>
+            <dd>{terms.currency}</dd>
+            <dt>Price per share</dt>
+            <dd>
+              {row.source?.["Price per Share"] ||
+                row.source?.["Price / share"] ||
+                row.source?.TradePrice}{" "}
+              {terms.currency}
+            </dd>
+            {terms.gbpPerUnit && (
+              <>
+                <dt>Conversion</dt>
+                <dd>
+                  £{terms.gbpPerUnit} per {terms.currency}
+                </dd>
+              </>
+            )}
+            {terms.feesGBP !== undefined && (
+              <>
+                <dt>Fees in GBP</dt>
+                <dd>£{new Money(terms.feesGBP).toFixed(2)}</dd>
+              </>
+            )}
+            {terms.feesInCurrency !== undefined && (
+              <>
+                <dt>Fees in {terms.currency}</dt>
+                <dd>{terms.feesInCurrency}</dd>
+              </>
+            )}
+          </dl>
+        ) : (
+          terms.currency && (
+            <p className="caption">
+              Export currency: {terms.currency} ·{" "}
+              {terms.priceUnit === "minor"
+                ? "unit cost in pence"
+                : "price in pounds"}
+              .
+            </p>
+          )
+        )}
         <label className="checkbox-line">
           <input
             name="netAmountConfirmed"
@@ -231,15 +275,7 @@ export function ImportDetailsForm({
           disabled={busy}
           onClick={() => {
             setResetKey((k) => k + 1);
-            setCurrency(
-              initial?.currency ??
-                (fixedCurrency
-                  ? "GBP"
-                  : source.CurrencyPrimary ||
-                    source["Instrument Currency"] ||
-                    source["Currency (Price / share)"] ||
-                    ""),
-            );
+            setCurrency(initialCurrency);
             setFieldErrors({});
             setError("");
 
@@ -252,6 +288,17 @@ export function ImportDetailsForm({
           {busy ? "Checking details…" : "Check and save supporting details"}
         </Button>
       </form>
+      <details className="min-w-0 text-sm">
+        <summary>Original CSV values · record {row.record}</summary>
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 my-3">
+          {Object.entries(row.source ?? {}).map(([key, value]) => (
+            <div key={key} className="break-all">
+              <dt className="font-semibold">{key}</dt>
+              <dd>{value || "—"}</dd>
+            </div>
+          ))}
+        </dl>
+      </details>
     </div>
   );
 }

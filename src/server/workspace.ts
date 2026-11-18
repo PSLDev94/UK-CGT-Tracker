@@ -55,6 +55,7 @@ interface ReceiptRecord {
   status: "accepted" | "duplicate" | "excluded";
   reason: string;
   tradeDetail?: ImportTradeDetail;
+  statementReference?: string;
 }
 
 const missing = () =>
@@ -157,14 +158,12 @@ async function lockPortfolio(tx: Connection, id: string): Promise<Portfolio> {
 }
 
 async function invalidate(tx: Connection, portfolioId: string): Promise<void> {
+  // All readers of a published result require a matching revision. Keep the
+  // pointer so recalculation can refer to the inputs the investor last saved,
+  // even when that save reused an earlier immutable run.
   await query(
     tx,
     "UPDATE cgt.portfolios SET revision = revision + 1 WHERE id = $1",
-    [portfolioId],
-  );
-  await query(
-    tx,
-    "DELETE FROM cgt.published_calculations WHERE portfolio_id = $1",
     [portfolioId],
   );
 }
@@ -190,9 +189,12 @@ async function preview(
   supportingDetails: ImportDetails = {},
 ): Promise<ImportReview> {
   // No provider-imposed page limit: this returns the full account's active keys.
-  const existing = await query<{ source_key: string; content_digest: string }>(
+  const existing = await query<{
+    source_key: string; content_digest: string; supporting_details: SupportingDetails | null;
+  }>(
     tx,
-    "SELECT source_key, content_digest FROM cgt.transactions WHERE account_id = $1 AND active",
+    `SELECT source_key, content_digest, provenance->'native'->'supportingDetails' AS supporting_details
+     FROM cgt.transactions WHERE account_id = $1 AND active`,
     [a.id],
   );
   return reviewCsv(csv, {
@@ -204,7 +206,9 @@ async function preview(
     supportingDetails,
     latestTradeDate: ukCalendarDate(new Date()),
     existing: new Map(
-      existing.map((row) => [row.source_key, row.content_digest]),
+      existing.map((row) => [row.source_key, row.supporting_details
+        ? { digest: row.content_digest, supportingDetails: row.supporting_details }
+        : row.content_digest]),
     ),
   });
 }
@@ -307,7 +311,8 @@ export class Workspace {
           SELECT jsonb_build_object(
             'record', i.record_receipts->n->'record',
             'status', i.record_receipts->n->'status',
-            'reason', i.record_receipts->n->'reason'
+            'reason', i.record_receipts->n->'reason',
+            'statementReference', i.record_receipts->n->'statementReference'
           ) FROM generate_series($2::int, least($2::int + 24, jsonb_array_length(i.record_receipts) - 1)) AS n
           ORDER BY n
         ) AS records FROM cgt.imports AS i WHERE i.id = $1`,
@@ -421,13 +426,18 @@ export class Workspace {
           history_through: string;
           coverage_confirmed: boolean;
           created_at: string;
-        }) | { id: null; tax_year: string }
+        }) | { id: null; tax_year: string; previous_date: string; previous_accounts: string[] }
       >(
         tx,
         `SELECT r.id, years.tax_year, r.status, r.history_through, ${includeReportEligibility ? "r.result" : "r.result - 'poolMovements'"} AS result,
-        r.portfolio_id, r.portfolio_revision, r.input_digest, r.coverage_confirmed, r.coverage_accounts, r.created_at
-        FROM (SELECT DISTINCT tax_year FROM cgt.calculation_runs WHERE portfolio_id=$1) years
+        r.portfolio_id, r.portfolio_revision, r.input_digest, r.coverage_confirmed, r.coverage_accounts, r.created_at,
+        coalesce(saved.history_through, years.history_through)::text AS previous_date,
+        coalesce(saved.coverage_accounts, years.coverage_accounts) AS previous_accounts
+        FROM (SELECT DISTINCT ON (tax_year) tax_year, history_through, coverage_accounts
+              FROM cgt.calculation_runs WHERE portfolio_id=$1
+              ORDER BY tax_year, portfolio_revision DESC, created_at DESC, id DESC) years
         LEFT JOIN cgt.published_calculations p ON p.portfolio_id=$1 AND p.tax_year=years.tax_year
+        LEFT JOIN cgt.calculation_runs saved ON saved.id=p.run_id
         LEFT JOIN cgt.calculation_runs r ON r.id=p.run_id
           AND r.portfolio_revision=(SELECT revision FROM cgt.portfolios WHERE id=$1)
         ORDER BY years.tax_year DESC`,
@@ -435,9 +445,13 @@ export class Workspace {
       );
       const calculations = [];
       const staleReportYears: string[] = [];
+      const previousCalculationInputs = [];
       for (const run of runs) {
         if (run.id === null) {
           staleReportYears.push(run.tax_year);
+          previousCalculationInputs.push({
+            taxYear: run.tax_year, historyThrough: run.previous_date, confirmedAccountIds: run.previous_accounts,
+          });
           continue;
         }
         if (includeReportEligibility) await enrichReportHistory(tx, run);
@@ -480,6 +494,7 @@ export class Workspace {
         drafts,
         calculations,
         staleReportYears,
+        previousCalculationInputs,
       };
     });
   }
@@ -1005,12 +1020,13 @@ export class Workspace {
           c.duplicate,
           JSON.stringify(
             review.records.map(
-              ({ record, status, reason, sourceKey, digest }) => ({
+              ({ record, status, reason, sourceKey, digest, statementReference }) => ({
                 record,
                 status,
                 reason,
                 sourceKey,
                 digest,
+                statementReference,
               }),
             ),
           ),
@@ -1091,6 +1107,7 @@ export class Workspace {
     identity: Identity,
     input: {
       portfolioId: string;
+      portfolioRevision?: number;
       taxYear: string;
       historyThrough: string;
       confirmedAccountIds: string[];
@@ -1124,6 +1141,12 @@ export class Workspace {
       );
     return this.db.run(identity, async (tx) => {
       const p = await lockPortfolio(tx, input.portfolioId);
+      if (input.portfolioRevision !== undefined && input.portfolioRevision !== p.revision)
+        throw new AppError(
+          409,
+          "PORTFOLIO_CHANGED",
+          "Your portfolio changed. Review the updated history and confirm your accounts again before calculating.",
+        );
       const accounts = await query<{ id: string }>(
         tx,
         "SELECT id FROM cgt.broker_accounts WHERE portfolio_id=$1 ORDER BY id",

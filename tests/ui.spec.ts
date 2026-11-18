@@ -1075,9 +1075,15 @@ test("a long import opens its late blocker from page one and returns to the repa
   await expect(page.getByRole("button", { name: /^Save \d/ })).toHaveCount(0);
   await page.getByRole("button", { name: "Resolve record 202", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Resolve record 202" })).toBeFocused();
-  await page.getByLabel("GBP per currency unit", { exact: true }).fill("0.8");
-  await page.getByLabel("Price units in the export", { exact: true }).selectOption("major");
-  await page.getByLabel("Dealing fees and transaction taxes", { exact: true }).fill("5.625");
+  await expect(page.getByText("£4.50", { exact: true })).toBeVisible();
+  await expect(page.getByText("£0.8 per USD", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Price units in the export", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Dealing fees and transaction taxes", { exact: true })).toHaveCount(0);
+  const original = page.locator("details").filter({ hasText: "Original CSV values · record 202" });
+  await expect(original).not.toHaveAttribute("open", "");
+  await original.locator("summary").click();
+  await expect(original.getByText("FX Fee Amount", { exact: true })).toBeVisible();
+  await original.locator("summary").click();
   await page.getByLabel("Supporting statement or contract-note reference", { exact: true }).fill("Synthetic FX contract note 202");
   await page.getByRole("checkbox", { name: /I checked the currency/ }).check();
   await page.getByRole("button", { name: "Check and save supporting details" }).click();
