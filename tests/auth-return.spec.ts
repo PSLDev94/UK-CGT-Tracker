@@ -47,9 +47,9 @@ test("the signup form waits for JavaScript before accepting a submission", async
     await expect(
       page.getByRole("button", { name: "Create account" }),
     ).toBeDisabled();
-    await expect(
-      page.getByText("Enable JavaScript to use this form."),
-    ).toBeVisible();
+    const guidance = page.locator("form noscript p");
+    await expect(guidance).toBeVisible();
+    await expect(guidance).toHaveText("Enable JavaScript to use this form.");
   } finally {
     await context.close();
   }
