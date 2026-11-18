@@ -302,6 +302,28 @@ describe("auditable report exports", () => {
       true,
     );
   });
+  it("prints a source once and keeps its identity and reference lines on the same page", async () => {
+    const sources = Array.from({length: 30}, (_, i) => ({
+      key: `trace-${i.toString().padStart(2, "0")}`,
+      label: "Investor", broker: "ibkr", record: i + 2, instrument: "Example share",
+      reference: `EXEC-${i.toString().padStart(2, "0")}`, statementReference: `NOTE-${i.toString().padStart(2, "0")}`,
+    }));
+    const sourceIds = sources.map(source => source.key);
+    const disposal = {...snapshot.result.disposals[0]!, sourceIds};
+    const movement = {...snapshot.result.poolMovements!.at(-1)!, sourceIds};
+    const result = {...snapshot.result, disposals:[disposal], poolMovements:[movement]};
+    const pdf = await PDFDocument.load(await reportPdf({...snapshot,result,sources}, true));
+    const pages = pdf.getPages().map((_, i) => reportPageText(pdf, i));
+    expect(pages.length).toBeGreaterThan(2);
+    for (const source of sources) {
+      const execution = `Execution reference: ${source.reference}`;
+      expect(pages.join("\n").split(execution)).toHaveLength(2);
+      const page = pages.find(page => page.includes(execution))!;
+      expect(page).toContain(`file row ${source.record}\n${execution}`);
+      expect(page).toContain(`Statement reference: ${source.statementReference}`);
+      expect(page).toContain(`Trace reference: ${source.key}`);
+    }
+  });
   it("keeps the filing note on one evidence page and labels single-share trades", async () => {
     const disposal = snapshot.result.disposals[0]!;
     for (let accountCount = 1; accountCount <= 8; accountCount++) {

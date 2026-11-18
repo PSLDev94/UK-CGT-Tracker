@@ -90,14 +90,12 @@ export async function reportPdf(
       header();
     }
   }
-  function line(text: string, strong = false, size = 10, color = ink) {
-    const font = strong ? bold : regular;
+  function wrap(text: string, font: typeof regular, size: number) {
+    const lines: string[] = [];
     let buffer = "",
       width = 0;
     function flush() {
-      space(size + 5);
-      page.drawText(buffer.trimEnd(), { x: left, y, size, font, color });
-      y -= size + 5;
+      lines.push(buffer.trimEnd());
       buffer = "";
       width = 0;
     }
@@ -119,23 +117,63 @@ export async function reportPdf(
       }
     }
     if (buffer) flush();
+    return lines;
   }
-  function sourceLine(key: string, side: string) {
+  function line(text: string, strong = false, size = 10, color = ink) {
+    const font = strong ? bold : regular;
+    for (const content of wrap(text, font, size)) {
+      space(size + 5);
+      page.drawText(content, { x: left, y, size, font, color });
+      y -= size + 5;
+    }
+  }
+  const references = new Map<string, { id: string; role: string }>();
+  function sourceIds(keys: string[], role: string) {
+    return keys
+      .map((key) => {
+        const existing = references.get(key);
+        if (existing) return existing.id;
+        const id = `T${references.size + 1}`;
+        references.set(key, { id, role });
+        return id;
+      })
+      .join(", ");
+  }
+  function sourceLine(key: string, id: string, role: string) {
     const source = sources.get(key);
+    const entries: { text: string; size: number }[] = [];
     if (source) {
       const broker =
         BROKERS.find((b) => b.id === source.broker)?.name ?? source.broker;
-      line(
-        `${side} · ${broker} · ${source.label} · file row ${source.record}`,
-        false,
-        9,
-      );
+      entries.push({
+        text: `${id} · ${role} · ${broker} · ${source.label} · file row ${source.record}`,
+        size: 9,
+      });
       if (source.reference)
-        line(`Execution reference: ${source.reference}`, false, 9);
+        entries.push({
+          text: `Execution reference: ${source.reference}`,
+          size: 9,
+        });
       if (source.statementReference)
-        line(`Statement reference: ${source.statementReference}`, false, 9);
+        entries.push({
+          text: `Statement reference: ${source.statementReference}`,
+          size: 9,
+        });
+      entries.push({ text: `Trace reference: ${key}`, size: 8 });
+    } else {
+      entries.push({
+        text: `${id} · ${role} · trace reference: ${key}`,
+        size: 8,
+      });
     }
-    line(`${source ? "Trace reference" : side}: ${key}`, false, 8);
+    const height = entries.reduce(
+      (total, entry) =>
+        total + wrap(entry.text, regular, entry.size).length * (entry.size + 5),
+      0,
+    );
+    space(Math.min(712, height + 3));
+    for (const entry of entries) line(entry.text, false, entry.size);
+    y -= 3;
   }
   function heading(text: string) {
     space(48);
@@ -225,7 +263,7 @@ export async function reportPdf(
     for (const [index, d] of r.disposals.entries()) {
       space(85);
       line(
-        `D${index + 1}   ${date(d.date)}   ·   ${d.securityId}   ·   ${shares(d.quantity)}`,
+        `D${index + 1}   ${date(d.date)}   ·   ${d.securityId}   ·   ${shares(d.quantity)} · sale ${sourceIds(d.sourceIds, "Sale")}`,
         true,
         11,
       );
@@ -245,7 +283,7 @@ export async function reportPdf(
       );
       for (const m of d.matches)
         line(
-          `${rules[m.rule]} · ${shares(m.quantity)} · cost ${pounds(m.costGBP)}${m.acquisitionDate ? " · acquired " + date(m.acquisitionDate) : ""}`,
+          `${rules[m.rule]} · ${shares(m.quantity)} · cost ${pounds(m.costGBP)}${m.acquisitionDate ? " · acquired " + date(m.acquisitionDate) : ""}${m.acquisitionIds?.length ? " · " + sourceIds(m.acquisitionIds, rules[m.rule] + " acquisition") : ""}`,
           false,
           10,
         );
@@ -256,20 +294,20 @@ export async function reportPdf(
     if (r.poolMovements?.length) {
       heading("Section 104 pool movements");
       line(
-        "Each entry shows the part added to or removed from the pool after same-day and 30-day matching. Source references identify the transactions on that date.",
+        "Each entry shows the part added to or removed from the pool after same-day and 30-day matching. Look up each T reference in the transaction list.",
         false,
         9,
         muted,
       );
       for (const movement of r.poolMovements) {
-        space(movement.sourceIds.length ? 118 : 62);
+        space(62);
         const label = {
           opening: "Opening balance",
           acquisition: "Acquisition into pool",
           disposal: "Disposal from pool",
         }[movement.kind];
         line(
-          `${date(movement.date)} · ${movement.securityId} · ${label}`,
+          `${date(movement.date)} · ${movement.securityId} · ${label}${movement.sourceIds.length ? " · " + sourceIds(movement.sourceIds, "Pool " + movement.kind) : ""}`,
           true,
           10,
         );
@@ -283,7 +321,6 @@ export async function reportPdf(
           false,
           9,
         );
-        for (const key of movement.sourceIds) sourceLine(key, "Pool movement");
       }
     }
     heading(`Section 104 pools at ${date(r.poolAsOf)}`);
@@ -340,16 +377,9 @@ export async function reportPdf(
   );
   line(`Calculation reference: ${snapshot.id}`, false, 8);
   line(`Input fingerprint: ${snapshot.input_digest}`, false, 8);
-  if (evidence && r.disposals.length) {
+  if (evidence && references.size) {
     heading("Transaction references");
-    for (const [index, d] of r.disposals.entries()) {
-      space(35);
-      line(`D${index + 1} · ${date(d.date)} · ${d.securityId}`, true, 9);
-      for (const key of d.sourceIds) sourceLine(key, "Sale");
-      for (const match of d.matches)
-        for (const key of match.acquisitionIds ?? [])
-          sourceLine(key, rules[match.rule] + " acquisition");
-    }
+    for (const [key, { id, role }] of references) sourceLine(key, id, role);
   }
   const pages = doc.getPages();
   pages.forEach((p, index) =>
