@@ -59,7 +59,14 @@ for (const width of [320, 390]) {
         route.fulfill({
           json: {
             portfolio: { id: "portfolio", name: "Test", revision: 0 },
-            accounts: [],
+            accounts: [
+              {
+                id: "account",
+                label: "Invest",
+                broker: "trading212",
+                account_type: "GIA",
+              },
+            ],
             imports: [],
             drafts: [],
             calculations: [],
@@ -71,7 +78,12 @@ for (const width of [320, 390]) {
           json: { status: "active", entitled: true, canManage: true },
         }),
       );
-      for (const path of ["/", "/dashboard/calculations", "/billing"]) {
+      for (const path of [
+        "/",
+        "/dashboard/upload",
+        "/dashboard/calculations",
+        "/billing",
+      ]) {
         await page.goto(path);
         const main = page.getByRole("main");
         await expect(main.getByRole("heading", { level: 1 })).toBeVisible();
@@ -80,17 +92,31 @@ for (const width of [320, 390]) {
             main.getByRole("button", { name: "Manage subscription" }),
           ).toBeVisible();
         }
+        if (path === "/dashboard/upload") {
+          const name =
+            "Trading-212-consolidated-ordinary-share-transactions.csv";
+          await main.getByLabel("CSV file", { exact: true }).setInputFiles({
+            name,
+            mimeType: "text/csv",
+            buffer: Buffer.from("Date,Amount\n"),
+          });
+          const selected = main.getByText(name, { exact: false });
+          await expect(selected).toBeVisible();
+        }
         await enlarge(page, enlargement);
         expect(
           await page.evaluate(() => document.documentElement.scrollWidth),
         ).toBeLessThanOrEqual(width);
         await expectTextToFit(
           main.locator(
-            "h1, h2, h3, .home-card-pairs p, .home-card-pairs .tabular-nums, .home-card-pairs .font-bold, .home-card-pairs .font-extrabold, .actions button",
+            "h1, h2, h3, .home-card-pairs p, .home-card-pairs .tabular-nums, .home-card-pairs .font-bold, .home-card-pairs .font-extrabold, .actions button, .upload-box .caption",
           ),
           width,
         );
         if (path === "/") continue;
+        if (path === "/dashboard/upload") {
+          await main.getByLabel("CSV file", { exact: true }).setInputFiles([]);
+        }
         const toggle = page.getByRole("button", { name: "Open sidebar menu" });
         expect(
           await toggle.evaluate((button) => {

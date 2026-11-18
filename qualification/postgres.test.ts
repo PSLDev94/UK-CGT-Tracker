@@ -200,34 +200,72 @@ describe('PostgreSQL 18 deployment qualification',()=> {
   })
 })
 
-import { brokerCases, fixture, fixtureDetails } from '../tests/helpers/broker-corpus'
+import { brokerCases, fixture, fixtureDetails, fixtureRows } from '../tests/helpers/broker-corpus'
 import { fingerprintDetails } from '../src/domain/imports/supporting-details'
 import { createHash } from 'node:crypto'
+import Papa from 'papaparse'
 it.each(brokerCases)('qualifies $file import/report/retry using PostgreSQL 18 runtime roles',async c=>{
   const s=await setup(`broker-pg-${c.file}`)
   const account=await workspace.addAccount(s.user,{portfolioId:s.portfolio.id,broker:c.broker,label:`Synthetic ${c.file}`,accountType:'GIA'})
-  const prepare=()=>workspace.prepareImport(s.user,{accountId:account.id,csv:fixture(c),format:'native',ordinarySharesConfirmed:true})
-  let draft=await prepare()
-  for(const [record,details] of Object.entries(fixtureDetails(c))) {
-    const pgDetails=(await owner.query('SELECT $1::jsonb AS details',[JSON.stringify(details)])).rows[0].details
-    expect(JSON.stringify(fingerprintDetails(details))).toBe(JSON.stringify(pgDetails))
-    draft=await workspace.supplyImportDetails(s.user,draft.draftId,Number(record),details,draft.reviewVersion)
-    const row=draft.review.records.find(r=>r.record===Number(record))!
-    // Historical commits fingerprinted the JSONB-read supporting object.
-    const legacy={trade:row.trade,provenance:{...row.provenance,native:{...row.provenance!.native,supportingDetails:pgDetails}}}
-    expect(row.digest).toBe(createHash('sha256').update(JSON.stringify(legacy)).digest('hex'))
+  const notes=fixtureDetails(c)
+  async function review(file=fixture(c), declarations=notes) {
+    let draft=await workspace.prepareImport(s.user,{accountId:account.id,csv:file,format:'native',ordinarySharesConfirmed:true})
+    for(const [record,details] of Object.entries(declarations))
+      draft=await workspace.supplyImportDetails(s.user,draft.draftId,Number(record),details,draft.reviewVersion)
+    return draft
   }
+  const draft=await review()
   expect(draft.review.status).toBe('ready')
   expect((await workspace.commitImport(s.user,draft.draftId,draft.revision,draft.reviewVersion)).outcome).toBe('committed')
   const result=await workspace.calculate(s.user,{portfolioId:s.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',confirmedAccountIds:[s.account.id,account.id]})
   expect(result.result.summary?.netGainGBP).toBe(c.gain)
   expect((await workspace.reportSnapshot(s.user,result.runId)).result).toEqual(result.result)
-  let duplicate=await prepare()
-  for(const [record,details] of Object.entries(fixtureDetails(c)))
-    duplicate=await workspace.supplyImportDetails(s.user,duplicate.draftId,Number(record),details,duplicate.reviewVersion)
+  const duplicate=await review()
   expect(duplicate.review.counts).toMatchObject({accepted:0,duplicate:2})
   expect((await workspace.commitImport(s.user,duplicate.draftId,duplicate.revision,duplicate.reviewVersion)).outcome).toBe('needs_review')
   await workspace.discardDraft(s.user,duplicate.draftId)
+  if(Object.keys(notes).length) {
+    // Seed the previously deployed fingerprint and supporting JSONB exactly as
+    // the old writer did. All replays below go through the normal application role.
+    for(const [record,detail] of Object.entries(notes)) {
+      const historical={...detail,priceUnit:c.file==='freetrade-fx-fees' ? 'minor' : detail.priceUnit}
+      const pgNote=(await owner.query('SELECT $1::jsonb AS note',[JSON.stringify(historical)])).rows[0].note
+      expect(JSON.stringify(fingerprintDetails(pgNote))).toBe(JSON.stringify(pgNote))
+      const row=draft.review.records.find(r=>r.record===Number(record))!
+      const provenance={...row.provenance,native:{...row.provenance!.native,supportingDetails:pgNote}}
+      const digest=createHash('sha256').update(JSON.stringify({trade:row.trade,provenance})).digest('hex')
+      expect(digest).not.toBe(row.digest)
+      const saved=await owner.query(
+        "UPDATE cgt.transactions SET content_digest=$1, provenance=jsonb_set(provenance,'{native,supportingDetails}',$2::jsonb) WHERE import_id=$3 AND source_key=$4",
+        [digest,JSON.stringify(pgNote),draft.draftId,row.sourceKey],
+      )
+      expect(saved.rowCount).toBe(1)
+    }
+    const relabelled=Object.fromEntries(Object.entries(notes).map(([record,note])=>
+      [record,{...note,reference:note.reference+' (personal copy)'}]))
+    const replay=await review(fixture(c),relabelled)
+    expect(replay.review.counts).toMatchObject({duplicate:2,accepted:0,needsReview:0})
+    await workspace.discardDraft(s.user,replay.draftId)
+
+    // Increase the BUY fee and corresponding net cash by £1 for the same
+    // execution. Its gross price still reconciles, but its financial facts differ.
+    const rows=fixtureRows(c)
+    const buy=rows[0]!
+    if(c.file==='freetrade-fx-fees') {
+      buy['Total Amount']='1005.50'
+      buy['Stamp Duty']='1'
+      relabelled['2']!.fees='6.875' // £5.50 at £0.80 per USD.
+    } else {
+      buy[c.amount]=buy[c.amount]!.startsWith('-') ? '-509.49' : '509.49'
+      relabelled['2']!.fees='9.49'
+    }
+    const conflict=await review(Papa.unparse(rows),relabelled)
+    expect(conflict.review.issues).toContainEqual(expect.objectContaining({code:'DUPLICATE_CONFLICT',record:2}))
+    expect(conflict.review.counts).toMatchObject({duplicate:1,accepted:0,needsReview:1})
+    expect((await workspace.commitImport(s.user,conflict.draftId,conflict.revision,conflict.reviewVersion)).outcome).toBe('needs_review')
+    await workspace.discardDraft(s.user,conflict.draftId)
+    expect((await workspace.reportSnapshot(s.user,result.runId)).result).toEqual(result.result)
+  }
   await workspace.reverseImport(s.user,draft.draftId,'Synthetic broker qualification complete')
   await expect(workspace.reportSnapshot(s.user,result.runId)).rejects.toMatchObject({status:404})
 })
