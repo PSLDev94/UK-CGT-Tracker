@@ -1,5 +1,5 @@
 "use client";
-export { money } from './format';
+export { money } from "./format";
 
 import {
   useState,
@@ -72,7 +72,11 @@ export function PasswordField(props: Omit<FieldProps, "type">) {
         type="button"
         className="text-button"
         aria-pressed={visible}
-        aria-label={`${visible ? "Hide" : "Show"} ${props.label.toLowerCase()}`}
+        aria-label={
+          props.label.toLowerCase() === "password"
+            ? undefined
+            : `${visible ? "Hide" : "Show"} password for ${props.label.toLowerCase()}`
+        }
         onClick={() => setVisible(!visible)}
       >
         {visible ? "Hide password" : "Show password"}
@@ -149,4 +153,3 @@ export function focusFirstError(
     if (first instanceof HTMLElement) first.focus();
   });
 }
-

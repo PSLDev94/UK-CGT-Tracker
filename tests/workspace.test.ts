@@ -95,6 +95,9 @@ describe("authenticated PostgreSQL application workflow", () => {
     await expect(
       workspace.reverseImport(b.user, draft.draftId, "Wrong file"),
     ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      workspace.importDetail(b.user, draft.draftId, 1),
+    ).rejects.toMatchObject({ status: 404 });
     expect((await workspace.overview(b.user)).imports).toHaveLength(0);
   });
 
@@ -118,6 +121,20 @@ describe("authenticated PostgreSQL application workflow", () => {
       draft.revision,
     );
     expect(result.outcome).toBe("committed");
+    const receipt = await workspace.importDetail(s.user, draft.draftId, 1);
+    expect(receipt.total).toBe(3);
+    expect(receipt.records.map((row) => row.status).sort()).toEqual([
+      "accepted",
+      "accepted",
+      "excluded",
+    ]);
+    expect(receipt.records[0]).not.toHaveProperty("sourceKey");
+    expect(
+      (await workspace.importDetail(s.user, draft.draftId, 2)).records,
+    ).toEqual([]);
+    await expect(
+      workspace.importDetail(s.user, draft.draftId, 0),
+    ).rejects.toMatchObject({ code: "INVALID_PAGE" });
     expect(
       (await workspace.commitImport(s.user, draft.draftId, draft.revision))
         .outcome,
@@ -500,6 +517,13 @@ describe("report ownership and assisted draft concurrency", () => {
     expect(
       (await workspace.reportSnapshot(a.user, run.runId)).result.summary,
     ).toEqual(run.result.summary);
+    const published = await workspace.reportSnapshot(a.user, run.runId);
+    expect(published.accounts).toEqual([{label: a.account.label, broker: a.account.broker, confirmed: true}]);
+    const saleKeys = published.result.disposals.flatMap(d => d.sourceIds);
+    expect(await workspace.reportSources(a.user, saleKeys)).toEqual(
+      expect.arrayContaining([expect.objectContaining({label: a.account.label, broker: a.account.broker})])
+    );
+    expect(await workspace.reportSources(b.user, saleKeys)).toEqual([]);
     await expect(
       workspace.reportSnapshot(b.user, run.runId),
     ).rejects.toMatchObject({ status: 404 });
@@ -659,6 +683,7 @@ it.each(brokerCases)(
         session: { expiresAt: new Date(Date.now() + 3600000) },
       }),
       snapshot: (identity, id) => workspace.reportSnapshot(identity, id),
+      sources: (identity, keys) => workspace.reportSources(identity, keys),
       consume: (identity) => workspace.consumeRequest(identity, "calculate"),
       entitled,
     });

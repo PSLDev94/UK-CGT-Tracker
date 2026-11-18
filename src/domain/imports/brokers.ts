@@ -41,3 +41,13 @@ export const BROKER_COVERAGE = BROKERS.flatMap((broker) =>
     enabled: !(broker.id === "ibkr" && variant === "Activity Statement CSV"),
   })),
 );
+
+
+export const IMPORT_PATH_LABEL: Record<BrokerId, string> = {
+  trading212: "Automatic + assisted",
+  freetrade: "Automatic + assisted",
+  hl: "Assisted import",
+  ii: "Assisted import",
+  ibkr: "Execution Flex CSV",
+  ajbell: "Assisted import",
+};

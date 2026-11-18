@@ -45,6 +45,9 @@ export default function Section104PoolPage() {
 
   return (
     <GuideLayout
+      slug="section-104-pool"
+      edition="Share matching"
+      nextStep={{ href: "/tools/section-104-calculator", title: "Try the Section 104 pool example" }}
       title="What is a Section 104 Pool? UK CGT Explained with Examples"
       breadcrumb="Section 104 Pool"
       relatedGuides={[

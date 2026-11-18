@@ -334,11 +334,10 @@ export default function CGTAllowanceCheckerPage() {
         {/* CTA */}
         <section className="bg-blue-50 rounded-2xl p-8 text-center">
           <h2 className="text-xl font-bold text-gray-900 mb-3">
-            Know your exact position with your full transaction history
+            Review the disposals behind your gains
           </h2>
           <p className="text-gray-600 mb-6">
-            Upload your broker CSV and CGT Tracker will calculate your precise
-            gains, losses, and tax position automatically.
+            Import supported broker records to calculate your share gains and losses.
           </p>
           <Link
             href="/signup"

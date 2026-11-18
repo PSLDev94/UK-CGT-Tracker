@@ -58,7 +58,10 @@ export default function Privacy() {
           The preview uses Railway for hosting and PostgreSQL storage, Resend
           for verification, recovery and support email, and Stripe for sandbox
           billing. The production domain is managed through Cloudflare.
-          Essential sign-in cookies keep your session secure. The application
+          Essential cookies keep your session secure and return you to the selected report after checkout.
+          We count completed steps such as file reviews, repairs and report downloads in our service logs.
+          These usage events contain the step and, for file reviews and repairs, a broker category.
+          They omit names, account identifiers, amounts and file contents. The application
           does not include advertising trackers or send CSV files to an AI
           service.
         </p>

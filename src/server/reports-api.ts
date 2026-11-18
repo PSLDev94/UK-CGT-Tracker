@@ -1,3 +1,4 @@
+import { recordJourney } from "./journey";
 import { authenticate, type Identity, type SessionReader } from "./identity";
 import { AppError } from "./errors";
 import {
@@ -6,13 +7,14 @@ import {
   jsonInput,
   stringField,
 } from "./http";
-import { reportCsv, type ReportSnapshot } from "../domain/reports/report";
+import { reportCsv, type ReportSnapshot, type ReportSource } from "../domain/reports/report";
 import { reportPdf } from "../domain/reports/pdf";
 
 export function createReportHandler(deps: {
   readSession: SessionReader;
   origin: string;
   snapshot: (identity: Identity, id: string) => Promise<ReportSnapshot>;
+  sources?: (identity: Identity, keys: string[]) => Promise<ReportSource[]>;
   entitled: (identity: Identity) => Promise<boolean>;
   consume: (identity: Identity) => Promise<void>;
 }) {
@@ -56,10 +58,17 @@ export function createReportHandler(deps: {
           "REPORT_TOO_LARGE",
           "For more than 5,000 disposal groups or 50,000 matching references, download the full CSV evidence and the summary PDF.",
         );
+      if (kind === "evidence" && deps.sources) {
+        const keys = new Set(snapshot.result.disposals.flatMap(d => [
+          ...d.sourceIds, ...d.matches.flatMap(match => match.acquisitionIds ?? []),
+        ]));
+        snapshot.sources = await deps.sources(identity, [...keys]);
+      }
       const csv = kind === "csv";
       const body = csv
         ? reportCsv(snapshot)
         : Buffer.from(await reportPdf(snapshot, kind === "evidence"));
+      recordJourney(csv ? "csv_served" : "pdf_served");
       return new Response(body, {
         headers: {
           "content-type": csv ? "text/csv; charset=utf-8" : "application/pdf",

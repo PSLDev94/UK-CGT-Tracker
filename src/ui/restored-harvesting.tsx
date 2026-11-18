@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import Decimal from "decimal.js";
 import { Calculator, TrendingDown } from "lucide-react";
 import { workspaceApi } from "./api";
@@ -70,13 +71,13 @@ export function RestoredHarvesting() {
       <section className="bg-white rounded-xl shadow-sm border p-6">
         <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Calculator size={20} className="text-blue-600" aria-hidden="true" />
-          Enter Current Market Prices
+          Explore a price scenario
         </h2>
         <p className="text-sm text-gray-600">
-          Prices are entered by you. Pool snapshots are historical and may
-          differ from your current holdings. This scenario does not model a
-          disposal, trading costs, later matching, tax savings or investment
-          advice.
+          Enter a hypothetical price for each holding. Pool snapshots are
+          historical and may differ from your current holdings. This scenario
+          does not model a disposal, trading costs, later matching, tax savings
+          or investment advice.
         </p>
         <label htmlFor="scenario-year" className="text-sm font-medium">
           Pool snapshot year
@@ -116,9 +117,9 @@ export function RestoredHarvesting() {
             <thead>
               <tr>
                 <th>Asset</th>
-                <th>Shares Held</th>
+                <th>Shares at snapshot</th>
                 <th>Cost Per Share</th>
-                <th>Enter Current Price (£)</th>
+                <th>Your scenario price (£)</th>
               </tr>
             </thead>
             <tbody>
@@ -132,7 +133,7 @@ export function RestoredHarvesting() {
                     </td>
                     <td>
                       <input
-                        aria-label={`Current price for ${p.securityId}`}
+                        aria-label={`Scenario price for ${p.securityId}`}
                         inputMode="decimal"
                         className="border rounded px-2 py-2 w-36"
                         value={p.input}
@@ -156,8 +157,19 @@ export function RestoredHarvesting() {
               ) : (
                 <tr>
                   <td colSpan={4}>
-                    No qualified holdings in this snapshot. Save a complete
-                    calculation from Tax Overview first.
+                    {result
+                      ? "This snapshot has no eligible holdings to explore."
+                      : "A saved calculation provides the holdings for this scenario."}{" "}
+                    <Link
+                      className="text-blue-700 underline"
+                      href={
+                        year
+                          ? "/dashboard/calculations?year=" + year
+                          : "/dashboard/calculations"
+                      }
+                    >
+                      Open calculations
+                    </Link>
                   </td>
                 </tr>
               )}

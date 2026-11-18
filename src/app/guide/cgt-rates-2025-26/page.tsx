@@ -14,6 +14,9 @@ export const metadata: Metadata = {
 export default function CGTRatesPage() {
   return (
     <GuideLayout
+      slug="cgt-rates-2025-26"
+      edition="Tax year 2025–26"
+      nextStep={{ href: "/tools/cgt-allowance-checker", title: "Try the 2025–26 allowance example" }}
       title="UK Capital Gains Tax Rates 2025-26 on Shares"
       breadcrumb="CGT Rates 2025-26"
       relatedGuides={[

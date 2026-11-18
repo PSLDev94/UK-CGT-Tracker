@@ -120,6 +120,28 @@ describe("billing ownership, retries and reconciliation", () => {
     ).toBe(403);
     expect(s.gateway.createCustomer).not.toHaveBeenCalled();
   });
+  it("restores only the selected PDF year and format for the same account and tab", async () => {
+    const a = await setup(), b = await setup();
+    const tab = "72eac3d6-28dc-4828-b5a2-78663871ce12";
+    let owner = a.identity.ownerId;
+    const handler = createBillingHandler(a.billing, async () => ({
+      user: { id: owner, emailVerified: true }, session: { expiresAt: new Date(Date.now() + 60000) }
+    }), config.origin, async () => {});
+    const post = (body: object, cookie = "") => handler(new Request(config.origin + "/api/v2/billing",{
+      method: "POST", headers: {origin: config.origin, "content-type": "application/json", cookie}, body: JSON.stringify(body)
+    }));
+    const target = {year:"2024-25",format:"evidence"};
+    const start = await post({action:"checkout",tab,...target});
+    const setCookie = start.headers.get("set-cookie");
+    expect(start.status).toBe(200);
+    expect(setCookie).toMatch(/HttpOnly; SameSite=Lax; Max-Age=86400; Secure/);
+    const cookie = setCookie!.split(";")[0]!;
+    expect((await (await post({action:"status",tab}, cookie)).json()).returnReport).toEqual(target);
+    expect((await (await post({action:"status"}, cookie)).json()).returnReport).toBeNull();
+    owner = b.identity.ownerId;
+    expect((await (await post({action:"status",tab}, cookie)).json()).returnReport).toBeNull();
+    expect((await post({action:"checkout",year:"2024-25",format:"invalid"})).status).toBe(400);
+  });
   it("keeps provider idempotency keys after a provider failure", async () => {
     const s = await setup();
     vi.mocked(s.gateway.createCheckout).mockRejectedValueOnce(

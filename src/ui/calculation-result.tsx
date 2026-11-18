@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+import Link from "next/link";
 import { money, Notice } from "./primitives";
 import type { Calculation } from "../domain/cgt/types";
 const rules = {
@@ -14,7 +15,12 @@ export function CalculationResult({
   coverage: boolean;
 }) {
   return (
-    <section aria-label="Calculation result" className="space-y-6 mb-8">
+    <section
+      id="calculation-summary"
+      tabIndex={-1}
+      aria-label="Calculation result"
+      className="space-y-6 mb-8"
+    >
       <div className="flex flex-wrap gap-3 justify-between items-center">
         <h2 className="text-lg font-semibold text-gray-900">
           {result.taxYear} share gains
@@ -54,6 +60,13 @@ export function CalculationResult({
       {result.summary && (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
           {[
+            [
+              new Decimal(result.summary.netGainGBP).lt(0)
+                ? "Net loss"
+                : "Net gain",
+              result.summary.netGainGBP,
+              "text-blue-900",
+            ],
             ["Total Gains", result.summary.gainsGBP, "text-green-700"],
             ["Total Losses", result.summary.lossesGBP, "text-red-600"],
             [
@@ -61,22 +74,33 @@ export function CalculationResult({
               result.summary.allowableCostsGBP,
               "text-gray-900",
             ],
-            ["Net gain", result.summary.netGainGBP, "text-blue-900"],
           ].map(([label, value, tone]) => (
             <div
               key={label}
-              className={`p-6 rounded-xl border shadow-sm ${label === "Net gain" ? "bg-blue-50 border-blue-200 net-gain" : "bg-white"}`}
+              className={`p-6 rounded-xl border shadow-sm ${label.startsWith("Net") ? "bg-blue-50 border-blue-200 net-gain" : "bg-white"}`}
             >
               <h3 className="text-sm font-medium text-gray-600 mb-1">
                 {label}
               </h3>
-              <strong className={`text-2xl font-bold ${tone}`}>
+              <strong className={`text-2xl font-bold tabular-nums ${tone}`}>
                 {money(value)}
               </strong>
             </div>
           ))}
         </div>
       )}
+      <p className="caption">
+        History through {result.historyThrough} ·{" "}
+        {coverage
+          ? "Account coverage confirmed"
+          : "Account coverage incomplete"}
+      </p>
+      <Link
+        className="button primary"
+        href={"/dashboard/reports?year=" + encodeURIComponent(result.taxYear)}
+      >
+        View reports for {result.taxYear}
+      </Link>
       <p className="caption">
         Gains and losses, not tax owed. Personal allowances, reliefs and other
         gains are not applied. This preview is not a filing-ready report.
@@ -87,11 +111,52 @@ export function CalculationResult({
             Disposals ({result.taxYear})
           </h3>
           <span className="text-sm text-gray-500">
-            {result.disposals.length} transactions
+            {result.disposals.length}{" "}
+            {result.disposals.length === 1 ? "disposal" : "disposals"}
           </span>
         </div>
+        <div className="md:hidden p-4">
+          {result.disposals.length === 0 && (
+            <p>
+              No disposals fall in this tax year within the imported history.
+            </p>
+          )}
+          {result.disposals.map((d, i) => (
+            <details key={`${d.securityId}-${i}`} className="mb-2">
+              <summary className="cursor-pointer">
+                <span className="break-all">{d.securityId}</span> · {d.date}
+                <br />
+                <strong className="tabular-nums">
+                  {money(d.gainGBP)}
+                </strong>{" "}
+                {d.gainGBP === null
+                  ? "gain unresolved"
+                  : new Decimal(d.gainGBP).lt(0)
+                    ? "loss"
+                    : "gain"}
+              </summary>
+              <dl className="my-3 grid grid-cols-2 gap-2 tabular-nums">
+                <dt>Quantity</dt>
+                <dd className="text-right">{d.quantity}</dd>
+                <dt>Proceeds</dt>
+                <dd className="text-right">{money(d.proceedsGBP)}</dd>
+                <dt>Allowable cost</dt>
+                <dd className="text-right">{money(d.allowableCostGBP)}</dd>
+              </dl>
+              <ul className="match-list">
+                {d.matches.map((m, j) => (
+                  <li key={j}>
+                    {rules[m.rule]}: {m.quantity} shares
+                    {m.acquisitionDate ? " bought " + m.acquisitionDate : ""}.
+                    Cost: {money(m.costGBP)}.
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ))}
+        </div>
         <div
-          className="overflow-x-auto"
+          className="hidden md:block overflow-x-auto"
           tabIndex={0}
           role="region"
           aria-label="Disposal evidence"

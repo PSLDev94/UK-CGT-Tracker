@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { BarChart3, Plus, Trash2, ArrowRight, Calculator } from "lucide-react";
 import Decimal from "decimal.js";
@@ -23,7 +23,9 @@ export default function Section104CalculatorPage() {
   const [sellPrice, setSellPrice] = useState("");
   const [nextId, setNextId] = useState(2);
 
+  const rowFocus = useRef<number | null>(null);
   const addRow = () => {
+    rowFocus.current = nextId;
     setRows((prev) => [
       ...prev,
       { id: nextId, date: "", quantity: "", pricePerShare: "", fees: "" },
@@ -32,6 +34,8 @@ export default function Section104CalculatorPage() {
   };
 
   const removeRow = (id: number) => {
+    const index = rows.findIndex((row) => row.id === id);
+    rowFocus.current = (rows[index + 1] ?? rows[index - 1])?.id ?? null;
     setRows((prev) => prev.filter((r) => r.id !== id));
   };
 
@@ -45,22 +49,26 @@ export default function Section104CalculatorPage() {
   );
 
   const validDecimal = (value: string) => /^\d{1,12}(\.\d{1,8})?$/.test(value);
-  // Calculate pool
-  const poolRows = rows
-    .filter(
-      (r) =>
-        validDecimal(r.quantity) &&
-        new Decimal(r.quantity).gt(0) &&
-        validDecimal(r.pricePerShare) &&
-        (!r.fees || validDecimal(r.fees)),
-    )
-    .map((r) => {
-      const qty = new Decimal(r.quantity || 0);
-      const price = new Decimal(r.pricePerShare || 0);
-      const fees = new Decimal(r.fees || 0);
-      const cost = qty.mul(price).plus(fees);
-      return { ...r, decQty: qty, decCost: cost };
-    });
+  const activeRows = rows.filter((row) =>
+    [row.quantity, row.pricePerShare, row.date, row.fees].some(Boolean),
+  );
+  function missingFields(row: PurchaseRow) {
+    const fields: string[] = [];
+    if (!validDecimal(row.quantity) || !new Decimal(row.quantity).gt(0))
+      fields.push("a positive quantity");
+    if (!validDecimal(row.pricePerShare))
+      fields.push("a valid price per share");
+    if (row.fees && !validDecimal(row.fees)) fields.push("valid fees");
+    return fields;
+  }
+  const incomplete = activeRows.some((row) => missingFields(row).length > 0);
+  const poolRows = (incomplete ? [] : activeRows).map((r) => {
+    const qty = new Decimal(r.quantity || 0);
+    const price = new Decimal(r.pricePerShare || 0);
+    const fees = new Decimal(r.fees || 0);
+    const cost = qty.mul(price).plus(fees);
+    return { ...r, decQty: qty, decCost: cost };
+  });
 
   const poolState = poolRows.reduce<
     {
@@ -154,9 +162,9 @@ export default function Section104CalculatorPage() {
           proportionally from the pool.
         </p>
         <p className="text-gray-600 mb-8 max-w-3xl leading-relaxed">
-          Enter your purchase history below to build your pool and see how the
-          average cost changes with each acquisition. Then enter a disposal to
-          calculate your gain or loss.
+          This standalone example assumes the sale uses the pool. Enter
+          purchases in date order to see how the average cost changes with each
+          acquisition. Then enter a disposal to calculate your gain or loss.
         </p>
 
         {/* Purchase rows */}
@@ -168,7 +176,7 @@ export default function Section104CalculatorPage() {
             </h2>
 
             <div className="space-y-4">
-              {rows.map((row) => (
+              {rows.map((row, index) => (
                 <div
                   key={row.id}
                   className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end"
@@ -179,7 +187,7 @@ export default function Section104CalculatorPage() {
                     </label>
                     <input
                       type="date"
-                      aria-label={`Date — purchase ${rows.indexOf(row) + 1}`}
+                      aria-label={`Date — purchase ${index + 1}`}
                       value={row.date}
                       onChange={(e) =>
                         updateRow(row.id, "date", e.target.value)
@@ -192,11 +200,16 @@ export default function Section104CalculatorPage() {
                       Quantity
                     </label>
                     <input
-                      type="number"
-                      step="any"
-                      min="0.01"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="100"
-                      aria-label={`Quantity — purchase ${rows.indexOf(row) + 1}`}
+                      ref={(input) => {
+                        if (input && rowFocus.current === row.id) {
+                          rowFocus.current = null;
+                          input.focus();
+                        }
+                      }}
+                      aria-label={`Quantity — purchase ${index + 1}`}
                       value={row.quantity}
                       onChange={(e) =>
                         updateRow(row.id, "quantity", e.target.value)
@@ -209,11 +222,10 @@ export default function Section104CalculatorPage() {
                       Price/share (£)
                     </label>
                     <input
-                      type="number"
-                      step="any"
-                      min="0.0001"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="3.50"
-                      aria-label={`Price/share (£) — purchase ${rows.indexOf(row) + 1}`}
+                      aria-label={`Price/share (£) — purchase ${index + 1}`}
                       value={row.pricePerShare}
                       onChange={(e) =>
                         updateRow(row.id, "pricePerShare", e.target.value)
@@ -226,11 +238,10 @@ export default function Section104CalculatorPage() {
                       Fees (£)
                     </label>
                     <input
-                      type="number"
-                      step="any"
-                      min="0"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="0"
-                      aria-label={`Fees (£) — purchase ${rows.indexOf(row) + 1}`}
+                      aria-label={`Fees (£) — purchase ${index + 1}`}
                       value={row.fees}
                       onChange={(e) =>
                         updateRow(row.id, "fees", e.target.value)
@@ -244,12 +255,23 @@ export default function Section104CalculatorPage() {
                         type="button"
                         onClick={() => removeRow(row.id)}
                         className="p-2 text-gray-400 hover:text-red-600 transition-colors"
-                        aria-label="Remove row"
+                        aria-label={`Remove purchase ${index + 1}`}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     )}
                   </div>
+                  {activeRows.includes(row) &&
+                    missingFields(row).length > 0 && (
+                      <p
+                        role="status"
+                        className="sm:col-span-12 text-sm text-amber-800"
+                      >
+                        Purchase {index + 1} needs{" "}
+                        {missingFields(row).join(" and ")}. The pool total will
+                        appear when all purchases are complete.
+                      </p>
+                    )}
                 </div>
               ))}
             </div>
@@ -315,7 +337,7 @@ export default function Section104CalculatorPage() {
                   </tbody>
                 </table>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid sm:grid-cols-3 gap-4 tabular-nums">
                 <div className="bg-white rounded-xl p-4 border text-center">
                   <p className="text-xs text-gray-500 uppercase mb-1">
                     Total Shares
@@ -361,9 +383,8 @@ export default function Section104CalculatorPage() {
                 </label>
                 <input
                   id="sell-qty"
-                  type="number"
-                  step="any"
-                  min="0.01"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="e.g. 100"
                   value={sellQty}
                   onChange={(e) => setSellQty(e.target.value)}
@@ -379,9 +400,8 @@ export default function Section104CalculatorPage() {
                 </label>
                 <input
                   id="sell-price"
-                  type="number"
-                  step="any"
-                  min="0.0001"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="e.g. 4.20"
                   value={sellPrice}
                   onChange={(e) => setSellPrice(e.target.value)}
@@ -491,8 +511,8 @@ export default function Section104CalculatorPage() {
             Tracking multiple securities?
           </h2>
           <p className="text-gray-600 mb-6">
-            CGT Tracker handles your entire portfolio automatically — multiple
-            securities, same-day rules, B&amp;B matching, and SA108 reports.
+            Import supported ordinary-share trades, confirm your history and
+            review each disposal against its matched acquisitions.
           </p>
           <Link
             href="/signup"

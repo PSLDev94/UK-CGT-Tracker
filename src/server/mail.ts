@@ -1,3 +1,4 @@
+import { contactTopics } from "../ui/contact-topics";
 import { Resend } from "resend";
 import type { SendAuthMail } from "./auth";
 
@@ -33,7 +34,8 @@ export function resendSupportMailer(apiKey: string, from: string) {
         from: `CGT Tracker <${from}>`,
         to: "support@cgttracker.com",
         replyTo: message.email,
-        subject: "CGT Tracker support request",
+        subject:
+          "CGT Tracker support · " + contactTopics[message.topic ?? "general"],
         text: `Name: ${message.name}\nReply email: ${message.email}\n\n${message.message}`,
       },
       { idempotencyKey: `contact-${message.requestId}` },

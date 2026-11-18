@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { authHref, safeReturnPath } from "./return-path";
 import { authApi, ApiError } from "./api";
 import {
   Button,
@@ -25,7 +26,7 @@ const copy: Record<
   "sign-up": {
     title: "Create your account",
     description:
-      "Create an account for the relaunch preview. Verify your email before uploading financial information.",
+      "Upload and calculate for free after verifying your email. PDF reports are included in the £49 annual plan.",
     action: "Create account",
   },
   recover: {
@@ -47,8 +48,28 @@ const copy: Record<
   },
 };
 
-export function AuthForm({ mode, token, verificationNotice }: { mode: AuthMode; token?: string; verificationNotice?: "failed" | "complete" }) {
+export function AuthForm({
+  mode,
+  token,
+  nextPath,
+  verificationNotice,
+}: {
+  mode: AuthMode;
+  nextPath?: string;
+  token?: string;
+  verificationNotice?: "failed" | "complete";
+}) {
   const router = useRouter();
+  const destination = safeReturnPath(nextPath);
+  const href = (path: string) => authHref(path, destination);
+  const [submittedAddress, setSubmittedAddress] = useState("");
+  const confirmationHeading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (submittedAddress) confirmationHeading.current?.focus();
+  }, [submittedAddress]);
+  const [resent, setResent] = useState(false);
+  const callbackURL = () =>
+    location.origin + href("/account/sign-in?verification=complete");
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
@@ -96,23 +117,22 @@ export function AuthForm({ mode, token, verificationNotice }: { mode: AuthMode; 
     try {
       if (mode === "sign-in") {
         await authApi("sign-in/email", { email, password });
-        router.replace("/dashboard");
+        router.replace(destination);
         router.refresh();
       } else if (mode === "sign-up") {
         await authApi("sign-up/email", {
           email,
           password,
           name,
-          callbackURL: `${location.origin}/account/sign-in?verification=complete`,
+          callbackURL: callbackURL(),
         });
         form.reset();
-        setMessage(
-          "Check your inbox. If this address can be registered, a verification link is on its way. After verifying, return here to sign in.",
-        );
+        setSubmittedAddress(email);
+        setResent(false);
       } else if (mode === "recover") {
         await authApi("request-password-reset", {
           email,
-          redirectTo: `${location.origin}/account/reset`,
+          redirectTo: location.origin + href("/account/reset"),
         });
         setMessage(
           "If there is an account for this address, a reset link is on its way. The link expires in 30 minutes.",
@@ -120,7 +140,7 @@ export function AuthForm({ mode, token, verificationNotice }: { mode: AuthMode; 
       } else if (mode === "verify") {
         await authApi("send-verification-email", {
           email,
-          callbackURL: `${location.origin}/account/sign-in?verification=complete`,
+          callbackURL: callbackURL(),
         });
         setMessage(
           "If verification is needed for this address, a new link is on its way. Check your inbox and spam folder.",
@@ -149,87 +169,171 @@ export function AuthForm({ mode, token, verificationNotice }: { mode: AuthMode; 
     }
   }
 
+  if (mode === "sign-up" && submittedAddress) {
+    return (
+      <section className="auth-wrap panel">
+        <h1 tabIndex={-1} ref={confirmationHeading}>
+          Check your inbox
+        </h1>
+        <p role="status">
+          {resent
+            ? "Verification email requested again."
+            : "Check your inbox for the verification link."}{" "}
+          If this address can be registered, the link will arrive at{" "}
+          <strong>{submittedAddress}</strong>.
+        </p>
+        <p>
+          Open the link to verify your email, then sign in to your workspace.
+        </p>
+        {error && <Notice tone="error">{error}</Notice>}
+        <Link className="button primary" href={href("/account/sign-in")}>
+          Go to sign in
+        </Link>
+        <div className="actions">
+          <Button
+            variant="secondary"
+            busy={busy}
+            onClick={async () => {
+              if (busy) return;
+              setBusy(true);
+              setError("");
+              try {
+                await authApi("send-verification-email", {
+                  email: submittedAddress,
+                  callbackURL: callbackURL(),
+                });
+                setResent(true);
+              } catch (e) {
+                setError(
+                  e instanceof Error
+                    ? e.message
+                    : "Try requesting a new email.",
+                );
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? "Sending…" : "Resend verification email"}
+          </Button>
+          <button
+            className="text-button"
+            disabled={busy}
+            onClick={() => {
+              setSubmittedAddress("");
+              setError("");
+            }}
+          >
+            Use a different email
+          </button>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="auth-wrap panel">
-      <Link href="/" className="text-sm text-blue-600 font-medium inline-block mb-4">← Back to home</Link>
+      <Link
+        href="/"
+        className="text-sm text-blue-600 font-medium inline-block mb-4"
+      >
+        ← Back to home
+      </Link>
       <h1>{copy[mode].title}</h1>
       <p className="muted">{copy[mode].description}</p>
-      {verificationNotice === "complete" && <Notice tone="success">Your email is verified. Sign in to continue.</Notice>}
-      {verificationNotice === "failed" && <Notice tone="error">This verification link could not be used. <Link href="/account/verify">Request a new verification email</Link>.</Notice>}
+      {verificationNotice === "complete" && (
+        <Notice tone="success">
+          Your email is verified. Sign in to continue.
+        </Notice>
+      )}
+      {verificationNotice === "failed" && (
+        <Notice tone="error">
+          This verification link could not be used.{" "}
+          <Link href={href("/account/verify")}>
+            Request a new verification email
+          </Link>
+          .
+        </Notice>
+      )}
       {error && <Notice tone="error">{error}</Notice>}
       {message && <Notice tone="success">{message}</Notice>}
-      <form
-        noValidate
-        onSubmit={submit}
-        className="form-stack"
-        aria-busy={busy}
-      >
-        {mode === "sign-up" && (
-          <Field
-            id="name"
-            name="name"
-            label="Your name"
-            autoComplete="name"
-            maxLength={100}
-            error={errors.name}
-          />
-        )}
-        {mode !== "reset" && (
-          <Field
-            id="email"
-            name="email"
-            label="Email address"
-            type="email"
-            autoComplete="email"
-            error={errors.email}
-          />
-        )}
-        {["sign-in", "sign-up", "reset"].includes(mode) && (
-          <PasswordField
-            id="password"
-            name="password"
-            label={mode === "reset" ? "New password" : "Password"}
-            autoComplete={
-              mode === "sign-in" ? "current-password" : "new-password"
-            }
-            hint="12–128 characters. You can paste or use a password manager."
-            error={errors.password}
-          />
-        )}
-        {["sign-up", "reset"].includes(mode) && (
-          <PasswordField
-            id="confirmation"
-            name="confirmation"
-            label="Confirm password"
-            autoComplete="new-password"
-            error={errors.confirmation}
-          />
-        )}
-        <Button
-          type="submit"
-          busy={busy}
-          disabled={mode === "reset" && !!message}
+      {mode === "reset" && !token ? (
+        <p>This reset link is missing or invalid.</p>
+      ) : (
+        <form
+          noValidate
+          onSubmit={submit}
+          className="form-stack"
+          aria-busy={busy}
         >
-          {busy ? "Please wait…" : copy[mode].action}
-        </Button>
-      </form>
+          {mode === "sign-up" && (
+            <Field
+              id="name"
+              name="name"
+              label="Your name"
+              autoComplete="name"
+              maxLength={100}
+              error={errors.name}
+            />
+          )}
+          {mode !== "reset" && (
+            <Field
+              id="email"
+              name="email"
+              label="Email address"
+              type="email"
+              autoComplete="email"
+              error={errors.email}
+            />
+          )}
+          {["sign-in", "sign-up", "reset"].includes(mode) && (
+            <PasswordField
+              id="password"
+              name="password"
+              label={mode === "reset" ? "New password" : "Password"}
+              autoComplete={
+                mode === "sign-in" ? "current-password" : "new-password"
+              }
+              hint="12–128 characters. You can paste or use a password manager."
+              error={errors.password}
+            />
+          )}
+          {["sign-up", "reset"].includes(mode) && (
+            <PasswordField
+              id="confirmation"
+              name="confirmation"
+              label="Confirm password"
+              autoComplete="new-password"
+              error={errors.confirmation}
+            />
+          )}
+          <Button
+            type="submit"
+            busy={busy}
+            disabled={mode === "reset" && !!message}
+          >
+            {busy ? "Please wait…" : copy[mode].action}
+          </Button>
+        </form>
+      )}
       <div className="actions">
         {mode === "sign-in" ? (
           <>
-            <Link href="/account/recover">Forgot password?</Link>
-            <Link href="/account/sign-up">Create account</Link>
+            <Link href={href("/account/recover")}>Forgot password?</Link>
+            <Link href={href("/account/sign-up")}>Create account</Link>
           </>
         ) : (
-          <Link href="/account/sign-in">Back to sign in</Link>
+          <Link href={href("/account/sign-in")}>Back to sign in</Link>
         )}
       </div>
       {mode === "sign-in" && (
         <p className="caption">
-          <Link href="/account/verify">Need another verification email?</Link>
+          <Link href={href("/account/verify")}>
+            Need another verification email?
+          </Link>
         </p>
       )}
       {mode === "reset" && !token && (
-        <Link href="/account/recover">Request a new reset link</Link>
+        <Link href={href("/account/recover")}>Request a new reset link</Link>
       )}
     </section>
   );

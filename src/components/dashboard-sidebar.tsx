@@ -1,9 +1,11 @@
 "use client";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useRef } from "react";
+import { useRef, useState } from "react";
 import {
   Calculator,
+  ChartNoAxesCombined,
   Upload,
   LogOut,
   Settings,
@@ -14,52 +16,40 @@ import {
   MessageSquare,
   WalletCards,
   History,
+  PieChart,
+  CreditCard,
 } from "lucide-react";
-export type WorkspaceView = "accounts" | "imports" | "calculations" | "history";
-const links = [
-  {
-    name: "Tax Overview",
-    href: "/dashboard",
-    icon: Calculator,
-    view: "calculations",
-  },
-  {
-    name: "Upload CSV",
-    href: "/dashboard/upload",
-    icon: Upload,
-    view: "imports",
-  },
-  {
-    name: "Tax-Loss Harvesting",
-    href: "/dashboard/tax-loss-harvesting",
-    icon: TrendingDown,
-  },
-  { name: "Reports", href: "/dashboard/reports", icon: FileText },
-  { name: "Settings", href: "/dashboard/settings", icon: Settings },
-  { name: "Contact Us", href: "/dashboard/contact", icon: MessageSquare },
-  {
-    name: "Broker accounts",
-    href: "/dashboard/accounts",
-    icon: WalletCards,
-    view: "accounts",
-  },
-  {
-    name: "Import history",
-    href: "/dashboard/history",
-    icon: History,
-    view: "history",
-  },
+
+export type WorkspaceView =
+  "overview" | "accounts" | "imports" | "calculations" | "history";
+
+const groups = [
+  [
+    { name: "Overview", href: "/dashboard", icon: ChartNoAxesCombined },
+    { name: "Broker accounts", href: "/dashboard/accounts", icon: WalletCards },
+    { name: "Upload CSV", href: "/dashboard/upload", icon: Upload },
+    { name: "Import history", href: "/dashboard/history", icon: History },
+    { name: "Calculations", href: "/dashboard/calculations", icon: Calculator },
+    { name: "Reports", href: "/dashboard/reports", icon: FileText },
+  ],
+  [
+    {
+      name: "Tax-Loss Harvesting",
+      href: "/dashboard/tax-loss-harvesting",
+      icon: TrendingDown,
+    },
+    { name: "Settings", href: "/dashboard/settings", icon: Settings },
+    { name: "Billing", href: "/billing", icon: CreditCard },
+    { name: "Contact Us", href: "/dashboard/contact", icon: MessageSquare },
+  ],
 ];
+
 export function DashboardSidebar({
   userEmail,
-  view,
-  onView,
   onSignOut,
   busy = false,
 }: {
   userEmail: string;
-  view?: WorkspaceView;
-  onView?: (view: WorkspaceView) => void;
   onSignOut: () => void;
   busy?: boolean;
 }) {
@@ -71,9 +61,17 @@ export function DashboardSidebar({
       aria-label="Workspace navigation"
       className="bg-white border-r border-gray-200 flex flex-col"
     >
-      <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-        <Link href="/" className="text-xl font-bold text-gray-900">
-          CGT Tracker
+      <div className="p-4 md:p-6 border-b border-gray-100 flex items-center justify-between">
+        <Link
+          href="/dashboard"
+          className="flex gap-2 items-center text-xl font-bold text-gray-900"
+        >
+          <span className="bg-blue-600 p-1.5 rounded-lg">
+            <PieChart size={18} className="text-white" aria-hidden="true" />
+          </span>
+          <span>
+            CGT<span className="text-blue-600">Tracker</span>
+          </span>
         </Link>
         <button
           type="button"
@@ -90,53 +88,42 @@ export function DashboardSidebar({
       <div
         id="dashboard-navigation"
         className={`${open ? "flex" : "hidden"} md:flex flex-col flex-1`}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
             setOpen(false);
             menuButton.current?.focus();
           }
         }}
       >
-        <nav className="flex-1 p-4 space-y-1" aria-label="Dashboard">
-          {links.map((link) => {
-            const Icon = link.icon;
-            const active =
-              onView && link.view ? view === link.view : pathname === link.href;
-            const cls = `flex w-full items-center px-4 py-3 text-sm font-medium rounded-md transition-colors ${active ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`;
-            const content = (
-              <>
-                <Icon
-                  aria-hidden="true"
-                  className={`w-5 h-5 mr-3 ${active ? "text-blue-600" : "text-gray-400"}`}
-                />
-                {link.name}
-              </>
-            );
-            return onView && link.view ? (
-              <button
-                key={link.href}
-                type="button"
-                disabled={busy}
-                className={cls}
-                aria-current={active ? "page" : undefined}
-                onClick={() => {
-                  onView(link.view as WorkspaceView);
-                  setOpen(false);
-                }}
-              >
-                {content}
-              </button>
-            ) : (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={cls}
-                aria-current={active ? "page" : undefined}
-              >
-                {content}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 p-4" aria-label="Dashboard">
+          {groups.map((group, index) => (
+            <div
+              key={group[0].href}
+              className={index ? "mt-3 pt-3 border-t border-gray-100" : ""}
+            >
+              {group.map(({ name, href, icon: Icon }) => {
+                const active =
+                  pathname === href ||
+                  (pathname === "/workspace" && href === "/dashboard/accounts");
+                return (
+                  <Link
+                    key={href}
+                    href={href}
+                    aria-disabled={busy || undefined}
+                    onClick={(event) => {
+                      if (busy) event.preventDefault();
+                      else setOpen(false);
+                    }}
+                    aria-current={active ? "page" : undefined}
+                    className={`flex w-full items-center px-4 py-2.5 text-sm font-medium rounded-md ${active ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`}
+                  >
+                    <Icon aria-hidden="true" className="w-5 h-5 mr-3" />
+                    {name}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
           <Link
             href="/supported-brokers"
             className="block px-4 py-3 text-sm text-gray-600 hover:bg-gray-50 rounded-md"
@@ -145,18 +132,9 @@ export function DashboardSidebar({
           </Link>
         </nav>
         <div className="p-4 border-t border-gray-100 mt-auto">
-          <div className="text-xs font-medium text-gray-500 uppercase tracking-wider px-4 mb-2">
-            Signed in as
-          </div>
-          <div className="text-sm font-medium text-gray-900 px-4 mb-4 break-all">
+          <div className="text-sm font-medium text-gray-900 px-4 mb-2 break-all">
             {userEmail || "Private workspace"}
           </div>
-          <Link
-            href="/billing"
-            className="block px-4 py-2 text-sm text-blue-600"
-          >
-            Billing test
-          </Link>
           <button
             type="button"
             disabled={busy}

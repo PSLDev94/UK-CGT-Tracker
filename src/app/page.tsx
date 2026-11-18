@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { ReportPricing } from "@/components/report-pricing";
+import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
+import { BROKERS, IMPORT_PATH_LABEL, type BrokerId } from "@/domain/imports/brokers";
 import {
   ArrowRight,
   CheckCircle,
@@ -17,7 +20,7 @@ import { PublicFooter } from "@/components/public-footer";
 export const metadata: Metadata = {
   title: "UK CGT Calculator for Shares | CGT Tracker",
   description:
-    "Calculate your UK capital gains tax on shares in minutes. Review supported broker CSVs and trace share-matching evidence. Applies HMRC's Section 104, same-day and 30-day rules automatically. Relaunch preview.",
+    "Calculate gains and losses on ordinary shares across taxable broker accounts. Review supported broker CSVs and trace share-matching evidence. Applies HMRC's Section 104, same-day and 30-day rules automatically. Relaunch preview.",
   alternates: { canonical: "https://www.cgttracker.com/" },
 };
 
@@ -28,18 +31,18 @@ const JSON_LD = {
   applicationCategory: "FinanceApplication",
   operatingSystem: "Web",
   description:
-    "UK capital gains tax calculator for self-directed investors. Applies HMRC Section 104 pooling, same-day and 30-day bed and breakfast rules automatically.",
+    "UK ordinary-share gains and losses for self-directed investors. Applies HMRC Section 104 pooling, same-day and 30-day bed and breakfast rules automatically.",
   url: "https://www.cgttracker.com",
 };
 
-const SUPPORTED_BROKERS = [
-  { name: "Trading 212", accent: "from-blue-500 to-cyan-500" },
-  { name: "Freetrade", accent: "from-purple-500 to-pink-500" },
-  { name: "Hargreaves Lansdown", accent: "from-blue-700 to-blue-500" },
-  { name: "Interactive Investor", accent: "from-teal-500 to-emerald-500" },
-  { name: "Interactive Brokers", accent: "from-red-500 to-red-400" },
-  { name: "AJ Bell", accent: "from-green-600 to-green-400" },
-];
+const ACCENTS: Record<BrokerId, string> = {
+  trading212: "from-blue-500 to-cyan-500",
+  freetrade: "from-purple-500 to-pink-500",
+  hl: "from-blue-700 to-blue-500",
+  ii: "from-teal-500 to-emerald-500",
+  ibkr: "from-red-500 to-red-400",
+  ajbell: "from-green-600 to-green-400",
+};
 
 export default function LandingPage() {
   return (
@@ -55,7 +58,7 @@ export default function LandingPage() {
 
       <main id="main">
         {/* Premium Hero Section */}
-        <section className="relative pt-24 pb-32 overflow-hidden px-4">
+        <section className="relative pt-12 pb-14 sm:pt-24 sm:pb-24 overflow-hidden px-4">
           {/* Background Gradients */}
           <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-50 via-white to-white"></div>
           <div className="absolute top-0 right-0 -translate-y-12 translate-x-1/3 w-[800px] h-[600px] opacity-20 bg-gradient-to-br from-blue-200 to-indigo-100 blur-[100px] rounded-full mix-blend-multiply pointer-events-none"></div>
@@ -71,16 +74,14 @@ export default function LandingPage() {
             </div>
 
             <h1 className="text-5xl md:text-7xl font-extrabold text-gray-900 tracking-tight mb-8 max-w-4xl mx-auto leading-[1.1]">
-              Calculate your Capital Gains Tax in{" "}
+              Calculate gains on your{" "}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">
-                minutes
+                share sales
               </span>
             </h1>
 
             <p className="text-xl md:text-2xl text-gray-600 max-w-2xl mx-auto mb-10 leading-relaxed">
-              Stop fighting with spreadsheets. Review your broker CSV and trace
-              your share gains through same-day, 30-day and Section 104
-              matching.
+              Bring together ordinary shares from your taxable broker accounts. See the proceeds, allowable cost and matching rule behind each gain or loss.
             </p>
 
             <div className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-6 mb-6">
@@ -92,22 +93,22 @@ export default function LandingPage() {
                 <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </Link>
               <Link
-                href="#preview"
+                href="/supported-brokers"
                 className="bg-white border border-gray-300 text-gray-700 px-8 py-4 rounded-xl text-lg font-semibold hover:bg-gray-50 transition-all flex items-center justify-center shadow-sm"
               >
-                See how it works
+                Check my broker
               </Link>
             </div>
 
             <p className="text-sm text-gray-500 font-medium">
-              Relaunch preview. No live payments.
+              Free calculations and CSV evidence. PDF reports {ANNUAL_REPORT_PRICE}/year in the sandbox preview. <a href="#preview" className="underline text-blue-700">See a sample calculation</a>.
             </p>
           </div>
 
           {/* Mock Dashboard UI Preview */}
           <div
             id="preview"
-            className="mt-20 max-w-5xl mx-auto relative z-20 group perspective-1000"
+            className="mt-10 sm:mt-16 max-w-5xl mx-auto relative z-20 group perspective-1000"
           >
             <div className="absolute inset-0 bg-gradient-to-b from-blue-600/10 to-transparent rounded-2xl blur-xl scale-105 opacity-50 z-0"></div>
 
@@ -127,53 +128,51 @@ export default function LandingPage() {
               </div>
 
               {/* Dashboard Content */}
-              <div className="p-8">
+              <div className="p-4 sm:p-8">
                 {/* Summary Cards */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-8">
-                  <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm hover:border-gray-200 transition-colors">
+                  <div className="bg-white border border-gray-100 rounded-xl p-3 sm:p-5 shadow-sm hover:border-gray-200 transition-colors">
                     <div className="text-sm text-gray-500 mb-1 font-medium">
                       Total Gains
                     </div>
-                    <div className="text-2xl font-bold text-green-700">
-                      £14,250.00
+                    <div className="text-lg sm:text-2xl font-bold text-green-700">
+                      £2,350.00
                     </div>
                   </div>
-                  <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm hover:border-gray-200 transition-colors">
+                  <div className="bg-white border border-gray-100 rounded-xl p-3 sm:p-5 shadow-sm hover:border-gray-200 transition-colors">
                     <div className="text-sm text-gray-500 mb-1 font-medium">
                       Total Losses
                     </div>
-                    <div className="text-2xl font-bold text-red-600">
-                      £2,100.00
+                    <div className="text-lg sm:text-2xl font-bold text-red-600">
+                      £500.00
                     </div>
                   </div>
-                  <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm hover:border-gray-200 transition-colors">
+                  <div className="bg-white border border-gray-100 rounded-xl p-3 sm:p-5 shadow-sm hover:border-gray-200 transition-colors">
                     <div className="text-sm text-gray-500 mb-1 font-medium">
-                      Exemption Used
+                      Allowable costs
                     </div>
-                    <div className="text-2xl font-bold text-gray-900">
-                      £3,000.00
+                    <div className="text-lg sm:text-2xl font-bold text-gray-900">
+                      £11,950.00
                     </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2 mt-3 overflow-hidden">
-                      <div className="bg-blue-600 h-2 rounded-full w-full"></div>
-                    </div>
+
                   </div>
-                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl p-5 shadow-sm">
+                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-xl p-3 sm:p-5 shadow-sm">
                     <div className="text-sm text-blue-800 font-semibold mb-1">
-                      Taxable Gain
+                      Net gain
                     </div>
-                    <div className="text-2xl font-extrabold text-blue-900">
-                      £9,150.00
+                    <div className="text-lg sm:text-2xl font-extrabold text-blue-900">
+                      £1,850.00
                     </div>
                   </div>
                 </div>
 
                 {/* Transactions Table */}
                 <div>
-                  <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <h2 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                     <FileText className="w-4 h-4 text-gray-500" />
                     Matched Disposals
-                  </h4>
-                  <div className="overflow-x-auto rounded-lg border border-gray-100 shadow-sm">
+                  </h2>
+                  <div tabIndex={0} role="region" aria-label="Illustrative matched disposals" className="overflow-x-auto rounded-lg border border-gray-100 shadow-sm">
                     <table className="w-full text-sm text-left whitespace-nowrap">
                       <thead className="bg-gray-50 text-gray-600 border-b border-gray-100">
                         <tr>
@@ -276,11 +275,11 @@ export default function LandingPage() {
               </p>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-              {SUPPORTED_BROKERS.map((broker) => (
-                <div key={broker.name} className="relative group">
+              {BROKERS.map((broker) => (
+                <Link key={broker.id} href={`/supported-brokers#${broker.id}`} className="relative group">
                   <div className="bg-white rounded-xl border border-gray-200 p-5 text-center hover:shadow-lg hover:border-gray-300 transition-all duration-300 hover:-translate-y-0.5">
                     <div
-                      className={`w-10 h-10 rounded-lg bg-gradient-to-br ${broker.accent} mx-auto mb-3 flex items-center justify-center shadow-sm`}
+                      className={`w-10 h-10 rounded-lg bg-gradient-to-br ${ACCENTS[broker.id]} mx-auto mb-3 flex items-center justify-center shadow-sm`}
                     >
                       <span className="text-white font-bold text-sm">
                         {broker.name.charAt(0)}
@@ -290,12 +289,10 @@ export default function LandingPage() {
                       {broker.name}
                     </p>
                     <span className="block text-xs text-gray-500 mt-2">
-                      {["Trading 212", "Freetrade"].includes(broker.name)
-                        ? "Automatic + assisted"
-                        : "Assisted review"}
+                      {IMPORT_PATH_LABEL[broker.id]}
                     </span>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
             <p className="text-center text-sm text-gray-500 mt-6">
@@ -311,7 +308,7 @@ export default function LandingPage() {
         </section>
 
         {/* Features */}
-        <section className="py-24 bg-white px-4 border-t border-gray-100">
+        <section className="py-12 sm:py-24 bg-white px-4 border-t border-gray-100">
           <div className="max-w-7xl mx-auto">
             <div className="text-center max-w-3xl mx-auto mb-16">
               <h2 className="text-3xl font-extrabold text-gray-900 mb-4">
@@ -397,7 +394,7 @@ export default function LandingPage() {
         </section>
 
         {/* Free Tools Teaser */}
-        <section className="py-20 px-4 bg-white border-t border-gray-100">
+        <section className="py-12 sm:py-20 px-4 bg-white border-t border-gray-100">
           <div className="max-w-5xl mx-auto">
             <div className="text-center mb-10">
               <h2 className="text-3xl font-extrabold text-gray-900 mb-3">
@@ -468,7 +465,7 @@ export default function LandingPage() {
         </section>
 
         {/* How it works */}
-        <section className="py-24 px-4 bg-slate-900 text-white relative overflow-hidden">
+        <section className="py-12 sm:py-24 px-4 bg-slate-900 text-white relative overflow-hidden">
           {/* Background flares */}
           <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-blue-500/20 blur-[120px] rounded-full mix-blend-screen pointer-events-none"></div>
           <div className="absolute bottom-0 left-1/4 w-[400px] h-[400px] bg-purple-500/20 blur-[100px] rounded-full mix-blend-screen pointer-events-none"></div>
@@ -507,7 +504,7 @@ export default function LandingPage() {
                     2
                   </div>
                 </div>
-                <h3 className="font-bold text-xl mb-3">System Detection</h3>
+                <h3 className="font-bold text-xl mb-3">Review your records</h3>
                 <p className="text-slate-400 leading-relaxed">
                   Review included, excluded, duplicate and unresolved records
                   before saving any transactions.
@@ -517,7 +514,7 @@ export default function LandingPage() {
               <div className="text-center relative">
                 <div className="w-24 h-24 bg-slate-800 border border-slate-700 text-green-400 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-2xl relative z-10">
                   <CheckCircle className="w-10 h-10" />
-                  <div className="absolute -top-3 -right-3 w-8 h-8 bg-green-600 text-white font-bold rounded-full flex items-center justify-center border-4 border-slate-900">
+                  <div className="absolute -top-3 -right-3 w-8 h-8 bg-green-700 text-white font-bold rounded-full flex items-center justify-center border-4 border-slate-900">
                     3
                   </div>
                 </div>
@@ -532,7 +529,7 @@ export default function LandingPage() {
         </section>
 
         {/* Trust / Security */}
-        <section className="py-20 bg-gray-50 px-4 border-b border-gray-200">
+        <section className="py-12 sm:py-20 bg-gray-50 px-4 border-b border-gray-200">
           <div className="max-w-4xl mx-auto text-center flex flex-col items-center">
             <div className="w-16 h-16 bg-white border border-gray-200 rounded-full flex items-center justify-center mb-6 shadow-sm">
               <Shield className="w-8 h-8 text-blue-600" />
@@ -541,87 +538,29 @@ export default function LandingPage() {
               Private account access
             </h2>
             <p className="text-gray-600 max-w-2xl mx-auto text-lg leading-relaxed">
-              Raw upload files are not retained. Parsed draft records expire
-              after 24 hours; saved transactions remain in your authenticated
-              workspace. Never upload ISA or pension records.
+              A private preview keeps your CSV available across devices for 24 hours. Saving or discarding the preview removes that draft. <Link className="underline" href="/privacy">Read how your data and backups are handled</Link>.
             </p>
           </div>
         </section>
 
         {/* Pricing */}
-        <section className="py-24 px-4 bg-white" id="pricing">
+        <section className="py-12 sm:py-24 px-4 bg-white" id="pricing">
           <div className="max-w-3xl mx-auto text-center">
             <h2 className="text-4xl font-extrabold mb-6 text-gray-900">
               Simple, transparent pricing
             </h2>
             <p className="text-xl text-gray-600 mb-12 max-w-xl mx-auto">
-              Review the relaunch preview before choosing an annual plan.
+              Start with free imports and calculations. Add PDF reports when you need them.
             </p>
 
-            <div className="bg-white rounded-3xl shadow-2xl border border-gray-200 p-8 sm:p-10 max-w-md mx-auto relative overflow-hidden">
-              {/* Decoration */}
-              <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-blue-500 to-indigo-500"></div>
-
-              <div className="flex justify-center items-center gap-2 mb-2">
-                <span className="text-gray-500 font-semibold uppercase tracking-wider text-sm">
-                  Annual Plan
-                </span>
-              </div>
-              <div className="text-6xl font-extrabold text-gray-900 mb-2">
-                £49
-                <span className="text-2xl text-gray-500 font-medium">
-                  /year
-                </span>
-              </div>
-              <p className="text-sm text-gray-500 mb-8 pb-8 border-b border-gray-100">
-                Annual plan in sandbox testing. No live payments.
-              </p>
-
-              <ul className="text-left space-y-4 mb-10">
-                <li className="flex items-start">
-                  <CheckCircle className="w-6 h-6 text-green-500 mr-3 flex-shrink-0" />
-                  <span className="text-gray-700">
-                    Validated transaction imports
-                  </span>
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle className="w-6 h-6 text-green-500 mr-3 flex-shrink-0" />
-                  <span className="text-gray-700">
-                    Qualified broker layouts and a CSV template
-                  </span>
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle className="w-6 h-6 text-green-500 mr-3 flex-shrink-0" />
-                  <span className="text-gray-700">
-                    Strict CSV validation and row review
-                  </span>
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle className="w-6 h-6 text-green-500 mr-3 flex-shrink-0" />
-                  <span className="text-gray-700">
-                    Historical pool and price scenarios
-                  </span>
-                </li>
-                <li className="flex items-start">
-                  <CheckCircle className="w-6 h-6 text-green-500 mr-3 flex-shrink-0" />
-                  <span className="text-gray-700 font-medium">
-                    PDF summaries and detailed calculation evidence
-                  </span>
-                </li>
-              </ul>
-              <Link
-                href="/signup"
-                className="block w-full bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 text-center text-lg transition-colors ring-2 ring-transparent ring-offset-2 hover:ring-blue-600 active:scale-95"
-              >
-                Try the relaunch preview
-              </Link>
-            </div>
+            <ReportPricing heading="h3" />
+            <p className="mt-5 text-sm text-gray-600">Staging checkout uses test payments. <Link href="/pricing" className="underline">View pricing details</Link>.</p>
           </div>
         </section>
 
         {/* FAQ */}
         <section
-          className="py-24 bg-gray-50 px-4 border-t border-gray-200"
+          className="py-12 sm:py-24 bg-gray-50 px-4 border-t border-gray-200"
           id="faq"
         >
           <div className="max-w-3xl mx-auto">
@@ -648,10 +587,7 @@ export default function LandingPage() {
                   Is my data secure?
                 </h3>
                 <p className="text-gray-600 leading-relaxed">
-                  Yes. Raw CSV files are processed completely in memory and
-                  never stored permanently on our servers. Saved records are
-                  scoped to your authenticated account with database access
-                  controls.
+                  Drafts contain your CSV and expire after 24 hours. Your saved transactions and calculation evidence stay in your workspace. <Link className="underline" href="/privacy">See the storage and backup details</Link>.
                 </p>
               </div>
               <div className="bg-white rounded-2xl border border-gray-200 p-6 sm:p-8 shadow-sm">
@@ -659,11 +595,7 @@ export default function LandingPage() {
                   Which brokers are supported?
                 </h3>
                 <p className="text-gray-600 leading-relaxed">
-                  Selected ordinary-share GBP exports from Trading 212 and
-                  Freetrade are in preview testing. Hargreaves Lansdown,
-                  Interactive Investor, Interactive Brokers and AJ Bell remain
-                  in qualification. Unsupported records block saving; check the
-                  broker support page before uploading.
+                  We support documented taxable-account layouts from {BROKERS.map((broker) => broker.name).join(", ")}. Some need details from your contract notes. <Link className="underline" href="/supported-brokers">Find the export for your broker</Link>.
                 </p>
               </div>
               <div className="bg-white rounded-2xl border border-gray-200 p-6 sm:p-8 shadow-sm">
@@ -671,11 +603,7 @@ export default function LandingPage() {
                   What happens if I have capital losses?
                 </h3>
                 <p className="text-gray-600 leading-relaxed">
-                  Losses are natively offset against your gains for the current
-                  tax year. If your total losses exceed your allowable gains,
-                  the remaining negative balance is clearly separated so you can
-                  report them to HMRC and carry them forward to safeguard future
-                  wealth.
+                  Your report separates gains and losses on the ordinary-share disposals you imported and shows the net result for the selected tax year. Check your wider tax position separately.
                 </p>
               </div>
               <div className="bg-white rounded-2xl border border-gray-200 p-6 sm:p-8 shadow-sm">
@@ -693,7 +621,7 @@ export default function LandingPage() {
         </section>
 
         {/* Final CTA */}
-        <section className="py-24 bg-blue-600 text-white text-center px-4 relative overflow-hidden">
+        <section className="py-12 sm:py-24 bg-blue-600 text-white text-center px-4 relative overflow-hidden">
           {/* Background Pattern */}
           <div
             className="absolute inset-0 opacity-10"
@@ -708,7 +636,7 @@ export default function LandingPage() {
             <h2 className="text-4xl font-extrabold mb-6 tracking-tight">
               Ready to take control of your CGT?
             </h2>
-            <p className="text-blue-100 mb-10 text-xl font-medium max-w-2xl mx-auto">
+            <p className="text-white mb-10 text-xl font-medium max-w-2xl mx-auto">
               Review your first supported CSV and follow the calculation
               evidence.
             </p>

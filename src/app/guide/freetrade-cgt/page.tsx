@@ -12,6 +12,9 @@ export const metadata: Metadata = {
 export default function FreetradeCGTPage() {
   return (
     <GuideLayout
+      slug="freetrade-cgt"
+      edition="Freetrade general investment accounts"
+      nextStep={{ href: "/supported-brokers#freetrade", title: "Check my Freetrade export" }}
       title="Freetrade Capital Gains Tax Guide for UK Investors"
       breadcrumb="Freetrade CGT"
       relatedGuides={[
@@ -41,29 +44,18 @@ export default function FreetradeCGTPage() {
         transaction history:
       </p>
       <ol>
-        <li>Open the Freetrade app on your phone.</li>
-        <li>
-          Go to <strong>Activity</strong> (the clock/history icon in the bottom
-          navigation).
-        </li>
-        <li>
-          Tap the <strong>export</strong> or <strong>download</strong> icon
-          (often in the top-right corner).
-        </li>
-        <li>
-          Select the date range — choose the full tax year:{" "}
-          <strong>6 April 2025 to 5 April 2026</strong>.
-        </li>
-        <li>
-          Freetrade will email the CSV to your registered email address.
-          Download it to your computer.
-        </li>
+        <li>Open the Freetrade app and select your taxable account.</li>
+        <li>Open <strong>Activity</strong> and tap the arrow at the top right.</li>
+        <li>Choose <strong>All Activity</strong> and save the CSV to your device.</li>
       </ol>
       <p>
-        Note: The export feature is available on all Freetrade plans (including
-        the free tier). If you can&apos;t find it, check under{" "}
-        <strong>Settings → Statements &amp; Reports</strong> or contact
-        Freetrade support.
+        Check the export against transfers and corporate actions in your records.
+        The Activity Feed can omit these events. To finish matching for 2025–26,
+        include purchases through 5 May 2026.{" "}
+        <a href="https://help.freetrade.io/en/articles/6627908-how-do-i-download-a-csv-export-of-my-activity-feed">
+          Freetrade’s download instructions
+        </a>
+        .
       </p>
 
       <h2>Understanding the Freetrade CSV Format</h2>
@@ -239,7 +231,7 @@ export default function FreetradeCGTPage() {
             same-day and 30-day matching rules
           </Link>
           , build your Section 104 pools, and review calculation evidence.
-          Filing-ready reports remain in qualification.
+          The CSV and PDF evidence show gains and losses on the trades you imported.
         </p>
       </div>
     </GuideLayout>

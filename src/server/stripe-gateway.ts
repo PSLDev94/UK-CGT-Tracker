@@ -1,3 +1,4 @@
+import { ANNUAL_REPORT_PRICE_PENCE } from "../domain/reports/access";
 import Stripe from "stripe";
 import { createHash } from "node:crypto";
 import type {
@@ -54,7 +55,7 @@ export class StripeGateway implements BillingGateway {
       !price.active ||
       price.type !== "recurring" ||
       price.currency !== "gbp" ||
-      price.unit_amount !== 4900 ||
+      price.unit_amount !== ANNUAL_REPORT_PRICE_PENCE ||
       price.recurring?.interval !== "year" ||
       price.recurring.interval_count !== 1 ||
       price.recurring.usage_type !== "licensed" ||
@@ -228,7 +229,7 @@ export class StripeGateway implements BillingGateway {
     const session = await this.client.billingPortal.sessions.create({
       customer: customerId,
       configuration: this.portalConfiguration,
-      return_url: `${this.config.origin}/billing`,
+      return_url: `${this.config.origin}/billing?checkout=portal`,
     });
     if (new URL(session.url).origin !== "https://billing.stripe.com")
       throw new Error("Unexpected portal destination");

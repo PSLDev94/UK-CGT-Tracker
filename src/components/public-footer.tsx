@@ -17,16 +17,16 @@ export function PublicFooter() {
               </span>
             </Link>
             <p className="text-sm text-gray-500 leading-relaxed">
-              Automated UK Capital Gains Tax calculator for self-directed
+              UK share gains and losses for self-directed
               investors. Traceable share matching and import review.
             </p>
           </div>
 
           {/* Guides */}
           <div>
-            <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">
+            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">
               Tax Guides
-            </h4>
+            </h2>
             <ul className="space-y-2.5 text-sm">
               <li>
                 <Link
@@ -73,9 +73,9 @@ export function PublicFooter() {
 
           {/* Free Tools */}
           <div>
-            <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">
+            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">
               Free Tools
-            </h4>
+            </h2>
             <ul className="space-y-2.5 text-sm">
               <li>
                 <Link
@@ -102,10 +102,11 @@ export function PublicFooter() {
                 </Link>
               </li>
             </ul>
-            <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider mt-6 mb-4">
+            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider mt-6 mb-4">
               Brokers
-            </h4>
+            </h2>
             <ul className="space-y-2.5 text-sm">
+              <li><Link className="text-gray-500 hover:text-gray-900" href="/supported-brokers">All six broker exports</Link></li>
               <li>
                 <Link
                   href="/guide/trading-212-cgt"
@@ -135,9 +136,9 @@ export function PublicFooter() {
 
           {/* Company */}
           <div>
-            <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">
+            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">
               Company
-            </h4>
+            </h2>
             <ul className="space-y-2.5 text-sm">
               <li>
                 <Link

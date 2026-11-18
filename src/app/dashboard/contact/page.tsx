@@ -1,10 +1,15 @@
 import { ContactForm } from "@/components/contact-form";
 import { DashboardShell } from "@/ui/dashboard-shell";
 export const metadata = { title: "Contact Us" };
-export default function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ topic?: string }>;
+}) {
+  const { topic } = await searchParams;
   return (
     <DashboardShell>
-      <ContactForm dashboard />
+      <ContactForm initialTopic={topic} dashboard />
     </DashboardShell>
   );
 }

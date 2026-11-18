@@ -3,8 +3,14 @@ export const metadata = { title: "Reset Password" };
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ next?: string; token?: string }>;
 }) {
-  const { token } = await searchParams;
-  return <AuthPage mode="reset" token={token} />;
+  const { next, token } = await searchParams;
+  return (
+    <AuthPage
+      next={typeof next === "string" ? next : undefined}
+      mode="reset"
+      token={token}
+    />
+  );
 }

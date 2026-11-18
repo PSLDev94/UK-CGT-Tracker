@@ -10,6 +10,7 @@ import type { Overview, Preview } from "../src/ui/workspace-types";
 test("billing keeps test status explicit and recovers from interrupted requests", async ({
   page,
 }) => {
+  await mockWorkspace(page);
   let fail = true;
   await page.route("**/api/v2/billing", async (route) => {
     if (fail) {
@@ -37,11 +38,11 @@ test("billing keeps test status explicit and recovers from interrupted requests"
   ).toHaveCount(0);
   await page.getByRole("button", { name: "Refresh billing status" }).click();
   await expect(
-    page.getByRole("heading", { name: "No subscription", exact: true }),
+    page.getByRole("heading", { name: "Awaiting payment confirmation", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Open test checkout" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await page.setViewportSize({ width: 375, height: 812 });
   expect(
     await page.evaluate(
@@ -60,6 +61,7 @@ test("billing keeps test status explicit and recovers from interrupted requests"
 test("billing shows cancellation and prevents duplicate checkout while a request is pending", async ({
   page,
 }) => {
+  await mockWorkspace(page);
   let calls = 0;
   let release: (() => void) | undefined;
   await page.route("**/api/v2/billing", async (route) => {
@@ -183,6 +185,12 @@ async function mockWorkspace(
             pageSize: 25,
           },
         });
+      case "import-detail":
+        return route.fulfill({json: {page: 1, pageSize: 25, total: 3, records: [
+          {record: 1, status: "accepted", reason: "Share purchase"},
+          {record: 2, status: "accepted", reason: "Share sale"},
+          {record: 3, status: "excluded", reason: "Cash dividend"},
+        ]}});
       case "add-account":
         state.accounts.push({
           id: accountId,
@@ -333,7 +341,7 @@ async function uploadTemplate(page: Page) {
 }
 
 async function navigateWorkspace(page: Page, name: string) {
-  const button = page.getByRole("button", { name, exact: true });
+  const button = page.getByRole("navigation", {name:"Dashboard", includeHidden:true}).getByRole("link", { name, exact: true });
   if (!(await button.isVisible()))
     await page.getByRole("button", { name: "Open sidebar menu" }).click();
   await button.click();
@@ -344,7 +352,7 @@ test("home and broker support are honest, responsive and accessible", async ({
 }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
-    "Calculate your Capital Gains Tax",
+    "Calculate gains on your",
   );
   expect(
     (
@@ -445,6 +453,7 @@ test("account → review → conflict → commit → calculate → reverse", asy
   await page.getByLabel("Account name", { exact: true }).fill("My Invest");
   await page.getByRole("checkbox", { name: /This is a taxable/ }).check();
   await page.getByRole("button", { name: "Add account", exact: true }).click();
+  await expect(page).toHaveURL(/dashboard\/upload\?account=/);
   await navigateWorkspace(page, "Broker accounts");
   await expect(page.getByLabel("Portfolio summary")).toContainText(
     "Taxable accounts1",
@@ -455,7 +464,7 @@ test("account → review → conflict → commit → calculate → reverse", asy
   });
   await uploadTemplate(page);
   await expect(
-    page.getByRole("cell", { name: "Excluded", exact: true }),
+    page.getByText("Excluded (1)", {exact:true}),
   ).toBeVisible();
   await page.getByRole("button", { name: "Save 2 transactions" }).click();
   await expect(
@@ -470,7 +479,7 @@ test("account → review → conflict → commit → calculate → reverse", asy
   await expect(
     page.getByRole("heading", { name: "Review before saving" }),
   ).not.toBeVisible();
-  await navigateWorkspace(page, "Tax Overview");
+  await navigateWorkspace(page, "Calculations");
   await page.getByLabel("Tax year", { exact: true }).selectOption("2024-25");
   await page.getByLabel("History complete through").fill("2025-05-05");
   await page.getByRole("checkbox", { name: "My Invest", exact: true }).check();
@@ -483,7 +492,7 @@ test("account → review → conflict → commit → calculate → reverse", asy
   await page
     .getByText("2024-09-01 · US0378331005 · £391.00", { exact: true })
     .click();
-  await expect(page.getByText(/Section 104 pool: 50 shares/)).toBeVisible();
+  await expect(page.getByRole("region", {name:"Disposal evidence"}).getByText(/Section 104 pool: 50 shares/)).toBeVisible();
   await page.screenshot({
     path: ".private/screenshots/calculation-desktop.png",
     fullPage: true,
@@ -496,6 +505,8 @@ test("account → review → conflict → commit → calculate → reverse", asy
     ).violations,
   ).toEqual([]);
   await navigateWorkspace(page, "Import history");
+  await page.getByText("View import details", {exact:true}).click();
+  await expect(page.getByText("Cash dividend")).toBeVisible();
   await page
     .getByRole("button", { name: "Reverse import", exact: true })
     .click();
@@ -514,7 +525,7 @@ test("account → review → conflict → commit → calculate → reverse", asy
     .getByRole("button", { name: "Reverse import", exact: true })
     .click();
   await expect(page.getByText("Reversed", { exact: true })).toBeVisible();
-  await navigateWorkspace(page, "Tax Overview");
+  await navigateWorkspace(page, "Calculations");
   await expect(
     page.getByRole("heading", { name: "2024-25 share gains" }),
   ).not.toBeVisible();
@@ -537,10 +548,23 @@ test("unsupported files cannot be saved and can be discarded", async ({
   await expect(
     page.getByRole("button", { name: /Save \d+ transactions/ }),
   ).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp("draft=" + draftId));
+  await page.reload();
+  await expect(page.getByText("This format is not verified.", { exact: false })).toBeVisible();
+  await navigateWorkspace(page, "Import history");
+  await expect(page).toHaveURL(/\/dashboard\/history$/);
+  await expect(page.getByRole("heading", { name: "Import history", level: 1 })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(new RegExp("draft=" + draftId));
+  await expect(page.getByText("This format is not verified.", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "Discard preview" }).click();
   await expect(
     page.getByRole("heading", { name: "Review before saving" }),
   ).not.toBeVisible();
+  await page.goto("/dashboard/upload?draft=" + draftId);
+  await expect(page.getByRole("heading", {name:"This preview is unavailable"})).toBeVisible();
+  await page.getByRole("link", {name:"Choose another file"}).click();
+  await expect(page.getByLabel("CSV file", {exact:true})).toBeVisible();
 });
 
 test("narrow workspace, keyboard, unsaved navigation and reduced motion", async ({
@@ -651,7 +675,7 @@ test("interrupted upload retains the file; pending retry prevents duplicate subm
     page.getByRole("button", { name: "Reviewing…", exact: true }),
   ).toBeDisabled();
   await expect(
-    page.getByRole("button", { name: "Broker accounts", exact: true }),
+    page.getByRole("link", { name: "Broker accounts", exact: true }),
   ).toBeDisabled();
   release!();
   await expect(
@@ -694,7 +718,7 @@ test("native import requires classification and shows incomplete-history guidanc
   await page
     .getByLabel("CSV file", { exact: true })
     .setInputFiles("tests/fixtures/brokers/trading212-gbp.csv");
-  await expect(page.getByText(/Freetrade exports can omit them/)).toBeVisible();
+  await expect(page.getByText(/Choose the Invest History CSV/)).toBeVisible();
   await page.getByRole("button", { name: "Review file", exact: true }).click();
   await expect(
     page.getByText(/Confirm that every traded instrument/).first(),
@@ -702,6 +726,7 @@ test("native import requires classification and shows incomplete-history guidanc
   await expect(
     page.getByRole("button", { name: "Save 2 transactions" }),
   ).toHaveCount(0);
+  await page.getByRole("button", {name:"Discard preview"}).click();
   await page
     .getByRole("checkbox", { name: /For a native broker export/ })
     .check();
@@ -718,16 +743,10 @@ test("native import requires classification and shows incomplete-history guidanc
   await expect(
     page.getByRole("button", { name: "Save 2 transactions" }),
   ).toBeEnabled();
-  await expect(
-    page.getByRole("checkbox", { name: /For a native broker export/ }),
-  ).not.toBeChecked();
-  // The upload form can point elsewhere while an existing draft is resumed.
-  // The confirmation must retain the account bound by the server to that draft.
-  await page.getByLabel("Broker account", { exact: true }).selectOption("");
-  await page.getByRole("button", { name: "Open preview", exact: true }).click();
-  await expect(
-    page.getByRole("region", { name: "Review before saving", exact: true }),
-  ).toContainText("Saving to: My Invest");
+  await expect(page.getByLabel("CSV file", {exact:true})).toHaveCount(0);
+  await expect(page).toHaveURL(/draft=/);
+  await page.reload();
+  await expect(page.getByRole("region",{name:"Review before saving", exact:true})).toContainText("My Invest");
   await page.screenshot({
     path: ".private/screenshots/native-import-preview.png",
     fullPage: true,
@@ -834,6 +853,11 @@ test("restored reports export saved evidence and settings retain edits after fai
   page,
 }) => {
   const { state } = await mockWorkspace(page, { account: true });
+  let paid = true;
+  await page.route("**/api/v2/billing", route => route.fulfill({json:{
+    status: paid ? "active" : "none", entitled: paid, needsReview: false, canManage: paid,
+    periodEnd: null, cancelAtPeriodEnd: false, testMode: true,
+  }}));
   const result = calculateGains(
     tradesFromReview(
       reviewCsv(csv, {
@@ -876,12 +900,13 @@ test("restored reports export saved evidence and settings retain edits after fai
   expect(content).toContain(result.disposals[0]!.securityId);
   const pdfDownloaded = page.waitForEvent("download");
   await page
-    .getByRole("button", { name: "Download PDF", exact: true })
+    .getByRole("button", { name: "Download summary PDF", exact: true })
     .first()
     .click();
   expect((await pdfDownloaded).suggestedFilename()).toBe(
     "CGT-summary-2024-25.pdf",
   );
+  paid = false;
   await page.route("**/api/v2/reports", (route) =>
     route.fulfill({
       status: 402,
@@ -893,16 +918,16 @@ test("restored reports export saved evidence and settings retain edits after fai
     }),
   );
   await page
-    .getByRole("button", { name: "Download PDF", exact: true })
+    .getByRole("button", { name: "Download summary PDF", exact: true })
     .first()
     .click();
   await expect(
-    page.getByRole("link", { name: "View subscription" }),
-  ).toBeVisible();
+    page.getByRole("link", { name: "Get summary PDF · £49/year" }),
+  ).toHaveAttribute("href", "/billing?year=2024-25&format=summary");
   await page.goto("/dashboard/tax-loss-harvesting");
   await expect(page.getByText(/Snapshot at/)).toBeVisible();
   const price = page.getByLabel(
-    `Current price for ${result.pools[0]!.securityId}`,
+    `Scenario price for ${result.pools[0]!.securityId}`,
   );
   await price.fill("1");
   await expect(
@@ -992,18 +1017,15 @@ test("assisted HL import preserves source evidence, validates details and enable
     .check();
   await page.getByRole("button", { name: "Review file", exact: true }).click();
   await page
-    .getByText(/Supply or review supporting details for record/)
+    .getByRole("button",{name:/^Resolve record/})
     .click();
   await page
     .getByRole("button", { name: "Check and save supporting details" })
     .click();
   await expect(page.getByLabel("Verified ISIN", { exact: true })).toBeFocused();
   await page.getByLabel("Verified ISIN", { exact: true }).fill("GB0008706128");
-  await page.getByLabel("Trade currency", { exact: true }).fill("GBP");
-  await page.getByLabel("GBP per currency unit", { exact: true }).fill("1");
-  await page
-    .getByLabel("Price units in the export", { exact: true })
-    .selectOption("minor");
+  await expect(page.getByText("Export currency: GBP · unit cost in pence.")).toBeVisible();
+  await expect(page.getByLabel("Execution reference if missing from export")).toHaveCount(0);
   await page
     .getByLabel("Dealing fees and transaction taxes", { exact: true })
     .fill("14.45");
@@ -1017,7 +1039,7 @@ test("assisted HL import preserves source evidence, validates details and enable
     .getByRole("button", { name: "Check and save supporting details" })
     .click();
   await expect(
-    page.getByRole("button", { name: "Save 1 transactions" }),
+    page.getByRole("button", { name: "Save 1 transaction" }),
   ).toBeEnabled();
   expect(
     await page.evaluate(
@@ -1029,7 +1051,7 @@ test("assisted HL import preserves source evidence, validates details and enable
     path: ".private/screenshots/assisted-hl-review.png",
     fullPage: true,
   });
-  await page.getByRole("button", { name: "Save 1 transactions" }).click();
+  await page.getByRole("button", { name: "Save 1 transaction" }).click();
   expect(calls).toContain("supply-import-details");
   expect(calls).toContain("commit-import");
 });

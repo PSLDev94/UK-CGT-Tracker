@@ -8,15 +8,39 @@ import {
   CheckCircle,
   AlertCircle,
   ArrowLeft,
-  PieChart,
   Mail,
   User,
   MessageSquare,
 } from "lucide-react";
+import { contactTopics, isContactTopic } from "@/ui/contact-topics";
+import { PublicFooter } from "@/components/public-footer";
 import { PublicNav } from "@/components/public-nav";
 
-export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
+export function ContactForm({
+  dashboard = false,
+  initialTopic,
+}: {
+  dashboard?: boolean;
+  initialTopic?: string;
+}) {
   const requestId = useRef<string | null>(null);
+  const [topic, setTopic] = useState(
+    isContactTopic(initialTopic) ? initialTopic : "general",
+  );
+  const backHref = dashboard
+    ? initialTopic === "deletion"
+      ? "/dashboard/settings"
+      : initialTopic === "billing"
+        ? "/billing"
+        : "/dashboard"
+    : "/";
+  const backLabel = dashboard
+    ? initialTopic === "deletion"
+      ? "Back to settings"
+      : initialTopic === "billing"
+        ? "Back to billing"
+        : "Back to overview"
+    : "Back to home";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
@@ -61,6 +85,7 @@ export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
         name,
         email,
         message,
+        topic,
         requestId: requestId.current,
       });
       setStatus("success");
@@ -76,18 +101,24 @@ export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
   };
 
   return (
-    <div className="bg-white font-sans text-gray-900">
+    <div
+      className={
+        dashboard
+          ? "font-sans text-gray-900"
+          : "bg-white font-sans text-gray-900"
+      }
+    >
       {/* Navigation */}
       {!dashboard && <PublicNav />}
 
-      <div className="max-w-2xl mx-auto py-16 px-4">
+      <div className={dashboard ? "max-w-2xl" : "max-w-2xl mx-auto py-16 px-4"}>
         {/* Back link */}
         <Link
-          href="/"
+          href={backHref}
           className="inline-flex items-center text-sm text-gray-500 hover:text-gray-900 mb-8 transition-colors group"
         >
           <ArrowLeft className="w-4 h-4 mr-1.5 group-hover:-translate-x-0.5 transition-transform" />
-          Back to home
+          {backLabel}
         </Link>
 
         {/* Header */}
@@ -127,10 +158,10 @@ export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
                   Write another message
                 </button>
                 <Link
-                  href="/"
+                  href={backHref}
                   className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors text-center"
                 >
-                  Back to home
+                  {backLabel}
                 </Link>
               </div>
             </div>
@@ -181,6 +212,7 @@ export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
                     setName(e.target.value);
                     requestId.current = null;
                   }}
+                  autoComplete="name"
                   placeholder="Your full name"
                   className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow placeholder:text-gray-400"
                 />
@@ -211,11 +243,31 @@ export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
                     setEmail(e.target.value);
                     requestId.current = null;
                   }}
+                  autoComplete="email"
                   placeholder="you@example.com"
                   className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow placeholder:text-gray-400"
                 />
               </div>
 
+              <div className="field">
+                <label htmlFor="contact-topic">What can we help with?</label>
+                <select
+                  id="contact-topic"
+                  value={topic}
+                  disabled={status === "sending"}
+                  onChange={(event) => {
+                    if (isContactTopic(event.target.value))
+                      setTopic(event.target.value);
+                    requestId.current = null;
+                  }}
+                >
+                  {Object.entries(contactTopics).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               {/* Message */}
               <div>
                 <label
@@ -226,7 +278,7 @@ export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
                   Message
                 </label>
                 <textarea
-                  style={{ resize: "none" }}
+                  maxLength={5000}
                   id="contact-message"
                   disabled={status === "sending"}
                   aria-invalid={invalidField === "contact-message"}
@@ -243,7 +295,7 @@ export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
                     requestId.current = null;
                   }}
                   placeholder="How can we help you?"
-                  className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow resize-none placeholder:text-gray-400"
+                  className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow resize-y placeholder:text-gray-400"
                 />
               </div>
 
@@ -267,7 +319,7 @@ export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
               </button>
 
               <p className="text-xs text-gray-500 text-center">
-                Include your broker and the issue you need help with. Do not
+                If you have a CGT Tracker calculation or import reference, include it here. Do not
                 attach passwords or financial exports.
               </p>
             </form>
@@ -275,39 +327,7 @@ export function ContactForm({ dashboard = false }: { dashboard?: boolean }) {
         )}
       </div>
 
-      {/* Footer */}
-      <footer className="border-t py-12 text-center bg-white mt-auto">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-6">
-          <div className="flex items-center gap-2">
-            <PieChart className="w-5 h-5 text-blue-600" />
-            <span className="font-bold text-gray-900">CGTTracker</span>
-          </div>
-          <p className="text-gray-500 text-sm">
-            &copy; {new Date().getFullYear()} CGT Tracker. Data provided for
-            guidance. Consult a qualified advisor.
-          </p>
-          <div className="flex gap-6 text-sm font-medium">
-            <Link
-              href="/guide"
-              className="text-gray-500 hover:text-gray-900 transition-colors"
-            >
-              Tax Guide
-            </Link>
-            <Link
-              href="/pricing"
-              className="text-gray-500 hover:text-gray-900 transition-colors"
-            >
-              Pricing
-            </Link>
-            <Link
-              href="/login"
-              className="text-gray-500 hover:text-gray-900 transition-colors"
-            >
-              Log in
-            </Link>
-          </div>
-        </div>
-      </footer>
+      {!dashboard && <PublicFooter />}
     </div>
   );
 }

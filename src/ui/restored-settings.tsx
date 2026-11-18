@@ -111,7 +111,7 @@ export function RestoredSettings() {
       <section className="bg-white rounded-xl shadow-sm border p-6">
         <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
           <User size={20} className="text-blue-600" aria-hidden="true" />
-          Account Details
+          Profile
         </h2>
         {profile ? (
           <form
@@ -193,7 +193,7 @@ export function RestoredSettings() {
       <section className="bg-white rounded-xl shadow-sm border border-red-200 p-6">
         <h2 className="text-lg font-semibold text-red-700 flex items-center gap-2 mb-4">
           <AlertTriangle size={20} aria-hidden="true" />
-          Danger Zone
+          Account data and deletion
         </h2>
         <p>
           Reverse individual imports from Import history. Permanent data
@@ -201,7 +201,7 @@ export function RestoredSettings() {
           ownership and any record-retention requirements. Subscription
           cancellation is separate.
         </p>
-        <Link className="button secondary" href="/dashboard/contact">
+        <Link className="button secondary" href="/dashboard/contact?topic=deletion">
           Contact support about data deletion
         </Link>
       </section>

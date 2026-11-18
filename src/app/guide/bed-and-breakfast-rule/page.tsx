@@ -45,6 +45,9 @@ export default function BedAndBreakfastRulePage() {
 
   return (
     <GuideLayout
+      slug="bed-and-breakfast-rule"
+      edition="Share matching"
+      nextStep={{ href: "/tools/bed-and-breakfast-calculator", title: "Check a sale and repurchase" }}
       title="The 30-Day Bed & Breakfast Rule: UK CGT Guide 2025-26"
       breadcrumb="Bed & Breakfast Rule"
       relatedGuides={[

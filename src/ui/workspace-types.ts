@@ -25,8 +25,10 @@ export interface Overview {
   calculations: {
     id: string;
     tax_year: string;
+    created_at?: string;
     result: Calculation;
     coverage_confirmed: boolean;
+    coverage_accounts?: string[];
   }[];
 }
 export interface Preview {

@@ -1,3 +1,4 @@
+import { recordJourney } from "./journey";
 import { betterAuth, type BetterAuthOptions } from 'better-auth'
 import type { Database } from './database'
 
@@ -36,6 +37,7 @@ export function authOptions(db: Database, config: AuthConfig, sendMail: SendAuth
       sendResetPassword: async ({ user, url }) => sendMail({ to: user.email, kind: 'password-reset', url }),
     },
     emailVerification: {
+      afterEmailVerification: async () => { recordJourney("email_verified"); },
       sendOnSignUp: true,
       sendOnSignIn: false,
       autoSignInAfterVerification: false,

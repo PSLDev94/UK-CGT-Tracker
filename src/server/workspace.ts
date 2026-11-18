@@ -16,7 +16,7 @@ import {
   type ImportDetails,
   type SupportingDetails,
 } from "../domain/imports/supporting-details";
-import type { ReportSnapshot } from "../domain/reports/report";
+import type { ReportSnapshot, ReportSource } from "../domain/reports/report";
 
 interface Portfolio {
   id: string;
@@ -168,6 +168,37 @@ export class Workspace {
     });
   }
 
+  async importDetail(identity: Identity, importId: string, page: number) {
+    if (!Number.isSafeInteger(page) || page < 1 || page > 100000)
+      throw new AppError(
+        400,
+        "INVALID_PAGE",
+        "Choose a valid source-row page.",
+      );
+    const start = (page - 1) * 25;
+    return this.db.run(identity, async (tx) => {
+      const receipt = (
+        await query<{
+          total: number;
+          records: { record: number; status: string; reason: string }[];
+        }>(
+          tx,
+          `SELECT jsonb_array_length(i.record_receipts) AS total, ARRAY(
+          SELECT jsonb_build_object(
+            'record', i.record_receipts->n->'record',
+            'status', i.record_receipts->n->'status',
+            'reason', i.record_receipts->n->'reason'
+          ) FROM generate_series($2::int, least($2::int + 24, jsonb_array_length(i.record_receipts) - 1)) AS n
+          ORDER BY n
+        ) AS records FROM cgt.imports AS i WHERE i.id = $1`,
+          [requireUuid(importId), start],
+        )
+      )[0];
+      if (!receipt) throw missing();
+      return { ...receipt, page, pageSize: 25 };
+    });
+  }
+
   async overview(identity: Identity) {
     return this.db.run(identity, async (tx) => {
       // Unique owner index serialises concurrent first visits; no advisory key collisions.
@@ -191,7 +222,7 @@ export class Workspace {
       );
       const calculations = await query(
         tx,
-        `SELECT r.id, r.tax_year, r.status, r.history_through, r.result, r.coverage_confirmed, r.created_at
+        `SELECT r.id, r.tax_year, r.status, r.history_through, r.result, r.coverage_confirmed, r.coverage_accounts, r.created_at
         FROM cgt.published_calculations p JOIN cgt.calculation_runs r ON r.id = p.run_id ORDER BY r.tax_year DESC`,
       );
       const drafts = await query(
@@ -208,6 +239,29 @@ export class Workspace {
     });
   }
 
+  async reportSources(
+    identity: Identity,
+    sourceKeys: string[],
+  ): Promise<ReportSource[]> {
+    if (!sourceKeys.length) return [];
+    return this.db.run(identity, (tx) =>
+      query<ReportSource>(
+        tx,
+        `
+      SELECT t.source_key AS key, a.label, a.broker, t.source_record AS record,
+        left(coalesce(nullif(f.fields->>'Name',''), nullif(f.fields->>'Stock name',''),
+                      nullif(f.fields->>'Ticker',''), nullif(f.fields->>'Symbol','')),120) AS instrument,
+        left(coalesce(nullif(f.fields->>'ID',''), nullif(f.fields->>'Reference',''),
+                      nullif(f.fields->>'TradeID',''), nullif(f.fields->>'Order ID','')),120) AS reference
+      FROM cgt.transactions t JOIN cgt.broker_accounts a ON a.id=t.account_id
+      CROSS JOIN LATERAL (SELECT t.provenance->'native'->'fields' AS fields) f
+      WHERE t.source_key=ANY($1::text[])
+    `,
+        [sourceKeys],
+      ),
+    );
+  }
+
   async reportSnapshot(
     identity: Identity,
     runId: string,
@@ -215,7 +269,9 @@ export class Workspace {
     return this.db.run(identity, async (tx) => {
       const rows = await query<ReportSnapshot>(
         tx,
-        `SELECT r.id,r.input_digest,r.created_at,r.coverage_confirmed,r.result
+        `SELECT r.id,r.input_digest,r.created_at,r.coverage_confirmed,r.result,
+          (SELECT coalesce(jsonb_agg(jsonb_build_object('label',a.label,'broker',a.broker,'confirmed',r.coverage_accounts ? a.id::text) ORDER BY a.label,a.id),'[]'::jsonb)
+           FROM cgt.broker_accounts a WHERE a.portfolio_id=r.portfolio_id) AS accounts
         FROM cgt.calculation_runs r JOIN cgt.published_calculations p ON p.run_id=r.id
         JOIN cgt.portfolios f ON f.id=r.portfolio_id AND f.revision=r.portfolio_revision
         WHERE r.id=$1`,
@@ -356,6 +412,7 @@ export class Workspace {
         ],
       );
       return {
+        broker: a.broker,
         draftId: rows[0]!.id,
         accountId: a.id,
         revision: p.revision,
@@ -507,6 +564,7 @@ export class Workspace {
         accountId: a.id,
         revision: p.revision,
         reviewVersion: next,
+        broker: a.broker,
         review,
       };
     });

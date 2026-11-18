@@ -30,7 +30,7 @@ const GUIDE_PAGES = [
     href: "/guide/cgt-rates-2025-26",
     title: "UK CGT Rates 2025-26",
     description:
-      "Current rates, annual exempt amounts, and the October 2024 Budget changes explained.",
+      "Rates and annual exempt amounts for the 2025–26 tax year, with worked examples.",
     colour: "from-green-500 to-emerald-600",
   },
   {
@@ -51,7 +51,7 @@ const GUIDE_PAGES = [
     href: "/guide/hargreaves-lansdown-cgt",
     title: "Hargreaves Lansdown CGT Guide",
     description:
-      "Learn how to export HL transactions and identify pence-denominated prices. Native imports are in qualification.",
+      "Export HL transactions and verify price units and fees with contract notes.",
     colour: "from-blue-600 to-blue-800",
   },
   {
@@ -109,7 +109,7 @@ export default function GuidePage() {
         </div>
         <p className="text-lg text-gray-600 mb-4 max-w-3xl">
           A plain-English guide to CGT for UK self-directed investors. Click any
-          topic below to read the full guide with worked examples.
+          topic below for worked examples, or <Link className="text-blue-700 underline" href="/supported-brokers">find the export instructions for your broker</Link>.
         </p>
         <p className="text-sm text-gray-500 mb-12">Last updated: April 2026</p>
 

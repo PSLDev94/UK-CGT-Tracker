@@ -3,8 +3,14 @@ export const metadata = { title: "Login" };
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ next?: string; token?: string }>;
 }) {
-  const { token } = await searchParams;
-  return <AuthPage mode="sign-in" token={token} />;
+  const { next, token } = await searchParams;
+  return (
+    <AuthPage
+      next={typeof next === "string" ? next : undefined}
+      mode="sign-in"
+      token={token}
+    />
+  );
 }

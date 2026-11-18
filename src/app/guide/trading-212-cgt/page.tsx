@@ -12,6 +12,9 @@ export const metadata: Metadata = {
 export default function Trading212CGTPage() {
   return (
     <GuideLayout
+      slug="trading-212-cgt"
+      edition="Trading 212 Invest accounts"
+      nextStep={{ href: "/supported-brokers#trading212", title: "Check my Trading 212 export" }}
       title="How to Calculate CGT on Trading 212 UK — Step by Step"
       breadcrumb="Trading 212 CGT"
       relatedGuides={[
@@ -57,7 +60,7 @@ export default function Trading212CGTPage() {
           statement&rdquo; or &ldquo;Export CSV&rdquo; option.
         </li>
         <li>
-          Select the date range covering the full tax year:{" "}
+          Include the tax year you want to calculate:{" "}
           <strong>6 April</strong> of one year to <strong>5 April</strong> of
           the next. For the 2025-26 tax year, this is 6 April 2025 to 5 April
           2026.
@@ -65,8 +68,7 @@ export default function Trading212CGTPage() {
         <li>Download the CSV file to your computer.</li>
       </ol>
       <p>
-        [SCREENSHOT: Trading 212 export screen showing the date range selector
-        and Download CSV button]
+        Include acquisitions before the tax year and purchases in the 30 days after it. Download more than one date range when necessary.
       </p>
 
       <h2>Step 2: Understanding the CSV Format</h2>
@@ -162,9 +164,9 @@ export default function Trading212CGTPage() {
         If you buy US shares on Trading 212 (e.g., AAPL, TSLA), the price per
         share will be in USD. For CGT purposes, HMRC requires all calculations
         to be in GBP. Trading 212 provides an exchange rate column — the
-        &ldquo;Total&rdquo; column is usually already converted to GBP. The
-        relaunch preview currently blocks foreign-currency native rows; do not
-        assume that their exchange-rate convention has been qualified.
+        &ldquo;Total&rdquo; column is usually already converted to GBP. For a supported Invest CSV, verify the exchange rate and any separate
+        dealing costs against your records. CGT Tracker checks the GBP total
+        and keeps the row in review if the amounts do not reconcile.
       </p>
 
       <h3>Fractional Shares</h3>
@@ -217,7 +219,7 @@ export default function Trading212CGTPage() {
             same-day and 30-day matching
           </Link>
           , Section 104 pooling, and calculation evidence for supported layouts.
-          Filing-ready reports remain in qualification.
+          The CSV and PDF evidence show gains and losses on the trades you imported.
         </p>
       </div>
     </GuideLayout>

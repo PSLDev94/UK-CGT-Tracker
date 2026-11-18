@@ -1,3 +1,4 @@
+import { isContactTopic, type ContactTopic } from "../ui/contact-topics";
 import { createHmac } from "node:crypto";
 import { isIP } from "node:net";
 import { AppError } from "./errors";
@@ -12,6 +13,7 @@ export interface ContactMessage {
   email: string;
   message: string;
   requestId: string;
+  topic?: ContactTopic;
 }
 export function createContactHandler(config: {
   origin: string;
@@ -58,6 +60,7 @@ export function createContactHandler(config: {
       const r = input as ContactMessage | null;
       if (
         !r ||
+        (r.topic !== undefined && !isContactTopic(r.topic)) ||
         typeof r.name !== "string" ||
         !r.name.trim() ||
         r.name.length > 100 ||
@@ -77,6 +80,7 @@ export function createContactHandler(config: {
           "Enter a name, valid email and a message of 10–5,000 characters.",
         );
       await config.send({
+        ...(r.topic && { topic: r.topic }),
         name: r.name.trim(),
         email: r.email,
         message: r.message.trim(),

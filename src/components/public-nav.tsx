@@ -19,15 +19,15 @@ const TOOLS = [
   {
     href: "/tools/cgt-allowance-checker",
     label: "CGT Allowance Checker",
-    subtitle: "See your tax position",
+    subtitle: "Estimate your annual allowance",
   },
 ];
 
 const NAV_LINKS = [
-  { href: "/guide", label: "CGT Guide" },
-  { href: "/pricing", label: "Pricing" },
-  { href: "/contact", label: "Contact" },
   { href: "/supported-brokers", label: "Broker support" },
+  { href: "/pricing", label: "Pricing" },
+  { href: "/guide", label: "CGT Guide" },
+  { href: "/contact", label: "Contact" },
 ];
 
 export function PublicNav() {
@@ -118,6 +118,7 @@ export function PublicNav() {
                   <Link
                     key={tool.href}
                     href={tool.href}
+                    aria-current={pathname === tool.href ? "page" : undefined}
                     onClick={() => setOpen(false)}
                     className={`block px-4 py-2.5 transition-colors ${
                       pathname === tool.href
@@ -141,7 +142,8 @@ export function PublicNav() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2 hidden lg:inline transition-colors"
+                aria-current={pathname === link.href ? "page" : undefined}
+                className="text-sm font-medium text-gray-600 hover:text-gray-900 aria-[current=page]:text-blue-700 px-3 py-2 hidden lg:inline transition-colors"
               >
                 {link.label}
               </Link>
@@ -192,6 +194,23 @@ export function PublicNav() {
             className="absolute max-h-[calc(100dvh-4rem)] overflow-y-auto left-0 right-0 top-16 bg-white border-b shadow-lg z-50 lg:hidden animate-slide-down"
           >
             <div className="max-w-7xl mx-auto px-4 py-3">
+              {/* Main nav links */}
+              {NAV_LINKS.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  aria-current={pathname === link.href ? "page" : undefined}
+                  onClick={() => setMobileOpen(false)}
+                  className={`block px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
+                    pathname === link.href
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-gray-900 hover:bg-gray-50"
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              ))}
+
               {/* Free Tools — expanded by default */}
               <div className="mb-1">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-3 py-2">
@@ -201,6 +220,8 @@ export function PublicNav() {
                   <Link
                     key={tool.href}
                     href={tool.href}
+                    aria-current={pathname === tool.href ? "page" : undefined}
+                    onClick={() => setMobileOpen(false)}
                     className={`flex flex-col px-3 py-3 pl-6 rounded-lg transition-colors ${
                       pathname === tool.href
                         ? "bg-blue-50 text-blue-700"
@@ -214,21 +235,6 @@ export function PublicNav() {
                   </Link>
                 ))}
               </div>
-
-              {/* Main nav links */}
-              {NAV_LINKS.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`block px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
-                    pathname === link.href
-                      ? "bg-blue-50 text-blue-700"
-                      : "text-gray-900 hover:bg-gray-50"
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              ))}
 
               {/* Divider */}
               <div className="border-t border-gray-200 my-3" />

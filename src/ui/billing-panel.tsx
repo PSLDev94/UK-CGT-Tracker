@@ -1,7 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
+import { authHref } from "./return-path";
+import {
+  billingUrl,
+  reportUrl,
+  type ReportDestination,
+} from "@/domain/reports/destination";
 import type { BillingStatus } from "@/server/billing";
 import { api, ApiError } from "./api";
 import { Button, Notice } from "./primitives";
@@ -18,185 +26,280 @@ const labels: Record<string, string> = {
   paused: "Paused",
   needs_review: "Needs a billing review",
 };
+type Outcome = "returned" | "cancelled" | "portal" | null;
+type Action = "status" | "checkout" | "portal";
+type Status = BillingStatus & { returnReport?: ReportDestination | null };
 
-export function BillingPanel() {
-  const [status, setStatus] = useState<BillingStatus | null>(null);
-  const [busy, setBusy] = useState<"status" | "checkout" | "portal" | null>(
-    "status",
-  );
+// Only a random navigation namespace is kept in the tab. The selected year and
+// document stay in an owner-bound HttpOnly cookie on the billing API.
+function billingTab() {
+  try {
+    const key = "cgt-billing-tab";
+    const existing = sessionStorage.getItem(key);
+    if (existing && /^[0-9a-f-]{36}$/.test(existing)) return existing;
+    const tab = crypto.randomUUID();
+    sessionStorage.setItem(key, tab);
+    return tab;
+  } catch {
+    // Private browsing without session storage still supports one return per browser.
+    return undefined;
+  }
+}
+
+export function BillingPanel({
+  target,
+  outcome,
+}: {
+  target: ReportDestination | null;
+  outcome: Outcome;
+}) {
+  const router = useRouter();
+  const [status, setStatus] = useState<Status | null>(null);
+  const [busy, setBusy] = useState<Action | null>("status");
   const [error, setError] = useState("");
   const [signIn, setSignIn] = useState(false);
-  const pending = useRef(false);
   const controller = useRef<AbortController | null>(null);
-  const run = useCallback(async (action: "status" | "checkout" | "portal") => {
-    if (pending.current && !controller.current?.signal.aborted) return;
-    pending.current = true;
-    const request = new AbortController();
-    controller.current = request;
-    setBusy(action);
-    setError("");
-    setSignIn(false);
-    try {
-      if (action === "status")
-        setStatus(
-          await api<BillingStatus>(
-            "/api/v2/billing",
-            { action },
-            request.signal,
-          ),
-        );
-      else {
-        const result = await api<{ url: string }>(
-          "/api/v2/billing",
-          { action },
-          request.signal,
-        );
-        const destination = new URL(result.url);
-        if (
-          destination.origin !==
-          (action === "checkout"
-            ? "https://checkout.stripe.com"
-            : "https://billing.stripe.com")
-        )
-          throw new Error("Unexpected destination");
-        window.location.assign(destination.href);
+  const destination = target ?? (outcome ? status?.returnReport : null);
+  const acceptStatus = useCallback(
+    (confirmed: Status) => {
+      setStatus(confirmed);
+      if (
+        confirmed.returnReport &&
+        outcome &&
+        (outcome === "cancelled" || outcome === "portal" || confirmed.entitled)
+      ) {
+        router.replace(reportUrl(confirmed.returnReport, outcome));
       }
-    } catch (failure) {
-      if (request.signal.aborted) return;
-      if (failure instanceof ApiError && [401, 403].includes(failure.status)) {
-        setStatus(null);
-        setSignIn(true);
-      }
-      setError(
-        failure instanceof ApiError && failure.status !== 0
-          ? failure.message
-          : "Billing could not be confirmed. Refresh the status before trying again; a checkout request may have reached Stripe.",
-      );
-    } finally {
-      if (controller.current === request) {
-        if (!request.signal.aborted) setBusy(null);
-        pending.current = false;
-      }
-    }
+    },
+    [outcome, router],
+  );
+  const showError = useCallback((e: unknown) => {
+    setSignIn(e instanceof ApiError && [401, 403].includes(e.status));
+    setError(
+      e instanceof ApiError && e.status !== 0
+        ? e.message
+        : "Billing could not be confirmed. Refresh the status before trying again.",
+    );
   }, []);
+  const load = useCallback(
+    async (action: Action, report?: ReportDestination | null) => {
+      if (controller.current && !controller.current.signal.aborted) return;
+      const request = new AbortController();
+      controller.current = request;
+      try {
+        const tab = billingTab();
+        if (action === "status") {
+          const confirmed = await api<Status>(
+            "/api/v2/billing",
+            { action, tab },
+            request.signal,
+          );
+          if (request.signal.aborted) return;
+          acceptStatus(confirmed);
+        } else {
+          const result = await api<{ url: string }>(
+            "/api/v2/billing",
+            { action, tab, ...report },
+            request.signal,
+          );
+          const url = new URL(result.url);
+          if (
+            url.origin !==
+            (action === "checkout"
+              ? "https://checkout.stripe.com"
+              : "https://billing.stripe.com")
+          )
+            throw new Error("Unexpected destination");
+          window.location.assign(url.href);
+        }
+      } catch (e) {
+        if (request.signal.aborted) return;
+        showError(e);
+      } finally {
+        if (controller.current === request) {
+          controller.current = null;
+          if (!request.signal.aborted) setBusy(null);
+        }
+      }
+    },
+    [acceptStatus, showError],
+  );
   useEffect(() => {
     const request = new AbortController();
     controller.current = request;
-    pending.current = true;
-    api<BillingStatus>("/api/v2/billing", { action: "status" }, request.signal)
-      .then((result) => {
-        if (!request.signal.aborted) setStatus(result);
+    api<Status>(
+      "/api/v2/billing",
+      { action: "status", tab: billingTab() },
+      request.signal,
+    )
+      .then((confirmed) => {
+        if (!request.signal.aborted) acceptStatus(confirmed);
       })
-      .catch((failure) => {
-        if (request.signal.aborted) return;
-        setSignIn(
-          failure instanceof ApiError && [401, 403].includes(failure.status),
-        );
-        setError(
-          failure instanceof ApiError && failure.status !== 0
-            ? failure.message
-            : "Billing could not be confirmed. Refresh the status before trying again; a checkout request may have reached Stripe.",
-        );
+      .catch((e) => {
+        if (!request.signal.aborted) showError(e);
       })
       .finally(() => {
         if (controller.current === request) {
-          pending.current = false;
+          controller.current = null;
           if (!request.signal.aborted) setBusy(null);
         }
       });
-    return () => request.abort();
-  }, []);
+    return () => controller.current?.abort();
+  }, [acceptStatus, showError]);
+  function userAction(action: Action, report?: ReportDestination | null) {
+    if (controller.current && !controller.current.signal.aborted) return;
+    setBusy(action);
+    setError("");
+    setSignIn(false);
+    void load(action, report);
+  }
+  const awaiting =
+    outcome === "returned" && status?.status === "none" && !status.needsReview;
   const canCheckout =
     status &&
+    !awaiting &&
     !status.needsReview &&
     ["none", "canceled", "incomplete_expired"].includes(status.status);
   return (
-    <section className="auth-wrap panel" aria-labelledby="billing-title">
-      <p className="eyebrow">RELAUNCH PREVIEW · BILLING TEST</p>
-      <h1 id="billing-title">Your subscription.</h1>
-      <p>
-        This preview uses Stripe test payments. No real money is charged and
-        tax-filing reports are not yet available.
-      </p>
-      {error && <Notice tone="error">{error}</Notice>}
-      {signIn && (
-        <p>
-          <Link href="/account/sign-in">Sign in with a verified email</Link> to
-          manage your subscription.
+    <div className="max-w-2xl space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Your subscription</h1>
+        <p className="mt-2 text-gray-600">
+          Download PDF summaries and matching evidence with CGT Tracker annual
+          reports.
         </p>
-      )}
-      {busy === "status" && <Notice>Checking your subscription…</Notice>}
-      {status && (
-        <>
-          <h2>{labels[status.status] ?? "Billing status unavailable"}</h2>
-          <p>
-            Annual plan: <strong>£49 per year</strong>. This amount is used only
-            for sandbox testing.
+      </div>
+      <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 sm:p-7">
+        <p className="text-2xl font-bold tabular-nums">
+          {ANNUAL_REPORT_PRICE}{" "}
+          <span className="text-base font-normal">per year</span>
+        </p>
+        <p>
+          Imports, calculations and CSV evidence are free. The subscription
+          renews annually until cancelled.
+        </p>
+        <p className="text-sm text-gray-600">
+          Staging uses Stripe test payments. No real money is charged.
+        </p>
+        {destination && (
+          <p className="font-medium">
+            {destination.year} ·{" "}
+            {destination.format === "summary"
+              ? "CGT summary PDF"
+              : "Calculation evidence PDF"}
           </p>
-          <p>
-            {status.entitled
-              ? "Test payment confirmed."
-              : "No paid access is currently confirmed."}{" "}
-            Returning from checkout does not confirm a payment; refresh to check
-            its status.
-          </p>
-          {status.periodEnd && (
-            <p>
-              {status.cancelAtPeriodEnd
-                ? "Scheduled to end"
-                : "Current billing period ends"}{" "}
-              {new Intl.DateTimeFormat("en-GB", {
-                dateStyle: "long",
-                timeZone: "Europe/London",
-              }).format(new Date(status.periodEnd))}
-              .
-            </p>
-          )}
-          {status.needsReview && (
-            <Notice tone="warning">
-              Billing needs a review before another checkout can start. Your
-              saved investment records remain available.
-            </Notice>
-          )}
-          <div className="actions">
-            {canCheckout && (
-              <Button
-                onClick={() => void run("checkout")}
-                busy={busy === "checkout"}
-                disabled={busy !== null}
-              >
-                Open test checkout
-              </Button>
+        )}
+        {error && <Notice tone="error">{error}</Notice>}
+        {signIn && (
+          <Link
+            className="text-blue-700 underline"
+            href={authHref(
+              "/login",
+              destination ? billingUrl(destination) : "/billing",
             )}
-            {status.canManage && (
-              <Button
-                variant="secondary"
-                onClick={() => void run("portal")}
-                busy={busy === "portal"}
-                disabled={busy !== null}
-              >
-                Manage subscription
-              </Button>
+          >
+            Sign in to continue
+          </Link>
+        )}
+        {busy === "status" && <Notice>Checking your subscription…</Notice>}
+        {status && (
+          <>
+            <h2 className="text-lg font-semibold">
+              {awaiting
+                ? "Awaiting payment confirmation"
+                : (labels[status.status] ?? "Subscription status unavailable")}
+            </h2>
+            {outcome === "cancelled" && (
+              <Notice>
+                Checkout cancelled. Your saved calculation is still available.
+              </Notice>
             )}
-          </div>
-          {status.canManage && (
-            <p className="muted">
-              Manage payment details and cancellation securely in Stripe.
-            </p>
-          )}
-        </>
-      )}
+            {awaiting && (
+              <Notice>
+                Stripe has returned you to CGT Tracker. Refresh the status to
+                check whether your PDF access is ready.
+              </Notice>
+            )}
+            {status.entitled && (
+              <Notice tone="success">Your PDF access is active.</Notice>
+            )}
+            {status.periodEnd && (
+              <p>
+                {status.cancelAtPeriodEnd
+                  ? "Scheduled to end"
+                  : status.entitled
+                    ? "Current paid period ends"
+                    : "Current billing period ends"}{" "}
+                {new Intl.DateTimeFormat("en-GB", {
+                  dateStyle: "long",
+                  timeZone: "Europe/London",
+                }).format(new Date(status.periodEnd))}
+                .
+              </p>
+            )}
+            {status.needsReview ? (
+              <Notice tone="warning">
+                We need to review this subscription. Your records and CSV remain
+                available.{" "}
+                <Link
+                  className="underline"
+                  href="/dashboard/contact?topic=billing"
+                >
+                  Contact billing support
+                </Link>
+                .
+              </Notice>
+            ) : (
+              ["past_due", "incomplete", "unpaid", "paused"].includes(
+                status.status,
+              ) && (
+                <Notice tone="warning">
+                  Review your payment details in Stripe, then refresh billing
+                  status here.
+                </Notice>
+              )
+            )}
+            <div className="actions">
+              {canCheckout && (
+                <Button
+                  busy={busy === "checkout"}
+                  disabled={!!busy}
+                  onClick={() => userAction("checkout", destination)}
+                >
+                  Open test checkout
+                </Button>
+              )}
+              {status.canManage &&
+                (!canCheckout || status.status === "canceled") && (
+                  <Button
+                    variant="secondary"
+                    busy={busy === "portal"}
+                    disabled={!!busy}
+                    onClick={() => userAction("portal", destination)}
+                  >
+                    Manage subscription
+                  </Button>
+                )}
+            </div>
+          </>
+        )}
+      </section>
       <div className="actions">
         <Button
           variant="secondary"
           busy={busy === "status"}
-          disabled={busy !== null}
-          onClick={() => void run("status")}
+          disabled={!!busy}
+          onClick={() => userAction("status")}
         >
           Refresh billing status
         </Button>
-        <Link href="/workspace">Back to workspace</Link>
+        <Link
+          className="text-blue-700 underline"
+          href={destination ? reportUrl(destination) : "/dashboard/reports"}
+        >
+          {destination ? `Back to ${destination.year} report` : "View reports"}
+        </Link>
       </div>
-    </section>
+    </div>
   );
 }

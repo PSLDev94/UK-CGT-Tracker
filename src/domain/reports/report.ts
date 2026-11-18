@@ -1,11 +1,21 @@
 import type { Calculation } from "../cgt/types";
 import { csvCell } from "../imports/review";
 
+export interface ReportSource {
+  key: string;
+  label: string;
+  broker: string;
+  record: number;
+  instrument: string | null;
+  reference: string | null;
+}
 export interface ReportSnapshot {
+  sources?: ReportSource[];
   id: string;
   input_digest: string;
   created_at: string | Date;
   coverage_confirmed: boolean;
+  accounts?: { label: string; broker: string; confirmed: boolean }[];
   result: Calculation;
 }
 export type ReportKind = "csv" | "summary" | "evidence";

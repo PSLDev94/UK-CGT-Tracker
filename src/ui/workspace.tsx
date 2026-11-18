@@ -1,12 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, ChartNoAxesCombined } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { authHref } from "./return-path";
+import { PortfolioOverview } from "./portfolio-overview";
 import {
   DashboardSidebar,
   type WorkspaceView,
 } from "@/components/dashboard-sidebar";
 import {
+  Suspense,
   useCallback,
   useEffect,
   useRef,
@@ -14,7 +18,13 @@ import {
   type FormEvent,
 } from "react";
 import { BROKERS } from "../domain/imports/brokers";
-import { TAX_YEARS, calendarDate, ukCalendarDate } from "../domain/values";
+import {
+  TAX_YEARS,
+  calendarDate,
+  ukCalendarDate,
+  plusDays,
+  type TaxYear,
+} from "../domain/values";
 import { authApi, workspaceApi, ApiError } from "./api";
 import {
   Button,
@@ -23,11 +33,11 @@ import {
   Notice,
   focusFirstError,
 } from "./primitives";
+import { ImportHistoryDetail } from "./import-history-detail";
 import { ImportReviewPanel } from "./import-review";
 import { CalculationResult } from "./calculation-result";
 import type { Overview, Preview, SavedImport } from "./workspace-types";
 
-type View = "accounts" | "imports" | "calculations" | "history";
 type History = {
   imports: SavedImport[];
   total: number;
@@ -38,6 +48,16 @@ type CommitResult =
   | ({ outcome: "review_changed" | "needs_review" } & Omit<Preview, "draftId">)
   | { outcome: "committed" | "already_committed"; importId: string };
 
+const uploadGuidance: Record<string, string> = {
+  trading212: "Choose the Invest History CSV with all activity categories.",
+  freetrade:
+    "Choose the Activity Feed CSV. Check transfers and corporate actions separately because this export can omit them.",
+  hl: "Choose the Transaction Summary CSV and have your contract notes ready.",
+  ii: "Choose the trading account transactions CSV. Have contract notes for currency, identifiers and fees.",
+  ibkr: "Choose an execution Flex Query CSV with ISINs, commission and base-currency FX.",
+  ajbell:
+    "Choose Transaction history and have contract notes for references, dealing costs and verified units.",
+};
 function useModal(
   ref: React.RefObject<HTMLDialogElement | null>,
   open: boolean,
@@ -58,7 +78,15 @@ function useModal(
   }, [open, ref]);
 }
 
-export function WorkspaceScreen({
+export function WorkspaceScreen(props: { initialView?: WorkspaceView }) {
+  return (
+    <Suspense fallback={<p role="status">Loading workspace…</p>}>
+      <WorkspaceBody {...props} />
+    </Suspense>
+  );
+}
+
+function WorkspaceBody({
   initialView = "accounts",
 }: {
   initialView?: WorkspaceView;
@@ -66,7 +94,31 @@ export function WorkspaceScreen({
   const [data, setData] = useState<Overview | null>(null);
   const [history, setHistory] = useState<History | null>(null);
   const [userName, setUserName] = useState("");
-  const [view, setView] = useState<View>(initialView);
+  const view = initialView;
+  const params = useSearchParams();
+  const router = useRouter();
+  const requestedDraft = view === "imports" ? params.get("draft") : null;
+  const [accountChoice, setAccountChoice] = useState<string | null>(null);
+  const accountId =
+    accountChoice ??
+    params.get("account") ??
+    (data?.accounts.length === 1 ? data.accounts[0].id : "");
+  const selectedAccount = data?.accounts.find(
+    (account) => account.id === accountId,
+  );
+  const [format, setFormat] = useState("native");
+  const savedImportId = params.get("saved");
+  const justSaved =
+    savedImportId &&
+    data?.imports.find(
+      (item) => item.id === savedImportId && item.status === "committed",
+    );
+  const [failedDraft, setFailedDraft] = useState<string | null>(null);
+  const [previewAttempt, setPreviewAttempt] = useState(0);
+  const [previewFile, setPreviewFile] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -79,7 +131,21 @@ export function WorkspaceScreen({
   const [file, setFile] = useState<File | null>(null);
   const [ordinarySharesConfirmed, setOrdinarySharesConfirmed] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [taxYear, setTaxYear] = useState("2025-26");
+  const requestedYear = params.get("year") ?? "";
+  const latestRun = data?.calculations.reduce<
+    Overview["calculations"][number] | undefined
+  >(
+    (latest, run) =>
+      !latest || (run.created_at ?? "") > (latest.created_at ?? "")
+        ? run
+        : latest,
+    undefined,
+  );
+  const taxYear = (
+    Object.hasOwn(TAX_YEARS, requestedYear)
+      ? requestedYear
+      : (latestRun?.tax_year ?? "2025-26")
+  ) as TaxYear;
   const [formDirty, setDirty] = useState(false);
   const [detailsDirty, setDetailsDirty] = useState(false);
   const dirty = formDirty || detailsDirty;
@@ -157,6 +223,7 @@ export function WorkspaceScreen({
         return;
       event.preventDefault();
       event.stopPropagation();
+      if (busyRef.current) return;
       setLeaveAction(() => () => {
         confirmedNavigation.current = true;
         location.assign(anchor.href);
@@ -169,6 +236,37 @@ export function WorkspaceScreen({
       document.removeEventListener("click", navigate, true);
     };
   }, [dirty, file, busy]);
+
+  useEffect(() => {
+    if (
+      !requestedDraft ||
+      !data ||
+      preview?.draftId === requestedDraft ||
+      !data.drafts.some((d) => d.id === requestedDraft)
+    )
+      return;
+    let current = true;
+    workspaceApi<Preview>({
+      action: "review-import",
+      draftId: requestedDraft,
+      page: 1,
+    })
+      .then((result) => {
+        if (current) {
+          setFailedDraft(null);
+          setPreview(result);
+        }
+      })
+      .catch((caught) => {
+        if (current) {
+          setFailedDraft(requestedDraft);
+          fail(caught);
+        }
+      });
+    return () => {
+      current = false;
+    };
+  }, [requestedDraft, data, preview?.draftId, previewAttempt, fail]);
 
   async function perform(work: () => Promise<void>) {
     if (busyRef.current) return;
@@ -206,7 +304,7 @@ export function WorkspaceScreen({
       return;
     }
     await perform(async () => {
-      await workspaceApi({
+      const account = await workspaceApi<{ id: string }>({
         action: "add-account",
         portfolioId: data!.portfolio.id,
         broker,
@@ -216,8 +314,9 @@ export function WorkspaceScreen({
       await reload();
       form.reset();
       setDirty(false);
-      setMessage("Account added. You can now review a file for this account.");
-      setView("imports");
+      router.push(
+        "/dashboard/upload?account=" + encodeURIComponent(account.id),
+      );
     });
   }
 
@@ -261,15 +360,18 @@ export function WorkspaceScreen({
         ordinarySharesConfirmed: values.get("ordinarySharesConfirmed") === "on",
         csv,
       });
+      setPreviewFile({ id: result.draftId, name: file!.name });
       setPreview(result);
+      window.history.pushState(
+        null,
+        "",
+        "/dashboard/upload?draft=" + encodeURIComponent(result.draftId),
+      );
       setOrdinarySharesConfirmed(false);
       setFile(null);
       if (fileInput.current) fileInput.current.value = "";
       setDirty(false);
       await reload();
-      setMessage(
-        "Preview saved for 24 hours. Review the records below before saving transactions.",
-      );
     });
   }
 
@@ -302,8 +404,9 @@ export function WorkspaceScreen({
       });
       await reload();
       setDirty(false);
-      setMessage(
-        "Calculation saved. Review the matching evidence and account coverage below.",
+      setMessage("Calculation saved.");
+      requestAnimationFrame(() =>
+        document.querySelector<HTMLElement>("#calculation-summary")?.focus(),
       );
     });
   }
@@ -334,14 +437,10 @@ export function WorkspaceScreen({
     <div className="workspace">
       <DashboardSidebar
         userEmail={userName}
-        view={view}
         busy={busy}
-        onView={(next) => {
-          setView(next);
-          setError("");
-          setErrors({});
-        }}
-        onSignOut={() => (dirty ? setLeaveAction(() => signOut) : signOut())}
+        onSignOut={() =>
+          dirty || file ? setLeaveAction(() => signOut) : signOut()
+        }
       />
       <main id="main" className="workspace-main">
         <div className="workspace-topbar">
@@ -354,8 +453,9 @@ export function WorkspaceScreen({
             {
               {
                 accounts: "Broker accounts",
-                imports: "Upload CSV",
-                calculations: "Tax Overview",
+                imports: requestedDraft ? "Review your import" : "Upload CSV",
+                calculations: "Calculations",
+                overview: "Overview",
                 history: "Import history",
               }[view]
             }
@@ -378,10 +478,23 @@ export function WorkspaceScreen({
               verify your email.
             </p>
             <div className="actions">
-              <Link className="button primary" href="/account/sign-in">
+              <Link
+                className="button primary"
+                href={authHref(
+                  "/account/sign-in",
+                  window.location.pathname + window.location.search,
+                )}
+              >
                 Sign in
               </Link>
-              <Link href="/account/sign-up">Create account</Link>
+              <Link
+                href={authHref(
+                  "/account/sign-up",
+                  window.location.pathname + window.location.search,
+                )}
+              >
+                Create account
+              </Link>
             </div>
           </section>
         ) : !data ? (
@@ -404,561 +517,665 @@ export function WorkspaceScreen({
           </section>
         ) : (
           <>
-            <section hidden={view !== "accounts"}>
-              <div className="portfolio-summary" aria-label="Portfolio summary">
-                <div>
-                  <span>Taxable accounts</span>
-                  <strong>
-                    {data.accounts.length.toLocaleString("en-GB")}
-                  </strong>
-                  <small>Combined for share matching</small>
-                </div>
-                <div>
-                  <span>Import records</span>
-                  <strong>
-                    {(history?.total ?? 0).toLocaleString("en-GB")}
-                  </strong>
-                  <small>Including reversed imports</small>
-                </div>
-                <div>
-                  <span>Saved previews</span>
-                  <strong>{data.drafts.length.toLocaleString("en-GB")}</strong>
-                  <small>Awaiting your review</small>
-                </div>
-              </div>
-              <div className="accounts-layout">
-                <div className="panel accounts-panel">
-                  <div className="panel-heading">
-                    <h2>Your taxable accounts</h2>
-                    <Button
-                      variant="secondary"
-                      disabled={busy || !data.accounts.length}
-                      onClick={() => setView("imports")}
-                    >
-                      Import a CSV <ArrowUpRight size={16} aria-hidden="true" />
-                    </Button>
+            {view === "overview" && (
+              <PortfolioOverview data={data} latestRun={latestRun} />
+            )}
+            {view === "accounts" && (
+              <section>
+                {data.accounts.length > 0 && (
+                  <div
+                    className="portfolio-summary"
+                    aria-label="Portfolio summary"
+                  >
+                    <div>
+                      <span>Taxable accounts</span>
+                      <strong>
+                        {data.accounts.length.toLocaleString("en-GB")}
+                      </strong>
+                      <small>Combined for share matching</small>
+                    </div>
+                    <div>
+                      <span>Import records</span>
+                      <strong>
+                        {(history?.total ?? 0).toLocaleString("en-GB")}
+                      </strong>
+                      <small>Including reversed imports</small>
+                    </div>
+                    <div>
+                      <span>Saved previews</span>
+                      <strong>
+                        {data.drafts.length.toLocaleString("en-GB")}
+                      </strong>
+                      <small>Awaiting your review</small>
+                    </div>
                   </div>
-                  {!data.accounts.length ? (
-                    <div className="empty">
-                      <h3>Start with your first broker account.</h3>
-                      <p>
-                        Add each taxable account you trade through. Their share
-                        histories will be combined for matching.
-                      </p>
-                    </div>
-                  ) : (
-                    <ul className="record-list">
-                      {data.accounts.map((a) => (
-                        <li key={a.id}>
-                          <div>
-                            <strong>{a.label}</strong>
-                            <p>
-                              {BROKERS.find((b) => b.id === a.broker)?.name} ·
-                              General investment account
-                            </p>
-                          </div>
-                          <span className="tag">Taxable</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                <section className="panel account-form">
-                  <h2>Add a broker account</h2>
-                  <p className="caption">
-                    Keep each source identifiable. Add taxable accounts only.
-                  </p>
-                  <form
-                    noValidate
-                    onSubmit={addAccount}
-                    onChange={() => setDirty(true)}
-                    className="form-stack"
-                  >
-                    <div className="form-columns">
-                      <SelectField
-                        id="broker"
-                        name="broker"
-                        label="Broker"
-                        defaultValue=""
-                        error={errors.broker}
-                      >
-                        <option value="">Choose broker</option>
-                        {BROKERS.map((b) => (
-                          <option key={b.id} value={b.id}>
-                            {b.name}
-                          </option>
-                        ))}
-                      </SelectField>
-                      <Field
-                        id="label"
-                        name="label"
-                        label="Account name"
-                        placeholder="For example, my Trading 212 Invest"
-                        maxLength={100}
-                        error={errors.label}
-                      />
-                    </div>
-                    <div>
-                      <label className="checkbox-label">
-                        <input
-                          name="taxable"
-                          type="checkbox"
-                          aria-invalid={!!errors.taxable}
-                          aria-describedby={
-                            errors.taxable ? "taxable-error" : undefined
-                          }
-                        />
-                        <span>
-                          This is a taxable general investment account, not an
-                          ISA or pension.
-                        </span>
-                      </label>
-                      {errors.taxable && (
-                        <small className="field-error" id="taxable-error">
-                          {errors.taxable}
-                        </small>
-                      )}
-                    </div>
-                    <div>
-                      <Button type="submit" busy={busy}>
-                        {busy ? "Adding account…" : "Add account"}
-                      </Button>
-                    </div>
-                  </form>
-                </section>
-              </div>
-            </section>
-            <section hidden={view !== "imports"}>
-              <Notice tone="warning">
-                All six brokers have import paths for the documented layouts.
-                Some require supporting details from contract notes. Unknown
-                layouts and corporate actions remain blocked. A readable CSV
-                does not prove complete history.{" "}
-                <Link href="/supported-brokers">
-                  Check support and template guidance
-                </Link>
-                .
-              </Notice>
-              {!data.accounts.length ? (
-                <section className="panel">
-                  <h2>Add an account first.</h2>
-                  <p>
-                    Each uploaded file needs a broker and account so its records
-                    remain identifiable.
-                  </p>
-                  <Button onClick={() => setView("accounts")}>
-                    Add broker account
-                  </Button>
-                </section>
-              ) : (
-                <section className="panel">
-                  <h2>Review a CSV file</h2>
-                  <form
-                    noValidate
-                    onSubmit={upload}
-                    onChange={(event) => {
-                      setDirty(true);
-                      const target = event.target;
-                      if (
-                        target instanceof HTMLSelectElement &&
-                        (target.name === "accountId" ||
-                          target.name === "format")
-                      )
-                        setOrdinarySharesConfirmed(false);
-                    }}
-                    className="form-stack"
-                  >
-                    <div className="form-columns">
-                      <SelectField
-                        id="accountId"
-                        name="accountId"
-                        label="Broker account"
-                        error={errors.accountId}
-                        defaultValue=""
-                      >
-                        <option value="">Choose account</option>
+                )}
+                <div className="accounts-layout">
+                  {data.accounts.length > 0 && (
+                    <div className="panel accounts-panel">
+                      <h2>Your taxable accounts</h2>
+                      <ul className="record-list">
                         {data.accounts.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.label}
-                          </option>
+                          <li key={a.id}>
+                            <div>
+                              <strong>{a.label}</strong>
+                              <p>
+                                {BROKERS.find((b) => b.id === a.broker)?.name} ·
+                                Taxable general investment account
+                              </p>
+                            </div>
+                            <Link
+                              href={
+                                "/dashboard/upload?account=" +
+                                encodeURIComponent(a.id)
+                              }
+                              aria-label={`Upload a CSV for ${a.label}`}
+                            >
+                              Upload CSV{" "}
+                              <ArrowUpRight size={14} aria-hidden="true" />
+                            </Link>
+                          </li>
                         ))}
-                      </SelectField>
-                      <SelectField
-                        id="format"
-                        name="format"
-                        label="File format"
-                        defaultValue="native"
-                      >
-                        <option value="native">
-                          Broker export — automatic or assisted review
-                        </option>
-                        <option value="canonical-v1">
-                          CGT Tracker CSV template
-                        </option>
-                      </SelectField>
+                      </ul>
                     </div>
-                    <div className="upload-box">
-                      <div className="field">
-                        <label htmlFor="csv">CSV file</label>
-                        <input
-                          ref={fileInput}
-                          id="csv"
-                          name="csv"
-                          type="file"
-                          accept=".csv,text/csv"
-                          onChange={(e) => {
-                            setFile(e.target.files?.[0] ?? null);
-                            setOrdinarySharesConfirmed(false);
-                          }}
-                          aria-invalid={!!errors.csv}
-                          aria-describedby={`csv-help${errors.csv ? " csv-error" : ""}`}
+                  )}
+                  <section className="panel account-form">
+                    <h2>
+                      {data.accounts.length
+                        ? "Add a broker account"
+                        : "Start with your first broker account."}
+                    </h2>
+                    <p className="caption">
+                      Keep each source identifiable. Add taxable accounts only.
+                    </p>
+                    <form
+                      noValidate
+                      onSubmit={addAccount}
+                      onChange={() => setDirty(true)}
+                      className="form-stack"
+                    >
+                      <div className="form-columns">
+                        <SelectField
+                          id="broker"
+                          name="broker"
+                          label="Broker"
+                          defaultValue=""
+                          error={errors.broker}
+                        >
+                          <option value="">Choose broker</option>
+                          {BROKERS.map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.name}
+                            </option>
+                          ))}
+                        </SelectField>
+                        <Field
+                          id="label"
+                          name="label"
+                          label="Account name"
+                          placeholder="For example, my Trading 212 Invest"
+                          maxLength={100}
+                          error={errors.label}
                         />
-                        <small id="csv-help">
-                          One UTF-8 CSV, up to 10 MiB. A local selection is kept
-                          only on this page; reselect it after a reload.
-                        </small>
-                        {errors.csv && (
-                          <small id="csv-error" className="field-error">
-                            {errors.csv}
+                      </div>
+                      <div>
+                        <label className="checkbox-label">
+                          <input
+                            name="taxable"
+                            type="checkbox"
+                            aria-invalid={!!errors.taxable}
+                            aria-describedby={
+                              errors.taxable ? "taxable-error" : undefined
+                            }
+                          />
+                          <span>
+                            This is a taxable general investment account, not an
+                            ISA or pension.
+                          </span>
+                        </label>
+                        {errors.taxable && (
+                          <small className="field-error" id="taxable-error">
+                            {errors.taxable}
                           </small>
                         )}
                       </div>
-                      {file && (
-                        <p className="caption">
-                          Selected: {file.name} · {Math.ceil(file.size / 1024)}{" "}
-                          KiB
-                        </p>
-                      )}
-                    </div>
-                    <label className="checkbox-label">
-                      <input
-                        name="ordinarySharesConfirmed"
-                        type="checkbox"
-                        checked={ordinarySharesConfirmed}
-                        onChange={(e) =>
-                          setOrdinarySharesConfirmed(e.target.checked)
-                        }
-                      />
-                      <span>
-                        For a native broker export, I have checked that every
-                        traded instrument is an ordinary share, not a fund, ETF,
-                        bond or derivative. Leave unchecked if unsure; the file
-                        will stay in review.
-                      </span>
-                    </label>
-                    <p className="caption">
-                      Check transfers and corporate actions against your account
-                      records. Freetrade exports can omit them. Do not remove
-                      unsupported rows to force an import; missing history can
-                      change your gains.
+                      <div>
+                        <Button type="submit" busy={busy}>
+                          {busy ? "Adding account…" : "Add account"}
+                        </Button>
+                      </div>
+                    </form>
+                  </section>
+                </div>
+              </section>
+            )}
+            {view === "imports" && (
+              <section>
+                {justSaved && !requestedDraft && (
+                  <section className="panel">
+                    <h2>Transactions saved</h2>
+                    <p>
+                      {justSaved.accepted_count} included in{" "}
+                      {accountName(justSaved.account_id)}. Calculate again to
+                      include these records.
                     </p>
-                    <div>
-                      <Button type="submit" busy={busy}>
-                        {busy ? "Reviewing…" : "Review file"}
-                      </Button>
+                    <div className="actions">
+                      <Link
+                        className="button primary"
+                        href="/dashboard/calculations"
+                      >
+                        Calculate gains
+                      </Link>
+                      <Link href="/dashboard/upload">Add another file</Link>
                     </div>
-                  </form>
-                </section>
-              )}
-              {preview && (
-                <ImportReviewPanel
-                  key={preview.draftId}
-                  preview={preview}
-                  onDirty={setDetailsDirty}
-                  onDetails={async (record, details) => {
-                    setBusy(true);
-                    try {
-                      const result = await workspaceApi<Preview>({
-                        action: "supply-import-details",
-                        draftId: preview.draftId,
-                        record,
-                        details,
-                        reviewVersion: preview.reviewVersion ?? 0,
-                      });
-                      setPreview(result);
-                    } finally {
-                      setBusy(false);
-                    }
-                  }}
-                  accountLabel={accountName(preview.accountId)}
-                  busy={busy}
-                  onPage={(page) =>
-                    void perform(async () =>
-                      setPreview(
-                        await workspaceApi<Preview>({
-                          action: "review-import",
-                          draftId: preview.draftId,
-                          page,
-                        }),
-                      ),
-                    )
-                  }
-                  onDiscard={() =>
-                    void perform(async () => {
-                      await workspaceApi({
-                        action: "discard-draft",
-                        draftId: preview.draftId,
-                      });
-                      setPreview(null);
-                      await reload();
-                      setMessage(
-                        "Preview discarded. Saved transactions were not changed.",
-                      );
-                    })
-                  }
-                  onCommit={() =>
-                    void perform(async () => {
-                      const result = await workspaceApi<CommitResult>({
-                        action: "commit-import",
-                        draftId: preview.draftId,
-                        revision: preview.revision,
-                        reviewVersion: preview.reviewVersion ?? 0,
-                      });
-                      if (
-                        result.outcome === "review_changed" ||
-                        result.outcome === "needs_review"
-                      ) {
-                        setPreview({ ...result, draftId: preview.draftId });
-                        setMessage(
-                          "The review changed or needs attention. Check the latest records before confirming again.",
-                        );
-                        return;
-                      }
-                      setPreview(null);
-                      await reload();
-                      setMessage(
-                        result.outcome === "already_committed"
-                          ? "This import was already saved. No duplicate transactions were added."
-                          : "Transactions saved. Your calculations must now be refreshed.",
-                      );
-                    })
-                  }
-                />
-              )}
-              {data.drafts.length > 0 && (
-                <section className="panel">
-                  <h2>Saved previews</h2>
-                  <ul className="record-list">
-                    {data.drafts.map((d) => (
-                      <li key={d.id}>
-                        <div>
-                          <strong>{accountName(d.account_id)}</strong>
-                          <p>Expires {auditDate(d.expires_at)} (London)</p>
+                  </section>
+                )}
+                {requestedDraft &&
+                  preview?.draftId !== requestedDraft &&
+                  !data.drafts.some((d) => d.id === requestedDraft) && (
+                    <section className="panel">
+                      <h2>This preview is unavailable</h2>
+                      <p>It may have expired, been saved or been discarded.</p>
+                      <Link href="/dashboard/upload">Choose another file</Link>
+                    </section>
+                  )}
+                {requestedDraft &&
+                  data.drafts.some((d) => d.id === requestedDraft) &&
+                  preview?.draftId !== requestedDraft &&
+                  (failedDraft === requestedDraft ? (
+                    <section className="panel">
+                      <h2>Preview could not be opened</h2>
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setFailedDraft(null);
+                          setError("");
+                          setPreviewAttempt((n) => n + 1);
+                        }}
+                      >
+                        Try opening preview again
+                      </Button>
+                    </section>
+                  ) : (
+                    <Notice>Opening saved preview…</Notice>
+                  ))}
+                {!data.accounts.length ? (
+                  <section className="panel">
+                    <h2>Add an account first.</h2>
+                    <p>
+                      Each uploaded file needs a broker and account so its
+                      records remain identifiable.
+                    </p>
+                    <Link className="button primary" href="/dashboard/accounts">
+                      Add broker account
+                    </Link>
+                  </section>
+                ) : (
+                  !requestedDraft &&
+                  !justSaved && (
+                    <section className="panel">
+                      <h2>Review a CSV file</h2>
+                      <form
+                        noValidate
+                        onSubmit={upload}
+                        onChange={(event) => {
+                          setDirty(true);
+                          const target = event.target;
+                          if (
+                            target instanceof HTMLSelectElement &&
+                            (target.name === "accountId" ||
+                              target.name === "format")
+                          )
+                            setOrdinarySharesConfirmed(false);
+                        }}
+                        className="form-stack"
+                      >
+                        <div className="form-columns">
+                          <SelectField
+                            id="accountId"
+                            name="accountId"
+                            label="Broker account"
+                            error={errors.accountId}
+                            value={selectedAccount?.id ?? ""}
+                            onChange={(e) => setAccountChoice(e.target.value)}
+                          >
+                            <option value="">Choose account</option>
+                            {data.accounts.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.label}
+                              </option>
+                            ))}
+                          </SelectField>
+                          <SelectField
+                            id="format"
+                            name="format"
+                            label="File format"
+                            value={format}
+                            onChange={(e) => setFormat(e.target.value)}
+                          >
+                            <option value="native">
+                              Original broker export
+                            </option>
+                            <option value="canonical-v1">
+                              CGT Tracker CSV template
+                            </option>
+                          </SelectField>
                         </div>
+                        {selectedAccount && (
+                          <p className="caption">
+                            {format === "native" ? (
+                              <>
+                                {uploadGuidance[selectedAccount.broker]}{" "}
+                                <Link
+                                  className="underline underline-offset-2"
+                                  href={`/supported-brokers#${selectedAccount.broker}`}
+                                >
+                                  See export instructions
+                                </Link>
+                              </>
+                            ) : (
+                              <Link href="/supported-brokers#template">
+                                Check the reviewed CSV template columns
+                              </Link>
+                            )}
+                          </p>
+                        )}
+                        <div className="upload-box">
+                          <div className="field">
+                            <label htmlFor="csv">CSV file</label>
+                            <input
+                              ref={fileInput}
+                              id="csv"
+                              name="csv"
+                              type="file"
+                              accept=".csv,text/csv"
+                              onChange={(e) => {
+                                setFile(e.target.files?.[0] ?? null);
+                                setOrdinarySharesConfirmed(false);
+                              }}
+                              aria-invalid={!!errors.csv}
+                              aria-describedby={`csv-help${errors.csv ? " csv-error" : ""}`}
+                            />
+                            <small id="csv-help">
+                              One UTF-8 CSV, up to 10 MiB. A local selection is
+                              kept only on this page; reselect it after a
+                              reload.
+                            </small>
+                            {errors.csv && (
+                              <small id="csv-error" className="field-error">
+                                {errors.csv}
+                              </small>
+                            )}
+                          </div>
+                          {file && (
+                            <p className="caption">
+                              Selected: {file.name} ·{" "}
+                              {Math.ceil(file.size / 1024)} KiB
+                            </p>
+                          )}
+                        </div>
+                        {format === "native" && (
+                          <label className="checkbox-label">
+                            <input
+                              name="ordinarySharesConfirmed"
+                              type="checkbox"
+                              checked={ordinarySharesConfirmed}
+                              onChange={(e) =>
+                                setOrdinarySharesConfirmed(e.target.checked)
+                              }
+                            />
+                            <span>
+                              For a native broker export, I have checked that
+                              every traded instrument is an ordinary share, not
+                              a fund, ETF, bond or derivative. Leave unchecked
+                              if unsure; the file will stay in review.
+                            </span>
+                          </label>
+                        )}
+                        <div>
+                          <Button type="submit" busy={busy}>
+                            {busy ? "Reviewing…" : "Review file"}
+                          </Button>
+                        </div>
+                      </form>
+                    </section>
+                  )
+                )}
+                {preview && requestedDraft === preview.draftId && (
+                  <ImportReviewPanel
+                    key={preview.draftId}
+                    preview={preview}
+                    onDirty={setDetailsDirty}
+                    onDetails={async (record, details) => {
+                      if (busyRef.current)
+                        throw new Error("Another action is in progress.");
+                      busyRef.current = true;
+                      setBusy(true);
+                      try {
+                        const result = await workspaceApi<Preview>({
+                          action: "supply-import-details",
+                          draftId: preview.draftId,
+                          record,
+                          details,
+                          reviewVersion: preview.reviewVersion ?? 0,
+                        });
+                        setPreview(result);
+                      } finally {
+                        busyRef.current = false;
+                        setBusy(false);
+                      }
+                    }}
+                    accountLabel={accountName(preview.accountId)}
+                    fileLabel={
+                      (previewFile?.id === preview.draftId
+                        ? previewFile.name + " · "
+                        : "") + `Preview ${preview.draftId.slice(0, 8)}`
+                    }
+                    expiry={
+                      data.drafts.find((d) => d.id === requestedDraft)
+                        ?.expires_at
+                    }
+                    broker={
+                      data.accounts.find((a) => a.id === preview.accountId)
+                        ?.broker ?? ""
+                    }
+                    busy={busy}
+                    onPage={(page) =>
+                      void perform(async () =>
+                        setPreview(
+                          await workspaceApi<Preview>({
+                            action: "review-import",
+                            draftId: preview.draftId,
+                            page,
+                          }),
+                        ),
+                      )
+                    }
+                    onDiscard={() =>
+                      void perform(async () => {
+                        await workspaceApi({
+                          action: "discard-draft",
+                          draftId: preview.draftId,
+                        });
+                        window.history.replaceState(
+                          null,
+                          "",
+                          "/dashboard/upload?account=" +
+                            encodeURIComponent(preview.accountId),
+                        );
+                        setPreview(null);
+                        setPreviewFile(null);
+                        await reload();
+                        setMessage(
+                          "Preview discarded. Saved transactions were not changed.",
+                        );
+                      })
+                    }
+                    onCommit={() =>
+                      void perform(async () => {
+                        const result = await workspaceApi<CommitResult>({
+                          action: "commit-import",
+                          draftId: preview.draftId,
+                          revision: preview.revision,
+                          reviewVersion: preview.reviewVersion ?? 0,
+                        });
+                        if (!("importId" in result)) {
+                          setPreview({ ...result, draftId: preview.draftId });
+                          setMessage(
+                            "The review changed or needs attention. Check the latest records before confirming again.",
+                          );
+                          return;
+                        }
+                        window.history.replaceState(
+                          null,
+                          "",
+                          "/dashboard/upload?saved=" +
+                            encodeURIComponent(result.importId),
+                        );
+                        setPreview(null);
+                        setPreviewFile(null);
+                        await reload();
+                        setMessage(
+                          result.outcome === "already_committed"
+                            ? "This import was already saved. No duplicate transactions were added."
+                            : "Transactions saved. Your calculations must now be refreshed.",
+                        );
+                      })
+                    }
+                  />
+                )}
+                {!requestedDraft && !justSaved && data.drafts.length > 0 && (
+                  <section className="panel">
+                    <h2>Saved previews</h2>
+                    <ul className="record-list">
+                      {data.drafts.map((d) => (
+                        <li key={d.id}>
+                          <div>
+                            <strong>{accountName(d.account_id)}</strong>
+                            <p>
+                              Preview {d.id.slice(0, 8)} · Expires{" "}
+                              {auditDate(d.expires_at)} (London)
+                            </p>
+                          </div>
+                          <a
+                            className="button secondary"
+                            href={
+                              "/dashboard/upload?draft=" +
+                              encodeURIComponent(d.id)
+                            }
+                          >
+                            Open preview
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+              </section>
+            )}
+            {view === "calculations" && (
+              <section>
+                <div className="calculation-layout">
+                  <section className="panel">
+                    <h2>Calculation settings</h2>
+                    <p>
+                      Confirm complete acquisition history across your taxable
+                      accounts, including trades within the 30-day look-ahead.
+                      Missing accounts can change the result.
+                    </p>
+                    <form
+                      noValidate
+                      onSubmit={calculate}
+                      onChange={() => setDirty(true)}
+                      className="form-stack"
+                    >
+                      <div className="form-columns">
+                        <SelectField
+                          id="taxYear"
+                          name="taxYear"
+                          label="Tax year"
+                          value={taxYear}
+                          onChange={(e) => {
+                            window.history.replaceState(
+                              null,
+                              "",
+                              "/dashboard/calculations?year=" +
+                                encodeURIComponent(e.target.value),
+                            );
+                          }}
+                        >
+                          {Object.keys(TAX_YEARS)
+                            .reverse()
+                            .map((year) => (
+                              <option key={year} value={year}>
+                                {year}
+                              </option>
+                            ))}
+                        </SelectField>
+                        <Field
+                          id="historyThrough"
+                          name="historyThrough"
+                          label="History complete through"
+                          placeholder="2026-05-05"
+                          hint={`Use YYYY-MM-DD. For ${taxYear}, matching can need history through ${plusDays(TAX_YEARS[taxYear].end, 30)}. Confirm only dates covered by your records.`}
+                          error={errors.historyThrough}
+                        />
+                      </div>
+                      <fieldset>
+                        <legend>Accounts with complete history</legend>
+                        {data.accounts.length ? (
+                          data.accounts.map((a) => (
+                            <label key={a.id} className="checkbox-label">
+                              <input
+                                name="confirmedAccountIds"
+                                value={a.id}
+                                type="checkbox"
+                              />
+                              <span>{a.label}</span>
+                            </label>
+                          ))
+                        ) : (
+                          <Link href="/dashboard/accounts">
+                            Add your first broker account
+                          </Link>
+                        )}
+                      </fieldset>
+                      <p className="caption">
+                        Leave an account unchecked if its history is incomplete.
+                        The result will show that account coverage has not been
+                        confirmed.
+                      </p>
+                      <div>
+                        <Button
+                          type="submit"
+                          busy={busy}
+                          disabled={!data.accounts.length}
+                        >
+                          {busy ? "Calculating…" : "Calculate gains"}
+                        </Button>
+                      </div>
+                    </form>
+                  </section>
+                  {currentCalculation && (
+                    <CalculationResult
+                      result={currentCalculation.result}
+                      coverage={currentCalculation.coverage_confirmed}
+                    />
+                  )}
+                </div>
+              </section>
+            )}
+            {view === "history" && (
+              <section>
+                <section className="panel">
+                  <h2>Import history</h2>
+                  {!history?.total ? (
+                    <div className="empty">
+                      <h3>No saved imports yet.</h3>
+                      <p>
+                        Review a file, then save its validated transactions to
+                        begin your history.
+                      </p>
+                      <Link className="button primary" href="/dashboard/upload">
+                        Review a file
+                      </Link>
+                    </div>
+                  ) : (
+                    <>
+                      <ul className="record-list">
+                        {history.imports.map((item) => (
+                          <li key={item.id}>
+                            <div>
+                              <strong>{accountName(item.account_id)}</strong>{" "}
+                              <span className="tag">
+                                {item.status === "committed"
+                                  ? "Saved"
+                                  : "Reversed"}
+                              </span>
+                              <p>
+                                {item.accepted_count} included ·{" "}
+                                {item.excluded_count} excluded ·{" "}
+                                {item.duplicate_count} duplicate ·{" "}
+                                {item.record_count} total
+                              </p>
+                              <p>{auditDate(item.created_at)} (London)</p>
+                              {item.reversal_reason && (
+                                <p>Reversal reason: {item.reversal_reason}</p>
+                              )}
+                            </div>
+                            <ImportHistoryDetail importId={item.id}>
+                              <p>Import reference {item.id}</p>
+                              <p>
+                                Source account: {accountName(item.account_id)}.
+                                Saved {auditDate(item.created_at)} (London).
+                              </p>
+                              <p>
+                                {item.status === "committed"
+                                  ? "These included transactions are used in your calculations."
+                                  : "These transactions are excluded from future calculations."}
+                              </p>
+                              {item.status === "committed" && (
+                                <Button
+                                  variant="secondary"
+                                  disabled={busy}
+                                  onClick={() => {
+                                    setReverse(item);
+                                    setErrors({});
+                                  }}
+                                >
+                                  Reverse import
+                                </Button>
+                              )}
+                            </ImportHistoryDetail>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="pagination">
                         <Button
                           variant="secondary"
-                          busy={busy}
+                          disabled={busy || history.page === 1}
                           onClick={() =>
                             void perform(async () =>
-                              setPreview(
-                                await workspaceApi<Preview>({
-                                  action: "review-import",
-                                  draftId: d.id,
-                                  page: 1,
+                              setHistory(
+                                await workspaceApi<History>({
+                                  action: "import-history",
+                                  page: history.page - 1,
                                 }),
                               ),
                             )
                           }
                         >
-                          Open preview
+                          Previous
                         </Button>
-                      </li>
-                    ))}
-                  </ul>
+                        <span>
+                          Page {history.page} of{" "}
+                          {Math.ceil(history.total / history.pageSize)}
+                        </span>
+                        <Button
+                          variant="secondary"
+                          disabled={
+                            busy ||
+                            history.page * history.pageSize >= history.total
+                          }
+                          onClick={() =>
+                            void perform(async () =>
+                              setHistory(
+                                await workspaceApi<History>({
+                                  action: "import-history",
+                                  page: history.page + 1,
+                                }),
+                              ),
+                            )
+                          }
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </section>
-              )}
-            </section>
-            <section hidden={view !== "calculations"}>
-              <div className="calculation-layout">
-                <section className="panel">
-                  <h2>Calculation settings</h2>
-                  <p>
-                    Confirm complete acquisition history across your taxable
-                    accounts, including trades within the 30-day look-ahead.
-                    Missing accounts can change the result.
-                  </p>
-                  <form
-                    noValidate
-                    onSubmit={calculate}
-                    onChange={() => setDirty(true)}
-                    className="form-stack"
-                  >
-                    <div className="form-columns">
-                      <SelectField
-                        id="taxYear"
-                        name="taxYear"
-                        label="Tax year"
-                        value={taxYear}
-                        onChange={(e) => setTaxYear(e.target.value)}
-                      >
-                        {Object.keys(TAX_YEARS)
-                          .reverse()
-                          .map((year) => (
-                            <option key={year} value={year}>
-                              {year}
-                            </option>
-                          ))}
-                      </SelectField>
-                      <Field
-                        id="historyThrough"
-                        name="historyThrough"
-                        label="History complete through"
-                        placeholder="2026-05-05"
-                        hint="YYYY-MM-DD. Use today or an earlier date."
-                        error={errors.historyThrough}
-                      />
-                    </div>
-                    <fieldset>
-                      <legend>Accounts with complete history</legend>
-                      {data.accounts.length ? (
-                        data.accounts.map((a) => (
-                          <label key={a.id} className="checkbox-label">
-                            <input
-                              name="confirmedAccountIds"
-                              value={a.id}
-                              type="checkbox"
-                            />
-                            <span>{a.label}</span>
-                          </label>
-                        ))
-                      ) : (
-                        <p>Add your taxable accounts before calculating.</p>
-                      )}
-                    </fieldset>
-                    <p className="caption">
-                      Leave an account unchecked if its history is incomplete.
-                      The result will show that account coverage has not been
-                      confirmed.
-                    </p>
-                    <div>
-                      <Button
-                        type="submit"
-                        busy={busy}
-                        disabled={!data.accounts.length}
-                      >
-                        {busy ? "Calculating…" : "Calculate gains"}
-                      </Button>
-                    </div>
-                  </form>
-                </section>
-                {currentCalculation && (
-                  <CalculationResult
-                    result={currentCalculation.result}
-                    coverage={currentCalculation.coverage_confirmed}
-                  />
-                )}
-                {!currentCalculation && (
-                  <div className="calculation-empty panel">
-                    <ChartNoAxesCombined size={36} aria-hidden="true" />
-                    <h2>Your gains, explained.</h2>
-                    <p>
-                      Choose a tax year and confirm your account history to see
-                      gains, losses and the share matching behind each disposal.
-                    </p>
-                    <span className="caption">
-                      Same day · 30-day rule · Section 104
-                    </span>
-                  </div>
-                )}
-              </div>
-            </section>
-            <section hidden={view !== "history"}>
-              <section className="panel">
-                <h2>Import history</h2>
-                {!history?.total ? (
-                  <div className="empty">
-                    <h3>No saved imports yet.</h3>
-                    <p>
-                      Review a file, then save its validated transactions to
-                      begin your history.
-                    </p>
-                    <Button onClick={() => setView("imports")}>
-                      Review a file
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <ul className="record-list">
-                      {history.imports.map((item) => (
-                        <li key={item.id}>
-                          <div>
-                            <strong>{accountName(item.account_id)}</strong>{" "}
-                            <span className="tag">
-                              {item.status === "committed"
-                                ? "Saved"
-                                : "Reversed"}
-                            </span>
-                            <p>
-                              {item.accepted_count} included ·{" "}
-                              {item.excluded_count} excluded ·{" "}
-                              {item.duplicate_count} duplicate ·{" "}
-                              {item.record_count} total
-                            </p>
-                            <p>{auditDate(item.created_at)} (London)</p>
-                            {item.reversal_reason && (
-                              <p>Reversal reason: {item.reversal_reason}</p>
-                            )}
-                          </div>
-                          {item.status === "committed" && (
-                            <Button
-                              variant="secondary"
-                              disabled={busy}
-                              onClick={() => {
-                                setReverse(item);
-                                setErrors({});
-                              }}
-                            >
-                              Reverse import
-                            </Button>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="pagination">
-                      <Button
-                        variant="secondary"
-                        disabled={busy || history.page === 1}
-                        onClick={() =>
-                          void perform(async () =>
-                            setHistory(
-                              await workspaceApi<History>({
-                                action: "import-history",
-                                page: history.page - 1,
-                              }),
-                            ),
-                          )
-                        }
-                      >
-                        Previous
-                      </Button>
-                      <span>
-                        Page {history.page} of{" "}
-                        {Math.ceil(history.total / history.pageSize)}
-                      </span>
-                      <Button
-                        variant="secondary"
-                        disabled={
-                          busy ||
-                          history.page * history.pageSize >= history.total
-                        }
-                        onClick={() =>
-                          void perform(async () =>
-                            setHistory(
-                              await workspaceApi<History>({
-                                action: "import-history",
-                                page: history.page + 1,
-                              }),
-                            ),
-                          )
-                        }
-                      >
-                        Next
-                      </Button>
-                    </div>
-                  </>
-                )}
               </section>
-            </section>
+            )}
           </>
         )}
       </main>

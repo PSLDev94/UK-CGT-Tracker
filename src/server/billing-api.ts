@@ -1,3 +1,6 @@
+import { recordJourney } from "./journey";
+import { createHash } from "node:crypto";
+import { reportDestination } from "../domain/reports/destination";
 import type { Billing } from "./billing";
 import { authenticate, type SessionReader } from "./identity";
 import {
@@ -26,19 +29,54 @@ export function createBillingHandler(
       const identity = await authenticate(request.headers, readSession);
       await consume(identity);
       const input = await jsonInput(request);
-      // Customer IDs, prices, return URLs and ownership never come from the client.
-      if (Object.keys(input).some((key) => key !== "action"))
+      // Checkout URLs are fixed server-side, even when an existing Stripe
+      // session is reused. A tab-specific navigation cookie stays on our origin.
+      const allowed =
+        input.action === "status"
+          ? ["action", "tab"]
+          : ["action", "tab", "year", "format"];
+      const target = reportDestination(input.year, input.format);
+      if (
+        Object.keys(input).some((key) => !allowed.includes(key)) ||
+        (("year" in input || "format" in input) && !target) ||
+        (input.tab !== undefined &&
+          (typeof input.tab !== "string" || !/^[0-9a-f-]{36}$/.test(input.tab)))
+      ) {
         throw new AppError(
           400,
           "INVALID_REQUEST",
-          "Only a billing action is accepted.",
+          "Choose a valid billing action and report.",
         );
-      if (input.action === "status")
-        return privateResponse(await billing.status(identity));
-      if (input.action === "checkout")
-        return privateResponse(await billing.checkout(identity));
-      if (input.action === "portal")
-        return privateResponse(await billing.portal(identity));
+      }
+      const owner = createHash("sha256")
+        .update(identity.ownerId)
+        .digest("hex")
+        .slice(0, 24);
+      const cookieName = `cgt_report_${input.tab ?? "return"}`;
+      if (input.action === "status") {
+        const saved = request.headers
+          .get("cookie")
+          ?.split(";")
+          .map((part) => part.trim())
+          .find((part) => part.startsWith(cookieName + "="));
+        const [binding, year, format] =
+          saved?.slice(cookieName.length + 1).split(".") ?? [];
+        return privateResponse({
+          ...(await billing.status(identity)),
+          returnReport:
+            binding === owner ? reportDestination(year, format) : null,
+        });
+      }
+      if (input.action === "checkout" || input.action === "portal") {
+        const response = privateResponse(await billing[input.action](identity));
+        if (input.action === "checkout") recordJourney("checkout_opened");
+        const value = target ? `${owner}.${target.year}.${target.format}` : "";
+        response.headers.append(
+          "set-cookie",
+          `${cookieName}=${value}; Path=/api/v2/billing; HttpOnly; SameSite=Lax; Max-Age=${target ? 86400 : 0}${origin.startsWith("https:") ? "; Secure" : ""}`,
+        );
+        return response;
+      }
       throw new AppError(
         400,
         "INVALID_ACTION",

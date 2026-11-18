@@ -7,12 +7,12 @@ export default function NotFound() {
       <main id="main" className="public-main principles">
         <h1>This page is unavailable.</h1>
         <p>
-          The relaunch is replacing the previous website. Your workspace is the
-          place to start.
+          This address may have changed. Return to your overview or browse the broker guides.
         </p>
-        <Link className="button primary" href="/workspace">
+        <Link className="button primary" href="/dashboard">
           Open workspace
         </Link>
+        <Link className="button secondary" href="/supported-brokers">Check broker support</Link>
       </main>
     </>
   );

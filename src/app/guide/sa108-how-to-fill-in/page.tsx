@@ -14,6 +14,9 @@ export const metadata: Metadata = {
 export default function SA108GuidePage() {
   return (
     <GuideLayout
+      slug="sa108-how-to-fill-in"
+      edition="Tax year 2025–26"
+      nextStep={{ href: "/dashboard/reports", title: "View your saved reports" }}
       title="How to Fill in SA108 for Shares and Investments"
       breadcrumb="SA108 Guide"
       relatedGuides={[
@@ -115,9 +118,10 @@ export default function SA108GuidePage() {
 
       <h2>How CGT Tracker Helps with SA108</h2>
       <p>
-        CGT Tracker provides reviewed share-matching evidence. Filing-ready
-        SA108 figures and PDF exports are still being qualified. Use the current
-        HMRC form and notes for your tax year.
+        Download the disposal and share-matching evidence as a free CSV. The
+        annual subscription also includes a summary PDF and a detailed evidence
+        PDF. Use these records with the current HMRC form and notes for your
+        tax year to complete your own return.
       </p>
 
       <h2>Summary Checklist</h2>

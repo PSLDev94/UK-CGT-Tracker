@@ -1,3 +1,4 @@
+import { recordJourney } from "./journey";
 import { authenticate, type SessionReader } from "./identity";
 import { AppError } from "./errors";
 import {
@@ -55,12 +56,19 @@ export function createWorkspaceHandler(
         await workspace.consumeRequest(identity, "calculate");
       const text = (name: string) => stringField(input, name);
       switch (input.action) {
+        case "import-detail":
+          return privateResponse(
+            await workspace.importDetail(identity, text("importId"), Number(input.page ?? 1)),
+          );
         case "import-history":
           return privateResponse(
             await workspace.importHistory(identity, Number(input.page ?? 1)),
           );
-        case "overview":
-          return privateResponse(await workspace.overview(identity));
+        case "overview": {
+          const overview = await workspace.overview(identity);
+          if (input.surface === "reports") recordJourney("reports_opened");
+          return privateResponse(overview);
+        }
         case "add-account":
           return privateResponse(
             await workspace.addAccount(identity, {
@@ -95,6 +103,7 @@ export function createWorkspaceHandler(
             ordinarySharesConfirmed: input.ordinarySharesConfirmed as
               boolean | undefined,
           });
+          recordJourney(result.review.status === "ready" ? "preview_ready" : "preview_blocked", result.broker);
           return privateResponse(
             { ...result, review: reviewPage(result.review, 1) },
             201,
@@ -134,6 +143,7 @@ export function createWorkspaceHandler(
             input.details as SupportingDetails,
             input.reviewVersion as number,
           );
+          recordJourney(result.review.status === "ready" ? "repair_ready" : "repair_saved", result.broker);
           return privateResponse({
             ...result,
             review: reviewPage(
@@ -166,6 +176,7 @@ export function createWorkspaceHandler(
               { ...result, review: reviewPage(result.review, 1) },
               409,
             );
+          if (result.outcome === "committed") recordJourney("import_saved");
           return privateResponse(result);
         }
         case "reverse-import":
@@ -187,14 +198,14 @@ export function createWorkspaceHandler(
               "Confirm the accounts whose history is complete.",
             );
           }
-          return privateResponse(
-            await workspace.calculate(identity, {
+          const calculation = await workspace.calculate(identity, {
               portfolioId: text("portfolioId"),
               taxYear: text("taxYear"),
               historyThrough: text("historyThrough"),
               confirmedAccountIds: input.confirmedAccountIds,
-            }),
-          );
+            });
+          recordJourney(calculation.result.status === "complete" && calculation.coverageConfirmed ? "calculation_complete" : "calculation_incomplete");
+          return privateResponse(calculation);
         }
         default:
           throw new AppError(

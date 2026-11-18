@@ -23,32 +23,39 @@ export default function BedAndBreakfastCalculatorPage() {
     gainLoss: Decimal;
   }>(null);
 
-  const [error, setError] = useState("");
-  const calculate = (e: React.FormEvent) => {
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [edited, setEdited] = useState(false);
+  const calculate = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setError("");
     setResult(null);
-    if (
-      ![sellQty, sellPrice, buyQty, buyPrice].every((v) =>
-        /^\d{1,12}(\.\d{1,8})?$/.test(v),
-      ) ||
-      !sellDate ||
-      !buyDate ||
-      new Decimal(sellQty).lte(0) ||
-      new Decimal(buyQty).lte(0)
-    ) {
-      setError(
-        "Enter valid dates, positive share quantities and non-negative prices (up to 8 decimal places).",
-      );
+    setEdited(false);
+    const next: Record<string, string> = {};
+    for (const [id, value, label] of [
+      ["sell-date", sellDate, "sale date"],
+      ["sell-qty", sellQty, "quantity sold"],
+      ["sell-price", sellPrice, "sale price"],
+      ["buy-date", buyDate, "repurchase date"],
+      ["buy-qty", buyQty, "quantity repurchased"],
+      ["buy-price", buyPrice, "repurchase price"],
+    ]) {
+      if (id.endsWith("-date")) {
+        if (!value || !Number.isFinite(Date.parse(value)))
+          next[id] = `Enter the ${label}.`;
+      } else if (
+        !/^\d{1,12}(\.\d{1,8})?$/.test(value) ||
+        (id.endsWith("-qty") && new Decimal(value).isZero())
+      ) {
+        next[id] =
+          `Enter the ${label} as ${id.endsWith("-qty") ? "a positive number" : "zero or a positive number"} with up to 8 decimal places.`;
+      }
+    }
+    setErrors(next);
+    const first = Object.keys(next)[0];
+    if (first) {
+      requestAnimationFrame(() => document.getElementById(first)?.focus());
       return;
     }
-    const sell = new Date(sellDate);
-    const buy = new Date(buyDate);
-    const diffMs = buy.getTime() - sell.getTime();
-    if (!Number.isFinite(diffMs)) {
-      setError("Enter valid calendar dates.");
-      return;
-    }
+    const diffMs = Date.parse(buyDate) - Date.parse(sellDate);
     const daysBetween = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
     const sQty = new Decimal(sellQty);
@@ -122,20 +129,24 @@ export default function BedAndBreakfastCalculatorPage() {
           your actual gain or loss based on the matched repurchase cost.
         </p>
 
-        {error && (
-          <p
-            role="alert"
-            className="bg-red-50 text-red-700 p-4 rounded-xl mb-4"
-          >
-            {error}
-          </p>
-        )}
         {/* Calculator */}
         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-12">
           <div className="h-1.5 bg-gradient-to-r from-amber-400 to-orange-500" />
           <form
             noValidate
             onSubmit={calculate}
+            onChange={(event) => {
+              if (result) setEdited(true);
+              setResult(null);
+              const id =
+                event.target instanceof HTMLInputElement ? event.target.id : "";
+              if (errors[id])
+                setErrors((previous) => {
+                  const remaining = { ...previous };
+                  delete remaining[id];
+                  return remaining;
+                });
+            }}
             className="p-6 sm:p-8 overflow-hidden"
           >
             <div className="grid sm:grid-cols-2 gap-8">
@@ -157,12 +168,24 @@ export default function BedAndBreakfastCalculatorPage() {
                     </label>
                     <input
                       id="sell-date"
+                      aria-invalid={Boolean(errors["sell-date"])}
+                      aria-describedby={
+                        errors["sell-date"] ? "sell-date-error" : undefined
+                      }
                       type="date"
                       required
                       value={sellDate}
                       onChange={(e) => setSellDate(e.target.value)}
                       className="w-full min-w-0 box-border border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
                     />
+                    {errors["sell-date"] && (
+                      <p
+                        id="sell-date-error"
+                        className="mt-1 text-sm text-red-700"
+                      >
+                        {errors["sell-date"]}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label
@@ -173,6 +196,10 @@ export default function BedAndBreakfastCalculatorPage() {
                     </label>
                     <input
                       id="sell-qty"
+                      aria-invalid={Boolean(errors["sell-qty"])}
+                      aria-describedby={
+                        errors["sell-qty"] ? "sell-qty-error" : undefined
+                      }
                       type="number"
                       step="any"
                       min="0.01"
@@ -182,6 +209,14 @@ export default function BedAndBreakfastCalculatorPage() {
                       placeholder="e.g. 100"
                       className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
                     />
+                    {errors["sell-qty"] && (
+                      <p
+                        id="sell-qty-error"
+                        className="mt-1 text-sm text-red-700"
+                      >
+                        {errors["sell-qty"]}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label
@@ -192,6 +227,10 @@ export default function BedAndBreakfastCalculatorPage() {
                     </label>
                     <input
                       id="sell-price"
+                      aria-invalid={Boolean(errors["sell-price"])}
+                      aria-describedby={
+                        errors["sell-price"] ? "sell-price-error" : undefined
+                      }
                       type="number"
                       step="any"
                       min="0.0001"
@@ -201,6 +240,14 @@ export default function BedAndBreakfastCalculatorPage() {
                       placeholder="e.g. 2.50"
                       className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
                     />
+                    {errors["sell-price"] && (
+                      <p
+                        id="sell-price-error"
+                        className="mt-1 text-sm text-red-700"
+                      >
+                        {errors["sell-price"]}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -223,12 +270,24 @@ export default function BedAndBreakfastCalculatorPage() {
                     </label>
                     <input
                       id="buy-date"
+                      aria-invalid={Boolean(errors["buy-date"])}
+                      aria-describedby={
+                        errors["buy-date"] ? "buy-date-error" : undefined
+                      }
                       type="date"
                       required
                       value={buyDate}
                       onChange={(e) => setBuyDate(e.target.value)}
                       className="w-full min-w-0 box-border border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
                     />
+                    {errors["buy-date"] && (
+                      <p
+                        id="buy-date-error"
+                        className="mt-1 text-sm text-red-700"
+                      >
+                        {errors["buy-date"]}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label
@@ -239,6 +298,10 @@ export default function BedAndBreakfastCalculatorPage() {
                     </label>
                     <input
                       id="buy-qty"
+                      aria-invalid={Boolean(errors["buy-qty"])}
+                      aria-describedby={
+                        errors["buy-qty"] ? "buy-qty-error" : undefined
+                      }
                       type="number"
                       step="any"
                       min="0.01"
@@ -248,6 +311,14 @@ export default function BedAndBreakfastCalculatorPage() {
                       placeholder="e.g. 100"
                       className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
                     />
+                    {errors["buy-qty"] && (
+                      <p
+                        id="buy-qty-error"
+                        className="mt-1 text-sm text-red-700"
+                      >
+                        {errors["buy-qty"]}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label
@@ -258,6 +329,10 @@ export default function BedAndBreakfastCalculatorPage() {
                     </label>
                     <input
                       id="buy-price"
+                      aria-invalid={Boolean(errors["buy-price"])}
+                      aria-describedby={
+                        errors["buy-price"] ? "buy-price-error" : undefined
+                      }
                       type="number"
                       step="any"
                       min="0.0001"
@@ -267,6 +342,14 @@ export default function BedAndBreakfastCalculatorPage() {
                       placeholder="e.g. 2.60"
                       className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
                     />
+                    {errors["buy-price"] && (
+                      <p
+                        id="buy-price-error"
+                        className="mt-1 text-sm text-red-700"
+                      >
+                        {errors["buy-price"]}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -280,6 +363,16 @@ export default function BedAndBreakfastCalculatorPage() {
             </button>
           </form>
 
+          <p
+            role="status"
+            className={edited ? "px-6 pb-6 text-sm text-gray-700" : "sr-only"}
+          >
+            {edited
+              ? "Details changed. Check the rule again for the updated result."
+              : result
+                ? "Calculation updated."
+                : ""}
+          </p>
           {/* Result */}
           {result && (
             <div
@@ -403,9 +496,8 @@ export default function BedAndBreakfastCalculatorPage() {
             Tracking an entire portfolio?
           </h2>
           <p className="text-gray-600 mb-6">
-            CGT Tracker handles your complete transaction history — B&amp;B
-            matching, Section 104 pooling, and SA108 report generation — all
-            automatically.
+            Review supported broker files and calculate gains and losses across
+            your taxable ordinary-share accounts.
           </p>
           <Link
             href="/signup"

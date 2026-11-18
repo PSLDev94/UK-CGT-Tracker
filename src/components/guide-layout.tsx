@@ -1,3 +1,4 @@
+import { Children, cloneElement, isValidElement } from "react";
 import Link from "next/link";
 import { ChevronRight, ArrowRight } from "lucide-react";
 import { PublicNav } from "./public-nav";
@@ -10,6 +11,9 @@ interface RelatedGuide {
 
 interface GuideLayoutProps {
   title: string;
+  slug: string;
+  nextStep: RelatedGuide;
+  edition: string;
   breadcrumb: string;
   lastUpdated?: string;
   relatedGuides: RelatedGuide[];
@@ -19,12 +23,35 @@ interface GuideLayoutProps {
 
 export function GuideLayout({
   title,
+  slug,
+  nextStep,
+  edition,
   breadcrumb,
   lastUpdated = "April 2026",
   relatedGuides,
   children,
   jsonLd = [],
 }: GuideLayoutProps) {
+  const contents: { id: string; title: string }[] = [];
+  const article = Children.map(children, (child) => {
+    if (
+      !isValidElement<{ children: unknown; id?: string; className?: string }>(
+        child,
+      ) ||
+      child.type !== "h2" ||
+      typeof child.props.children !== "string"
+    )
+      return child;
+    const title = child.props.children.trim();
+    const id =
+      child.props.id ??
+      title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/-$/, "");
+    contents.push({ id, title });
+    return cloneElement(child, { id, className: "scroll-mt-20" });
+  });
   const breadcrumbLd = {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
@@ -45,7 +72,7 @@ export function GuideLayout({
         "@type": "ListItem",
         position: 3,
         name: breadcrumb,
-        item: `https://www.cgttracker.com/guide`,
+        item: `https://www.cgttracker.com/guide/${slug}`,
       },
     ],
   };
@@ -55,7 +82,7 @@ export function GuideLayout({
     "@type": "Article",
     headline: title,
     datePublished: "2026-04-01",
-    dateModified: "2026-04-26",
+    dateModified: "2026-11-18",
     author: { "@type": "Organization", name: "CGT Tracker" },
     publisher: {
       "@type": "Organization",
@@ -77,7 +104,7 @@ export function GuideLayout({
 
       <main id="main" className="max-w-4xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-1.5 text-sm text-gray-500 mb-8 flex-wrap">
+        <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-gray-500 mb-8 flex-wrap">
           <Link href="/" className="hover:text-gray-900 transition-colors">
             Home
           </Link>
@@ -93,16 +120,16 @@ export function GuideLayout({
           {title}
         </h1>
         <p className="text-sm text-gray-500 mb-10">
-          Last updated: {lastUpdated}
+          {edition} · Article edition {lastUpdated}
         </p>
 
         <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-8 text-sm text-blue-900">
-          Relaunch preview: this educational guide is not a certification of
-          broker support or a filing-ready report.{" "}
-          <Link href="/supported-brokers" className="underline">
-            Check current broker support
-          </Link>
-          . Verify the rules for your tax year with{" "}
+          {nextStep.href.startsWith("/supported-brokers#") ? (
+            <Link href={nextStep.href} className="underline">{nextStep.title}</Link>
+          ) : (
+            <Link href="/supported-brokers" className="underline">Check current broker support</Link>
+          )}
+          . Check the share matching rules for your tax year with{" "}
           <a
             className="underline"
             href="https://www.gov.uk/government/publications/shares-and-capital-gains-tax-hs284-self-assessment-helpsheet/hs284-shares-and-capital-gains-tax-2026"
@@ -111,7 +138,24 @@ export function GuideLayout({
           </a>
           .
         </div>
-        <article className="guide-article">{children}</article>
+        <details className="mb-8 rounded-xl border border-gray-200 px-5 py-3">
+          <summary className="cursor-pointer font-semibold">
+            On this page
+          </summary>
+          <ul className="mt-3 space-y-1 text-blue-700">
+            {contents.map((section) => (
+              <li key={section.id}>
+                <a
+                  className="inline-block py-1 underline"
+                  href={`#${section.id}`}
+                >
+                  {section.title}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </details>
+        <article className="guide-article">{article}</article>
 
         {/* Related Guides */}
         {relatedGuides.length > 0 && (
@@ -138,22 +182,15 @@ export function GuideLayout({
 
         {/* CTA */}
         <section className="mt-12 bg-blue-50 rounded-2xl p-8 text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-3">
-            Ready to review your share gains?
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+            Put this guide into practice
           </h2>
-          <p className="text-gray-600 mb-6">
-            Review supported broker files and follow your share-matching
-            evidence.
-          </p>
           <Link
-            href="/signup"
-            className="inline-block bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-medium hover:bg-blue-700 transition-colors"
+            href={nextStep.href}
+            className="inline-block rounded-lg bg-blue-600 px-6 py-3 font-medium text-white hover:bg-blue-700"
           >
-            Try the preview
+            {nextStep.title}
           </Link>
-          <p className="text-sm text-gray-600 mt-3">
-            Relaunch preview. No live payments.
-          </p>
         </section>
       </main>
 

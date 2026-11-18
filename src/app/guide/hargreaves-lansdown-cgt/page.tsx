@@ -5,7 +5,7 @@ import { GuideLayout } from "@/components/guide-layout";
 export const metadata: Metadata = {
   title: "Hargreaves Lansdown Capital Gains Tax — How to Calculate It",
   description:
-    "How to export your Hargreaves Lansdown transaction history and calculate your CGT. Check price units carefully. Native HL imports remain in qualification.",
+    "How to export your Hargreaves Lansdown transaction history and calculate your CGT. Check price units carefully. HL imports use assisted review with contract notes.",
   alternates: {
     canonical: "https://www.cgttracker.com/guide/hargreaves-lansdown-cgt",
   },
@@ -14,6 +14,9 @@ export const metadata: Metadata = {
 export default function HargreavesLansdownCGTPage() {
   return (
     <GuideLayout
+      slug="hargreaves-lansdown-cgt"
+      edition="HL Fund and Share accounts"
+      nextStep={{ href: "/supported-brokers#hl", title: "Check my HL export" }}
       title="Hargreaves Lansdown Capital Gains Tax — How to Calculate It"
       breadcrumb="Hargreaves Lansdown CGT"
       relatedGuides={[
@@ -52,7 +55,7 @@ export default function HargreavesLansdownCGTPage() {
           Look for <strong>Transaction History</strong> or{" "}
           <strong>Trade History</strong> in the account menu.
         </li>
-        <li>Set the date range to cover the tax year (6 April to 5 April).</li>
+        <li>Export the full acquisition history and include purchases for 30 days after the year you are calculating.</li>
         <li>
           Download/export as CSV. You may need to select &ldquo;Download as
           spreadsheet&rdquo; or similar.
@@ -87,8 +90,7 @@ export default function HargreavesLansdownCGTPage() {
         &ldquo;Value&rdquo; column. If you bought 100 shares at a
         &ldquo;Price&rdquo; of 178.50 and the &ldquo;Total&rdquo; is £178.50
         (not £17,850), then the price is in pence. Check the export’s currency
-        and price units explicitly. Native HL imports remain in qualification;
-        the preview does not infer pence conversions.
+        and price units explicitly. The assisted review asks you to confirm these details against your contract note.
       </p>
 
       <h2>How the S104 Pool Works with HL Purchases</h2>
@@ -196,8 +198,7 @@ export default function HargreavesLansdownCGTPage() {
         </li>
         <li>
           <strong>Fund transactions</strong> — if you hold funds (OEICs or unit
-          trusts) rather than shares, the CGT treatment is the same but the
-          pricing format may differ.
+          trusts), keep them separate when reviewing your history. The supported import scope is ordinary shares.
         </li>
         <li>
           <strong>Multiple accounts</strong> — ensure you only export the
@@ -207,17 +208,14 @@ export default function HargreavesLansdownCGTPage() {
 
       <div className="bg-green-50 border-l-4 border-green-600 p-4 rounded-r-lg my-8 not-prose">
         <p className="text-sm text-green-900">
-          <strong>Support status:</strong> Native Hargreaves Lansdown files are
-          not yet qualified. Do not assume a pence-to-pounds conversion or
-          automatic import. The rebuilt engine supports{" "}
+          <strong>Support status:</strong> Documented Transaction Summary files use assisted review. Check price units, security identifiers and fees against your notes before saving. The calculation applies{" "}
           <Link
             href="/guide/bed-and-breakfast-rule"
             className="underline font-medium"
           >
             30-day B&amp;B matching
           </Link>
-          , and Section 104 pooling for supported records. Native HL exports and
-          filing-ready reports remain in qualification.
+          , and Section 104 pooling for supported records.
         </p>
       </div>
     </GuideLayout>

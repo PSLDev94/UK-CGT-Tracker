@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { authHref } from "./return-path";
 import { useRouter } from "next/navigation";
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { authApi } from "./api";
@@ -59,7 +60,15 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         ) : session === null ? (
           <section className="panel">
             <h1>Sign in to your account</h1>
-            <Link className="button primary" href="/login">
+            <Link
+              className="button primary"
+              href={authHref(
+                "/login",
+                typeof window === "undefined"
+                  ? undefined
+                  : window.location.pathname + window.location.search,
+              )}
+            >
               Sign in
             </Link>
           </section>
