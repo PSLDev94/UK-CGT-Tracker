@@ -97,7 +97,7 @@
     left: 1rem;
     top: -5rem;
     clip-path: inset(50%);
-    z-index: 20;
+    z-index: 60;
     background: var(--color-surface);
     padding: 0.8rem;
   }
@@ -439,6 +439,7 @@
     margin-top: 0.2rem;
   }
   .upload-box {
+    container-type: inline-size;
     border: 1px dashed #afb7cc;
     background: var(--color-background);
     border-radius: var(--radius-control);
@@ -457,13 +458,19 @@
     max-width: 100%;
     box-sizing: border-box;
     white-space: normal;
-    overflow-wrap: anywhere;
+    overflow-wrap: normal;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-control);
     background: var(--color-surface);
     margin-right: 1rem;
     color: var(--color-ink);
     cursor: pointer;
+  }
+  @container (max-width: 12rem) {
+    .upload-box input::file-selector-button {
+      inline-size: 100%;
+      margin-inline-end: 0;
+    }
   }
   .metrics {
     display: grid;
@@ -573,6 +580,14 @@
   }
   .broker-grid .panel {
     margin: 0;
+    min-inline-size: 0;
+  }
+  .broker-directory {
+    overflow-wrap: anywhere;
+  }
+  .broker-directory .tag {
+    max-inline-size: 100%;
+    white-space: normal;
   }
   dialog {
     max-width: min(32rem, calc(100vw - 2rem));
@@ -1005,7 +1020,7 @@
     }
     .form-columns,
     .broker-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
     .metrics {
       grid-template-columns: repeat(2, minmax(0, 1fr));

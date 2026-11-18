@@ -4,6 +4,7 @@ import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { readFileSync } from "node:fs";
 import { reviewCsv, tradesFromReview } from "../src/domain/imports/review";
+import { draftSummary } from "../src/domain/imports/draft-summary";
 import { pageForReviewIndex, reviewPage } from "../src/server/workspace-api";
 import { longFreetradeStatement, mixedFreetradeStatement } from "./helpers/freetrade-statement";
 import { calculateGains } from "../src/domain/cgt/calculate";
@@ -189,10 +190,13 @@ async function mockWorkspace(
             pageSize: 25,
           },
         });
-      case "import-detail":
+      case "import-detail": {
+        const saved = state.imports.find((item) => item.id === body.importId);
         return route.fulfill({json: {page: 1, pageSize: 25, legacy: false, total: wholeReview?.counts.total ?? 0,
+          status: saved?.status, accountLabel: state.accounts.find((a) => a.id === saved?.account_id)?.label, reversalReason: saved?.reversal_reason,
           records: currentPreview?.review.records.map(({ record, status, reason, tradeDetail }) => ({ record, status, reason, tradeDetail })) ?? [],
         }});
+      }
       case "add-account":
         state.accounts.push({
           id: accountId,
@@ -224,6 +228,7 @@ async function mockWorkspace(
           {
             id: draftId,
             account_id: accountId,
+            display_summary: draftSummary(review, body.fileName),
             expires_at: "2027-01-01T12:00:00Z",
           },
         ];
@@ -578,6 +583,71 @@ test("same-minute AJ Bell receipts identify the sale in history and in the rever
   await dialog.getByRole("button", { name: "Reverse import" }).click();
   await expect(sell.getByText("Reversed", { exact: true })).toBeVisible();
   await expect(buy.getByText("Saved", { exact: true })).toBeVisible();
+});
+
+test("reopened previews keep their filenames and distinguish earlier uploads", async ({ page }) => {
+  const { state } = await mockWorkspace(page, { account: true });
+  const parsed = reviewCsv(csv, { broker: "trading212", accountId, accountType: "GIA", format: "canonical-v1" });
+  const rows = reviewPage(parsed, 1);
+  const summary = draftSummary(parsed, file.name);
+  const original = { id: draftId, account_id: accountId, expires_at: "2026-11-19T12:34:56Z", display_summary: summary };
+  state.drafts = [original, {
+    ...original, id: "20000000-0000-4000-8000-000000000002",
+    display_summary: { ...summary, fileName: "Second export.csv" },
+  }, {
+    ...original, id: "20000000-0000-4000-8000-000000000003",
+    display_summary: null, created_at: "2026-11-18T12:34:56Z",
+  }];
+  await page.route("**/api/v2/workspace", async (route) => {
+    const body = route.request().postDataJSON();
+    if (body.action === "review-import") {
+      expect(body.draftId).toBe(original.id);
+      return route.fulfill({ json: { draftId, accountId, revision: 1, review: rows } });
+    }
+    return route.fallback();
+  });
+  await page.goto("/dashboard/upload");
+  await expect(page.getByRole("link", { name: /Open preview · Upload from .*12:34:56/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open preview · Second export.csv" })).toBeVisible();
+  await page.getByRole("link", { name: `Open preview · ${file.name}` }).click();
+  const review = page.getByRole("region", { name: "Review before saving" });
+  await expect(review).toContainText(file.name);
+  await page.reload();
+  await expect(review).toContainText(file.name);
+});
+
+test("direct receipts keep their effective status after a reversal", async ({ page }) => {
+  const { state } = await mockWorkspace(page, { account: true });
+  const receipt: HistoryImport = {
+    id: draftId, account_id: accountId, status: "committed", record_count: 3,
+    accepted_count: 2, excluded_count: 1, duplicate_count: 0, created_at: "2026-11-18T12:34:56Z", firstTrade: null,
+  };
+  state.imports = [receipt];
+  await page.route("**/api/v2/workspace", async (route) => {
+    const body = route.request().postDataJSON();
+    if (body.action === "import-detail") return route.fulfill({ json: {
+      status: receipt.status, accountLabel: "My Invest", reversalReason: receipt.reversal_reason,
+      total: 3, pageSize: 25, page: 1, legacy: false, records: [{ record: 2, status: "accepted", reason: "Trade was included at import." }],
+    } });
+    return route.fallback();
+  });
+  const bookmark = `/dashboard/history?receipt=${receipt.id}&record=2`;
+  await page.goto(bookmark);
+  await expect(page.getByText("My Invest", { exact: true })).toBeVisible();
+  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
+  await expect(page.locator("#receipt-record-2")).toBeFocused();
+  await expect(page.locator("#receipt-record-2 > dt")).toHaveText("Record 2 · Included");
+  receipt.status = "reversed";
+  receipt.reversal_reason = "Superseded broker statement";
+  await page.reload();
+  await expect(page.getByText("Reversed", { exact: true })).toBeVisible();
+  await expect(page.getByText("Reversal reason: Superseded broker statement")).toBeVisible();
+  await expect(page.getByText("These transactions are excluded from future calculations.")).toBeVisible();
+  await expect(page.locator("#receipt-record-2 > dt")).toHaveText("Record 2 · Included when imported");
+  await page.getByRole("link", { name: "View import history" }).click();
+  const listedReceipt = page.getByRole("listitem").filter({ hasText: "Receipt 20000000…0001" });
+  await listedReceipt.getByText("View import details", { exact: true }).click();
+  await expect(listedReceipt.getByText("Record 2 · Included when imported")).toBeVisible();
 });
 
 test("unsupported files cannot be saved and can be discarded", async ({
@@ -1156,6 +1226,69 @@ test("Accounts and Upload skip paginated history and explain a local CSV selecti
   await page.goto("/dashboard/history");
   await expect(page.getByRole("heading", { name: "No saved imports yet." })).toBeVisible();
   expect(calls).toContain("import-history");
+});
+
+test("assisted corrections stay with the failed trade and survive cancelling a discard after reload", async ({ page }) => {
+  const { state, calls } = await mockWorkspace(page, { account: true });
+  state.accounts[0]!.broker = "hl";
+  await page.goto("/dashboard/upload");
+  await page.getByLabel("CSV file", { exact: true }).setInputFiles("tests/fixtures/brokers/hl-assisted.csv");
+  await page.getByRole("checkbox", { name: /For a native broker export/ }).check();
+  await page.getByRole("button", { name: "Review file", exact: true }).click();
+  await page.getByRole("button", { name: "Review details for record 3" }).click();
+  const isin = page.getByLabel("Verified ISIN", { exact: true });
+  for (const text of ["Synthetic ordinary share", "Trade date · 01/07/2024", "Execution reference · S900000002", "Export currency: GBP · unit cost in pence."]) {
+    const identity = page.getByText(text, { exact: true }).filter({ visible: true });
+    await expect(identity).toBeVisible();
+    expect((await identity.boundingBox())!.y).toBeLessThan((await isin.boundingBox())!.y);
+  }
+  const fees = page.getByLabel("Dealing fees and transaction taxes", { exact: true });
+  const reference = page.getByLabel("Supporting statement or contract-note reference", { exact: true });
+  const confirm = page.getByRole("checkbox", { name: /I checked the currency/ });
+  const save = page.getByRole("button", { name: "Check and save supporting details" });
+  await isin.fill("gb0008706128");
+  await fees.fill("5");
+  await reference.fill("Statement for sale S900000002");
+  await confirm.check();
+  await save.click();
+  await expect(page.getByRole("heading", { name: "Resolve record 3" })).toBeVisible();
+  await expect(fees).toBeFocused();
+  await expect(fees).toHaveValue("5");
+  await expect(fees).toHaveAccessibleDescription(/net cash do not reconcile.*GBP 195\.00.*GBP 198\.00/);
+  await expect(reference).toHaveValue("Statement for sale S900000002");
+  await expect(page.getByText("Details checked for record 3", { exact: false })).toHaveCount(0);
+  await fees.fill("2");
+  await save.click();
+  await expect(page.getByText("Details checked for record 3. 1 record still needs attention.")).toBeVisible();
+  await page.getByRole("button", { name: "Resolve record 2", exact: true }).click();
+  await isin.fill("GB0008706128");
+  await fees.fill("8.49");
+  await reference.fill("Statement for purchase B900000001");
+  await confirm.check();
+  await save.click();
+  const commit = page.getByRole("button", { name: "Save 2 transactions" });
+  await expect(commit).toBeEnabled();
+  await page.reload();
+  await expect(commit).toBeEnabled();
+  const discard = page.getByRole("button", { name: "Discard preview", exact: true });
+  await discard.click();
+  const dialog = page.getByRole("dialog", { name: "Discard this corrected preview?" });
+  const keep = dialog.getByRole("button", { name: "Keep preview" });
+  await expect(keep).toBeFocused();
+  await keep.click();
+  await expect(discard).toBeFocused();
+  expect(calls).not.toContain("discard-draft");
+  await expect(commit).toBeEnabled();
+  await page.getByRole("button", { name: "Review details for record 3" }).click();
+  await expect(isin).toHaveValue("GB0008706128");
+  await expect(fees).toHaveValue("2");
+  await expect(reference).toHaveValue("Statement for sale S900000002");
+  await page.getByRole("button", { name: "Back to file review" }).click();
+  await discard.click();
+  await dialog.getByRole("button", { name: "Discard corrected preview" }).click();
+  await expect(page.getByText(/Preview discarded. Saved transactions were not changed./)).toBeVisible();
+  expect(calls.filter((call) => call === "discard-draft")).toHaveLength(1);
+  expect(calls).not.toContain("commit-import");
 });
 
 test("assisted HL import preserves source evidence, validates details and enables an explicit commit", async ({

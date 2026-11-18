@@ -10,6 +10,11 @@ export interface SupportingDetails {
   netAmountConfirmed: boolean;
 }
 export type ImportDetails = Record<string, SupportingDetails>;
+export class SupportingFieldError extends Error {
+  constructor(readonly field: keyof SupportingDetails, message: string) {
+    super(message);
+  }
+}
 /**
  * Stable order matching these fixed fields' PostgreSQL jsonb representation.
  * Existing commits already hash details read back from jsonb. Preserve their

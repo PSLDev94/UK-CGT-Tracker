@@ -49,11 +49,13 @@ export function DashboardSidebar({
   onSignOut,
   busy = false,
   brokerSupportHref = "/supported-brokers",
+  selectedYear,
 }: {
   userEmail: string;
   onSignOut: () => void;
   busy?: boolean;
   brokerSupportHref?: string;
+  selectedYear?: string;
 }) {
   const menuButton = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
@@ -114,7 +116,9 @@ export function DashboardSidebar({
                 return (
                   <Link
                     key={href}
-                    href={href}
+                    href={selectedYear && (href === "/dashboard/calculations" || href === "/dashboard/reports")
+                      ? href + "?year=" + encodeURIComponent(selectedYear)
+                      : href}
                     aria-disabled={busy || undefined}
                     onClick={(event) => {
                       if (busy) event.preventDefault();

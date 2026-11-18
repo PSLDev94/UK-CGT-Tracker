@@ -14,6 +14,7 @@ import { calendarDate, TAX_YEARS, ukCalendarDate } from "../domain/values";
 import { type Connection, OwnedDatabase, query } from "./database";
 import { AppError, requireLabel, requireUuid } from "./errors";
 import type { Identity } from "./identity";
+import { draftSummary, type DraftSummary } from "../domain/imports/draft-summary";
 import {
   validateDetails,
   type ImportDetails,
@@ -43,6 +44,7 @@ interface Draft {
   ordinary_shares_confirmed: boolean;
   supporting_details: ImportDetails;
   review_version: number;
+  display_summary: DraftSummary | null;
 }
 interface Import {
   id: string;
@@ -299,12 +301,16 @@ export class Workspace {
       const start = (page - 1) * 25;
       const receipt = (
         await query<{
+          status: Import["status"];
+          accountLabel: string;
+          reversalReason: string | null;
           total: number;
           legacy: boolean;
           records: ReceiptRecord[];
         }>(
           tx,
-          `SELECT jsonb_array_length(i.record_receipts) = 0 AS legacy,
+          `SELECT i.status, a.label AS "accountLabel", i.reversal_reason AS "reversalReason",
+          jsonb_array_length(i.record_receipts) = 0 AS legacy,
           CASE WHEN jsonb_array_length(i.record_receipts) = 0
             THEN (SELECT count(*)::int FROM cgt.transactions t WHERE t.import_id = i.id)
             ELSE jsonb_array_length(i.record_receipts) END AS total, ARRAY(
@@ -315,7 +321,8 @@ export class Workspace {
             'statementReference', i.record_receipts->n->'statementReference'
           ) FROM generate_series($2::int, least($2::int + 24, jsonb_array_length(i.record_receipts) - 1)) AS n
           ORDER BY n
-        ) AS records FROM cgt.imports AS i WHERE i.id = $1`,
+        ) AS records FROM cgt.imports AS i
+          JOIN cgt.broker_accounts a ON a.id = i.account_id WHERE i.id = $1`,
           [requireUuid(importId), start],
         )
       )[0];
@@ -381,11 +388,16 @@ export class Workspace {
         tx,
         "SELECT id, portfolio_id, broker, label, account_type FROM cgt.broker_accounts ORDER BY label, id",
       );
-      const imports = await query(
+      const imports = await query<Import & { accepted_count: number }>(
         tx,
         `SELECT id, account_id, status, record_count, accepted_count, excluded_count,
         duplicate_count, created_at, reversed_at, reversal_reason FROM cgt.imports ORDER BY created_at DESC, id DESC LIMIT 100`,
       );
+      // A portfolio's only active trades may precede the recent receipt page.
+      const hasActiveTrades = imports.some((item) => item.status === "committed" && item.accepted_count > 0) ||
+        (imports.length === 100 && (await query<{ present: boolean }>(
+          tx, "SELECT EXISTS (SELECT 1 FROM cgt.transactions WHERE active) AS present",
+        ))[0]!.present);
       // Read only the requested receipt. Its saved trades also cover older, paginated imports.
       const savedReceipt = receiptId
         ? (await query(
@@ -481,14 +493,17 @@ export class Workspace {
           ...availability,
         });
       }
-      const drafts = await query(
+      const drafts = await query<Pick<Draft, "id" | "account_id" | "display_summary"> & {
+        created_at: string; expires_at: string;
+      }>(
         tx,
-        "SELECT id, account_id, created_at, expires_at FROM cgt.import_drafts WHERE expires_at > now() ORDER BY created_at DESC",
+        "SELECT id, account_id, created_at, expires_at, display_summary FROM cgt.import_drafts WHERE expires_at > now() ORDER BY created_at DESC, id",
       );
       return {
         portfolio: portfolios[0]!,
         accounts,
         imports,
+        hasActiveTrades,
         ...(receiptId && { savedReceipt }),
         ...(includeImportCount && { importCount }),
         drafts,
@@ -645,6 +660,7 @@ export class Workspace {
       accountId: string;
       csv: string;
       format: Draft["format"];
+      fileName?: string;
       ordinarySharesConfirmed?: boolean;
     },
   ) {
@@ -696,8 +712,8 @@ export class Workspace {
       );
       const rows = await query<{ id: string }>(
         tx,
-        `INSERT INTO cgt.import_drafts(owner_id,account_id,csv,format,reviewed_revision,ordinary_shares_confirmed)
-        VALUES($1,$2,$3,$4,$5,$6) RETURNING id`,
+        `INSERT INTO cgt.import_drafts(owner_id,account_id,csv,format,reviewed_revision,ordinary_shares_confirmed,display_summary)
+        VALUES($1,$2,$3,$4,$5,$6,$7::jsonb) RETURNING id`,
         [
           identity.ownerId,
           a.id,
@@ -705,6 +721,7 @@ export class Workspace {
           input.format,
           p.revision,
           input.ordinarySharesConfirmed === true,
+          JSON.stringify(draftSummary(review, input.fileName)),
         ],
       );
       return {
@@ -719,7 +736,7 @@ export class Workspace {
     });
   }
 
-  async discardDraft(identity: Identity, draftId: string) {
+  async discardDraft(identity: Identity, draftId: string, expectedVersion = 0) {
     return this.db.run(identity, async (tx) => {
       const draft = (
         await query<{ account_id: string }>(
@@ -731,9 +748,18 @@ export class Workspace {
       if (!draft) return;
       const a = await account(tx, draft.account_id);
       await lockPortfolio(tx, a.portfolio_id);
-      await query(tx, "DELETE FROM cgt.import_drafts WHERE id = $1", [
-        requireUuid(draftId),
-      ]);
+      const removed = await query(tx,
+        "DELETE FROM cgt.import_drafts WHERE id = $1 AND review_version = $2 RETURNING id",
+        [draftId, expectedVersion],
+      );
+      if (removed.length) return;
+      const remaining = await query(tx, "SELECT id FROM cgt.import_drafts WHERE id = $1", [draftId]);
+      if (remaining.length)
+        throw new AppError(
+          409,
+          "DETAILS_CHANGED",
+          "This preview changed in another window. Reload the page to review the latest supporting details before discarding it.",
+        );
     });
   }
 
@@ -777,8 +803,8 @@ export class Workspace {
       );
       await query(
         tx,
-        "UPDATE cgt.import_drafts SET reviewed_revision = $2 WHERE id = $1",
-        [draftId, p.revision],
+        "UPDATE cgt.import_drafts SET reviewed_revision = $2, display_summary = $3::jsonb WHERE id = $1",
+        [draftId, p.revision, JSON.stringify(draftSummary(review, draft.display_summary?.fileName))],
       );
       return {
         draftId,
@@ -854,8 +880,8 @@ export class Workspace {
       const next = draft.review_version + 1;
       await query(
         tx,
-        "UPDATE cgt.import_drafts SET supporting_details=$2::jsonb,review_version=$3,reviewed_revision=$4 WHERE id=$1",
-        [draftId, JSON.stringify(supporting), next, p.revision],
+        "UPDATE cgt.import_drafts SET supporting_details=$2::jsonb,review_version=$3,reviewed_revision=$4,display_summary=$5::jsonb WHERE id=$1",
+        [draftId, JSON.stringify(supporting), next, p.revision, JSON.stringify(draftSummary(review, draft.display_summary?.fileName))],
       );
       return {
         draftId,

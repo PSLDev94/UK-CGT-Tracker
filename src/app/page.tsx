@@ -73,7 +73,7 @@ export default async function LandingPage() {
       {/* Navigation */}
       <PublicNav />
 
-      <main id="main" className="[overflow-wrap:anywhere]">
+      <main id="main" tabIndex={-1} className="[overflow-wrap:anywhere]">
         {/* Premium Hero Section */}
         <section className="relative pt-12 pb-14 sm:pt-24 sm:pb-24 overflow-hidden px-4">
           {/* Background Gradients */}

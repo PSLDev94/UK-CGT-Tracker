@@ -135,6 +135,7 @@ export function createWorkspaceHandler(
               "Use the ordinary-share confirmation checkbox.",
             );
           const result = await workspace.prepareImport(identity, {
+            fileName: input.fileName === undefined ? undefined : text("fileName"),
             accountId: text("accountId"),
             csv: text("csv"),
             format,
@@ -190,9 +191,13 @@ export function createWorkspaceHandler(
             ),
           });
         }
-        case "discard-draft":
-          await workspace.discardDraft(identity, text("draftId"));
+        case "discard-draft": {
+          const version = input.reviewVersion ?? 0;
+          if (typeof version !== "number" || !Number.isSafeInteger(version) || version < 0)
+            throw new AppError(400, "INVALID_VERSION", "Reopen the preview before discarding it.");
+          await workspace.discardDraft(identity, text("draftId"), version);
           return privateResponse({ discarded: true });
+        }
         case "commit-import": {
           if (typeof input.revision !== "number")
             throw new AppError(

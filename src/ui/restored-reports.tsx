@@ -2,20 +2,23 @@
 import { latestCalculation } from "./latest-calculation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Download } from "lucide-react";
 import { api, ApiError, workspaceApi } from "./api";
-import type { Overview } from "./workspace-types";
+import { hasActiveTrades, type Overview } from "./workspace-types";
 import type { BillingStatus } from "@/server/billing";
 import { Notice, Button, SelectField, money } from "./primitives";
 import { evidenceIssue } from "@/domain/reports/eligibility";
 import { roundingDifferences } from "@/domain/reports/rounding";
 import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
-import { billingUrl, type PdfFormat } from "../domain/reports/destination";
+import { billingUrl, reportDestination, type PdfFormat } from "../domain/reports/destination";
+import { TAX_YEARS } from "../domain/values";
 import { displayDate, netOutcome } from "./format";
 import type { ReportKind } from "../domain/reports/report";
 import { sa108Collection, sa108Edition } from "@/domain/reports/filing-guidance";
 import { SaleAmounts } from "./sale-amounts";
 import { ReportRecovery } from "./report-recovery";
+import { DashboardShell } from "./dashboard-shell";
 
 const cards = [
   {
@@ -32,6 +35,7 @@ const cards = [
   },
 ] as const;
 interface Feedback {
+  year: string;
   kind: ReportKind;
   text: string;
   error?: boolean;
@@ -59,21 +63,41 @@ function FilingGuidance({ year }: { year: string }) {
   );
 }
 
-export function RestoredReports({
-  requestedYear = "",
+export function RestoredReports() {
+  const params = useSearchParams();
+  const [defaultYear, setDefaultYear] = useState("");
+  const requestedYear = params.get("year") ?? "";
+  const year = Object.hasOwn(TAX_YEARS, requestedYear) ? requestedYear : defaultYear;
+  const checkout = params.get("checkout");
+  return (
+    <DashboardShell selectedYear={year}>
+      <ReportContents
+        year={year}
+        setDefaultYear={setDefaultYear}
+        requestedFormat={reportDestination(requestedYear, params.get("format"))?.format}
+        outcome={checkout === "returned" || checkout === "cancelled" ? checkout : null}
+      />
+    </DashboardShell>
+  );
+}
+
+function ReportContents({
+  year,
+  setDefaultYear,
   requestedFormat,
   outcome,
 }: {
-  requestedYear?: string;
+  year: string;
+  setDefaultYear: (year: string) => void;
   requestedFormat?: PdfFormat;
   outcome?: "returned" | "cancelled" | null;
 }) {
   const [data, setData] = useState<Overview | null>(null);
-  const [year, setYear] = useState(requestedYear);
   const [error, setError] = useState("");
   const [entitlement, setEntitlement] = useState<BillingStatus | null>(null);
   const [billingError, setBillingError] = useState("");
-  const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [lastFeedback, setFeedback] = useState<Feedback | null>(null);
+  const feedback = lastFeedback?.year === year ? lastFeedback : null;
   const [busy, setBusy] = useState<ReportKind | null>(null);
   const request = useRef<AbortController | null>(null);
 
@@ -98,37 +122,37 @@ export function RestoredReports({
         }),
     [],
   );
+  const loadOverview = useCallback((signal: AbortSignal) =>
+    workspaceApi<Overview>({ action: "overview", surface: "reports" }, signal).then((overview) => {
+      if (signal.aborted) return;
+      setData(overview);
+      setDefaultYear(latestCalculation(overview.calculations)?.tax_year || overview.staleReportYears?.[0] || "");
+    }), [setDefaultYear]);
   useEffect(() => {
     const controller = new AbortController();
     void checkBilling(controller.signal);
-    workspaceApi<Overview>(
-      { action: "overview", surface: "reports" },
-      controller.signal,
-    )
-      .then((d) => {
-        if (!controller.signal.aborted) {
-          setData(d);
-          setYear(requestedYear || latestCalculation(d.calculations)?.tax_year || d.staleReportYears?.[0] || "");
-        }
-      })
-      .catch((e) => {
-        if (!controller.signal.aborted) setError(e.message);
-      });
+    void loadOverview(controller.signal).catch((e) => {
+      if (!controller.signal.aborted) setError(e.message);
+    });
     return () => {
       controller.abort();
       request.current?.abort();
     };
-  }, [checkBilling, requestedYear]);
+  }, [checkBilling, loadOverview]);
   const focusedTarget = useRef("");
   useEffect(() => {
-    if (!requestedFormat || !data || (!entitlement && !billingError)) return;
-    const key = requestedYear + requestedFormat + (outcome ?? "");
+    if (!requestedFormat) {
+      focusedTarget.current = "";
+      return;
+    }
+    if (!data || (!entitlement && !billingError)) return;
+    const key = year + requestedFormat + (outcome ?? "");
     if (focusedTarget.current === key) return;
     focusedTarget.current = key;
     document.getElementById(`report-${requestedFormat}`)?.focus();
   }, [
     requestedFormat,
-    requestedYear,
+    year,
     outcome,
     data,
     entitlement,
@@ -141,11 +165,18 @@ export function RestoredReports({
   const uploadPath = year
     ? `/dashboard/upload?year=${encodeURIComponent(year)}`
     : "/dashboard/upload";
-  const fixPath = draft
-    ? `/dashboard/upload?${new URLSearchParams({ draft: draft.id, ...(year ? { year } : {}) })}`
-    : year
-      ? `/dashboard/calculations?year=${encodeURIComponent(year)}`
-      : "/dashboard/calculations";
+  const calculationPath = year ? "/dashboard/calculations?year=" + encodeURIComponent(year) : "/dashboard/calculations";
+  let nextAction = { href: calculationPath, label: year ? "Recalculate this year" : "Calculate your gains" };
+  if (draft) {
+    nextAction = {
+      href: "/dashboard/upload?" + new URLSearchParams({ draft: draft.id, ...(year ? { year } : {}) }),
+      label: "Resolve preview",
+    };
+  } else if (!data?.accounts.length) {
+    nextAction = { href: "/dashboard/accounts", label: "Add your first broker account" };
+  } else if (!hasActiveTrades(data)) {
+    nextAction = { href: uploadPath, label: "Upload a broker CSV" };
+  }
 
   async function download(kind: ReportKind) {
     if (!calculation || request.current) return;
@@ -171,14 +202,14 @@ export function RestoredReports({
           // Another session may have saved new trades or recalculated this year.
           setData(null);
           try {
-            const current = await workspaceApi<Overview>({ action: "overview", surface: "reports" }, controller.signal);
-            if (!controller.signal.aborted) setData(current);
+            await loadOverview(controller.signal);
           } catch {
             if (!controller.signal.aborted) setError("Your saved reports changed. Reload to see the current years.");
           }
           return;
         }
         setFeedback({
+          year,
           kind,
           error: true,
           text:
@@ -198,12 +229,14 @@ export function RestoredReports({
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       setFeedback({
+        year,
         kind,
         text: `Your ${year} download is ready. Check your downloads.`,
       });
     } catch {
       if (!controller.signal.aborted)
         setFeedback({
+          year,
           kind,
           error: true,
           text: "The download was interrupted. Try again.",
@@ -220,7 +253,7 @@ export function RestoredReports({
       <Notice tone={feedback.error ? "error" : "success"}>
         {feedback.text}{" "}
         {feedback.code === "PENDING_IMPORTS" ? (
-          <Link className={linkClass} href={draft ? fixPath : uploadPath}>
+          <Link className={linkClass} href={draft ? nextAction.href : uploadPath}>
             Resolve preview
           </Link>
         ) : null}
@@ -266,9 +299,8 @@ export function RestoredReports({
               disabled={!reportYears.length || !!busy}
               onChange={(e) => {
                 const choice = e.target.value;
-                setYear(choice);
                 setFeedback(null);
-                window.history.replaceState(
+                window.history.pushState(
                   null,
                   "",
                   `/dashboard/reports?year=${encodeURIComponent(choice)}`,
@@ -293,12 +325,8 @@ export function RestoredReports({
                 : year
                   ? `There is no current saved calculation for ${year}.`
                   : "There are no saved calculations yet."}{" "}
-              <Link className={linkClass} href={fixPath}>
-                {draft
-                  ? "Resolve preview"
-                  : year
-                    ? "Recalculate this year"
-                    : "Calculate your gains"}
+              <Link className={linkClass} href={nextAction.href}>
+                {nextAction.label}
               </Link>
             </Notice>
           ) : null}
@@ -317,6 +345,8 @@ export function RestoredReports({
                   ? `${netOutcome(result.summary.netGainGBP)} ${money(result.summary.netGainGBP.replace(/^-/, ""))}`
                   : "Total awaiting complete history"}
               </p>
+              <p className="text-sm text-gray-600">Share gains and losses before personal allowances, reliefs and other gains.</p>
+              <Link className={linkClass} href={calculationPath}>View calculation for {year}</Link>
               {noDisposals && (
                 <p>
                   The saved history contains no share sales in {year}. Choose the year of your sale
@@ -371,8 +401,7 @@ export function RestoredReports({
                         aria-label={card.title}
                         className="scroll-mt-4 min-w-0 max-w-full"
                       >
-                        {requestedYear === year &&
-                          requestedFormat === card.kind &&
+                        {requestedFormat === card.kind &&
                           !issue &&
                           !(outcome === "returned" && billingError) &&
                           outcome && (
@@ -563,7 +592,6 @@ export function RestoredReports({
                 </div>
               ) : null}
               <div className="space-y-1 text-sm text-gray-600">
-                <p>Personal allowances, reliefs and other gains are excluded.</p>
                 <FilingGuidance year={year} />
               </div>
             </section>

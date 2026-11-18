@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { Overview } from "./workspace-types";
+import { hasActiveTrades, type Overview } from "./workspace-types";
 import { displayDate, money, netOutcome } from "./format";
 
 export function PortfolioOverview({
@@ -36,7 +36,7 @@ export function PortfolioOverview({
         : "Review the history coverage and matching evidence before using these figures.";
     action = "Open latest report";
     href = "/dashboard/reports?year=" + encodeURIComponent(saved.taxYear);
-  } else if (!data.imports.some((item) => item.status === "committed")) {
+  } else if (!hasActiveTrades(data)) {
     title = "Upload your first file";
     description =
       "Choose the broker export from your taxable account. You can inspect every row before it is saved.";

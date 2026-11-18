@@ -90,7 +90,10 @@ async function initialise() {
         },
       }),
       checkDatabase: () =>
-        Promise.all([query(appDb, "SELECT 1"), query(authDb, "SELECT 1")]),
+        Promise.all([
+          query(appDb, "SELECT display_summary FROM cgt.import_drafts LIMIT 0"),
+          query(authDb, "SELECT 1"),
+        ]),
       workspaceHandler: createWorkspaceHandler(
         workspace,
         (headers) => auth.api.getSession({ headers }),

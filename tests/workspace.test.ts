@@ -150,6 +150,42 @@ describe("authenticated PostgreSQL application workflow", () => {
     await database.pg.query("UPDATE cgt.imports SET record_receipts = '[]' WHERE id = $1", [draft.draftId]);
     await database.pg.exec("SET ROLE cgt_app");
     await verifyLinkedPage();
+    expect(await workspace.importDetail(s.user, draft.draftId, 1, record)).toMatchObject({
+      accountLabel: "Invest", status: "committed", reversalReason: null,
+    });
+    await workspace.reverseImport(s.user, draft.draftId, "Superseded export");
+    expect(await workspace.importDetail(s.user, draft.draftId, 1, record)).toMatchObject({
+      accountLabel: "Invest", status: "reversed", reversalReason: "Superseded export", legacy: true,
+      records: expect.arrayContaining([expect.objectContaining({ record, status: "accepted" })]),
+    });
+  });
+
+  it("retains owner-scoped filenames and trade summaries only for the lifetime of a preview", async () => {
+    const s = await setup("draft-display");
+    const other = await setup("draft-display-other");
+    const upload = (fileName: string) => workspace.prepareImport(s.user, {
+      accountId: s.account.id, format: "canonical-v1", csv, fileName,
+    });
+    const first = await upload("C:\\private\\First\u202e.csv");
+    const second = await upload("/downloads/Second.csv");
+    const drafts = async () => (await workspace.overview(s.user)).drafts;
+    expect(await drafts()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: first.draftId, display_summary: {
+        fileName: "First.csv", recordCount: 3, firstTradeDate: "2024-06-01", lastTradeDate: "2024-09-01", firstUnresolvedTrade: null,
+      } }),
+      expect.objectContaining({ id: second.draftId, display_summary: expect.objectContaining({ fileName: "Second.csv" }) }),
+    ]));
+    expect((await workspace.overview(other.user)).drafts).toEqual([]);
+    await new OwnedDatabase(database.db).run(s.user, (tx) =>
+      query(tx, "UPDATE cgt.import_drafts SET display_summary = NULL WHERE id = $1", [second.draftId]));
+    await workspace.reviewImport(s.user, second.draftId);
+    expect((await drafts()).find((d) => d.id === second.draftId)?.display_summary).toMatchObject({
+      fileName: null, recordCount: 3, firstTradeDate: "2024-06-01",
+    });
+    await workspace.discardDraft(s.user, second.draftId);
+    await workspace.commitImport(s.user, first.draftId, first.revision);
+    expect(await drafts()).toEqual([]);
+    expect(await workspace.importDetail(s.user, first.draftId, 1)).not.toHaveProperty("display_summary");
   });
 
   it("reconciles every record, commits once and removes the raw CSV", async () => {
@@ -521,6 +557,24 @@ describe("authenticated PostgreSQL application workflow", () => {
     expect(overview.importCount).toBe(101);
     expect((await workspace.importHistory(s.user, 1)).imports[0]).toMatchObject({ firstTrade: null });
     expect(await workspace.overview(s.user)).not.toHaveProperty("importCount");
+  });
+
+  it("keeps the calculation step available when every recent receipt is reversed", async () => {
+    const s = await setup("earlier-active-trades");
+    const saved = await prepare(s.user, s.account.id, csv);
+    await workspace.commitImport(s.user, saved.draftId, saved.revision);
+    await new OwnedDatabase(database.db).run(s.user, (tx) =>
+      query(tx, `INSERT INTO cgt.imports
+        (account_id, owner_id, file_digest, parser_version, status, record_count,
+         accepted_count, excluded_count, duplicate_count, review_count)
+        SELECT $1, $2, lpad(i::text,64,'0'), 'fixture', 'reversed', 1,1,0,0,0
+        FROM generate_series(1,100) AS i`, [s.account.id, s.user.ownerId]));
+    const overview = await workspace.overview(s.user);
+    expect(overview.imports).toHaveLength(100);
+    expect(overview.imports.every((item) => item.status === "reversed")).toBe(true);
+    expect(overview.hasActiveTrades).toBe(true);
+    await workspace.reverseImport(s.user, saved.draftId, "Replace the original export");
+    expect((await workspace.overview(s.user)).hasActiveTrades).toBe(false);
   });
 
   it("rejects privileged runtime credentials and accepts a dedicated least-privilege login", async () => {
@@ -989,7 +1043,11 @@ it.each(brokerCases)(
         )
       ).outcome,
     ).toBe("needs_review");
-    await workspace.discardDraft(user, duplicate.draftId);
+    if (reviewed.reviewVersion > 0) {
+      await expect(workspace.discardDraft(user, duplicate.draftId, 0)).rejects.toMatchObject({ code: "DETAILS_CHANGED" });
+      expect((await workspace.reviewImport(user, duplicate.draftId)).reviewVersion).toBe(reviewed.reviewVersion);
+    }
+    await workspace.discardDraft(user, duplicate.draftId, reviewed.reviewVersion);
     expect((await workspace.overview(user)).imports).toHaveLength(1);
     await workspace.reverseImport(
       user,

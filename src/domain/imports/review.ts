@@ -6,6 +6,7 @@ import { BROKERS, type BrokerId } from "./brokers";
 import { nativeAdapter, NATIVE_GUIDANCE } from "./native";
 import {
   validateDetails,
+  SupportingFieldError,
   fingerprintDetails,
   type ImportDetails,
   type SupportingDetails,
@@ -66,6 +67,7 @@ export interface ImportRecord {
   source?: Record<string, string>;
   supportingDetails?: SupportingDetails;
   canSupplyDetails?: boolean;
+  issueField?: keyof SupportingDetails;
   exportedTerms?: ExportedTerms;
   statementReference?: string;
   sourceKey?: string;
@@ -574,6 +576,7 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
         ...detailMetadata,
         status: "needs_review",
         reason: message,
+        ...(error instanceof SupportingFieldError && { issueField: error.field }),
       });
     }
   });

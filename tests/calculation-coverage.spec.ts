@@ -238,11 +238,23 @@ test("editing saved coverage hides old figures until recalculated and isolates t
   );
   await page.getByLabel("Tax year", { exact: true }).selectOption("2023-24");
   await expect(date).toHaveValue("");
+  await expect(date).toHaveAttribute("placeholder", "YYYY-MM-DD");
+  await expect(page.getByText(/For 2023-24, matching can need history through 2024-05-05/)).toBeVisible();
   await expect(accountBox).not.toBeChecked();
+  await date.fill("2024-05-04");
+  await accountBox.check();
   await page.getByLabel("Tax year", { exact: true }).selectOption("2024-25");
-  await expect(date).toHaveValue(cutoff);
+  await expect(date).toHaveValue("2024-10-01");
+  await expect(accountBox).not.toBeChecked();
+  await expect(report).toHaveCount(0);
+  await page.goBack();
+  await expect(date).toHaveValue("2024-05-04");
   await expect(accountBox).toBeChecked();
-  await accountBox.uncheck();
+  await page.goForward();
+  await expect(date).toHaveValue("2024-10-01");
+  await date.fill(cutoff);
+  await expect(date).toHaveValue(cutoff);
+  await expect(accountBox).not.toBeChecked();
   await page.getByRole("button", { name: "Recalculate", exact: true }).click();
   await expect(warning).toHaveCount(0);
   await expect(
@@ -260,7 +272,12 @@ test("editing saved coverage hides old figures until recalculated and isolates t
   expect(datedSubmissions).toEqual([
     { historyThrough: cutoff, confirmedAccountIds: [] },
   ]);
-  await page.goto("/dashboard");
+  const menu = page.getByRole("button", { name: "Open sidebar menu" });
+  if (await menu.isVisible()) await menu.click();
+  await page.getByRole("navigation", { name: "Dashboard" }).getByRole("link", { name: "Overview" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Leave workspace" }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole("link", { name: "Open latest report" })).toBeVisible();
   await expect(page.getByText("Net loss", { exact: true })).toBeVisible();
   await page.goto("/dashboard/tax-loss-harvesting");
   await expect(
@@ -531,6 +548,59 @@ test("all report entry points prefer the latest save and the calculation year pr
   // WebKit uses Option-Tab to include links in its default keyboard traversal.
   await page.keyboard.press(browserName === "webkit" ? "Alt+Tab" : "Tab");
   await expect(report).toBeFocused();
+});
+
+test("report and calculation links preserve the chosen year, scope and amounts through browser history", async ({ page }) => {
+  const { state } = await workspace(page, [purchase, sale], true);
+  const first = state.calculations[0]!;
+  first.created_at = "2026-11-18T09:00:00Z";
+  state.calculations.push({
+    ...first, id: "gain", tax_year: "2025-26", created_at: "2026-11-17T12:00:00Z",
+    result: calculateGains([purchase, { ...sale, date: "2025-09-01", considerationGBP: "31" }], { taxYear: "2025-26", historyThrough: "2026-05-05" }),
+  });
+  await page.route("**/api/v2/billing", (route) => route.fulfill({ json: { status: "active", entitled: true } }));
+  const year = page.getByLabel("Tax year", { exact: true });
+  const summary = page.getByRole("region", { name: "Calculation summary" });
+  const menu = page.getByRole("button", { name: "Open sidebar menu" });
+  async function navigate(name: string) {
+    if (await menu.isVisible()) await menu.click();
+    await page.getByRole("navigation", { name: "Dashboard" }).getByRole("link", { name, exact: true }).click();
+  }
+  await page.goto("/dashboard/reports");
+  await expect(summary).toContainText("Net loss £5.00");
+  await year.selectOption("2025-26");
+  await expect(summary).toContainText("Net gain £6.00");
+  const scope = summary.getByText(/before personal allowances/);
+  expect(await scope.evaluate((el) => !!(el.compareDocumentPosition(document.querySelector("#report-csv")!) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
+  const detail = summary.getByRole("link", { name: "View calculation for 2025-26" });
+  await expect(detail).toHaveAttribute("href", "/dashboard/calculations?year=2025-26");
+  await navigate("Calculations");
+  await expect(page).toHaveURL(/calculations\?year=2025-26$/);
+  await expect(page.getByRole("heading", {name: "2025-26 share gains"})).toBeVisible();
+  await navigate("Reports");
+  await expect(summary).toContainText("Net gain £6.00");
+  await page.goBack();
+  await expect(year).toHaveValue("2025-26");
+  await page.goBack();
+  await expect(summary).toContainText("Net gain £6.00");
+  await page.goBack();
+  await expect(summary).toContainText("Net loss £5.00");
+});
+
+test("empty Reports presents the first outstanding portfolio step", async ({ page }) => {
+  const { state } = await workspace(page, [], false);
+  state.calculations = [];
+  state.accounts = [];
+  await page.route("**/api/v2/billing", (route) => route.fulfill({ json: { status: "none", entitled: false } }));
+  await page.goto("/dashboard/reports");
+  await page.getByRole("link", { name: "Add your first broker account" }).click();
+  await expect(page).toHaveURL(/dashboard\/accounts$/);
+  state.accounts = [account];
+  await page.goto("/dashboard/reports");
+  await expect(page.getByRole("link", { name: "Upload a broker CSV" })).toHaveAttribute("href", "/dashboard/upload");
+  state.hasActiveTrades = true;
+  await page.reload();
+  await expect(page.getByRole("link", { name: "Calculate your gains" })).toHaveAttribute("href", "/dashboard/calculations");
 });
 
 test("same-tab history restores the profile edit only for its session and clears an explicit discard", async ({ page }) => {

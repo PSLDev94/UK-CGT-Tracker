@@ -223,7 +223,7 @@ it.each(brokerCases)('qualifies $file import/report/retry using PostgreSQL 18 ru
   const duplicate=await review()
   expect(duplicate.review.counts).toMatchObject({accepted:0,duplicate:2})
   expect((await workspace.commitImport(s.user,duplicate.draftId,duplicate.revision,duplicate.reviewVersion)).outcome).toBe('needs_review')
-  await workspace.discardDraft(s.user,duplicate.draftId)
+  await workspace.discardDraft(s.user,duplicate.draftId,duplicate.reviewVersion)
   if(Object.keys(notes).length) {
     // Seed the previously deployed fingerprint and supporting JSONB exactly as
     // the old writer did. All replays below go through the normal application role.
@@ -245,7 +245,7 @@ it.each(brokerCases)('qualifies $file import/report/retry using PostgreSQL 18 ru
       [record,{...note,reference:note.reference+' (personal copy)'}]))
     const replay=await review(fixture(c),relabelled)
     expect(replay.review.counts).toMatchObject({duplicate:2,accepted:0,needsReview:0})
-    await workspace.discardDraft(s.user,replay.draftId)
+    await workspace.discardDraft(s.user,replay.draftId,replay.reviewVersion)
 
     // Increase the BUY fee and corresponding net cash by £1 for the same
     // execution. Its gross price still reconciles, but its financial facts differ.
@@ -263,7 +263,7 @@ it.each(brokerCases)('qualifies $file import/report/retry using PostgreSQL 18 ru
     expect(conflict.review.issues).toContainEqual(expect.objectContaining({code:'DUPLICATE_CONFLICT',record:2}))
     expect(conflict.review.counts).toMatchObject({duplicate:1,accepted:0,needsReview:1})
     expect((await workspace.commitImport(s.user,conflict.draftId,conflict.revision,conflict.reviewVersion)).outcome).toBe('needs_review')
-    await workspace.discardDraft(s.user,conflict.draftId)
+    await workspace.discardDraft(s.user,conflict.draftId,conflict.reviewVersion)
     expect((await workspace.reportSnapshot(s.user,result.runId)).result).toEqual(result.result)
   }
   await workspace.reverseImport(s.user,draft.draftId,'Synthetic broker qualification complete')

@@ -12,11 +12,13 @@ type Session = {
 export function DashboardShell({
   children,
   beforeSignOut,
+  selectedYear,
 }: {
   children:
     | React.ReactNode
     | ((user: Session["user"], sessionId?: string) => React.ReactNode);
   beforeSignOut?: (signOut: () => void) => void;
+  selectedYear?: string;
 }) {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>();
@@ -78,6 +80,7 @@ export function DashboardShell({
   return (
     <div className="workspace">
       <DashboardSidebar
+        selectedYear={selectedYear}
         userEmail={session?.user.name || ""}
         onSignOut={() =>
           beforeSignOut ? beforeSignOut(signOut) : void signOut()

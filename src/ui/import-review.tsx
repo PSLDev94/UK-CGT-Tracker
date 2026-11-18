@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ImportDetailsForm } from "./import-details-form";
 import { ImportTradeDetails } from "./import-trade-detail";
+import { useModal } from "./navigation-guard";
+import type { ImportRecord } from "../domain/imports/review";
 import type { SupportingDetails } from "../domain/imports/supporting-details";
 import { Button, Notice } from "./primitives";
 import type { Preview } from "./workspace-types";
@@ -36,13 +38,19 @@ export function ImportReviewPanel({
   onPage: (page: number, onLoaded?: () => void) => void;
   onCommit: () => void;
   onDiscard: () => void;
-  onDetails: (record: number, details: SupportingDetails) => Promise<void>;
+  onDetails: (
+    record: number,
+    details: SupportingDetails,
+  ) => Promise<ImportRecord>;
   onDirty: (dirty: boolean) => void;
 }) {
   const { review } = preview;
   const [editing, setEditing] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState<number | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const discardDialog = useRef<HTMLDialogElement>(null);
+  useModal(discardDialog, confirmDiscard);
   const title = useRef<HTMLHeadingElement>(null);
   const row = review.records.find((r) => r.record === editing);
   const pages = Math.max(1, Math.ceil(review.counts.total / review.pageSize));
@@ -51,7 +59,7 @@ export function ImportReviewPanel({
   useEffect(() => () => onDirty(false), [onDirty]);
   useEffect(() => {
     title.current?.focus();
-  }, [row?.record, preview.draftId]);
+  }, [row?.record, row?.canSupplyDetails, preview.draftId]);
   const changeDirty = (value: boolean) => {
     setDirty(value);
     onDirty(value);
@@ -67,12 +75,11 @@ export function ImportReviewPanel({
           ? `${row.canSupplyDetails ? "Resolve" : "Review"} record ${row.record}`
           : "Review before saving"}
       </h2>
-      <p>
+      <p className="[overflow-wrap:anywhere]">
         <strong>{fileLabel}</strong> · {accountLabel}
       </p>
       {row ? (
         <>
-          <p>{row.reason}</p>
           {row.canSupplyDetails ? (
             <ImportDetailsForm
               key={row.record}
@@ -81,22 +88,27 @@ export function ImportReviewPanel({
               busy={busy}
               onDirty={changeDirty}
               onSave={async (record, details) => {
-                await onDetails(record, details);
+                const updated = await onDetails(record, details);
                 changeDirty(false);
+                if (updated.status === "needs_review") return updated;
                 setSaved(record);
                 setEditing(null);
               }}
             />
           ) : (
-            <p>
-              Check record {row.record} against the original statement and the{" "}
-              <Link href={`/supported-brokers#${broker}`}>
-                broker export instructions
-              </Link>
-              . If the export is incorrect, get a corrected complete file from your broker.
-              If it matches the statement, keep every source row and{" "}
-              <Link href="/contact">contact support</Link> about this activity before using this file.
-            </p>
+            <>
+              <p>{row.reason}</p>
+              <p>
+                Check record {row.record} against the original statement and the{" "}
+                <Link href={`/supported-brokers#${broker}`}>
+                  broker export instructions
+                </Link>
+                . If the export is incorrect, get a corrected complete file from
+                your broker. If it matches the statement, keep every source row
+                and <Link href="/contact">contact support</Link> about this
+                activity before using this file.
+              </p>
+            </>
           )}
           <Button
             disabled={dirty || busy}
@@ -132,7 +144,9 @@ export function ImportReviewPanel({
             <Notice>
               Details checked for record {saved}.{" "}
               {review.counts.needsReview
-                ? `${review.counts.needsReview} records still need attention.`
+                ? review.counts.needsReview === 1
+                  ? "1 record still needs attention."
+                  : `${review.counts.needsReview} records still need attention.`
                 : "All records have an outcome."}
             </Notice>
           )}
@@ -179,10 +193,53 @@ export function ImportReviewPanel({
                 {next.record}
               </Button>
             )}
-            <Button busy={busy} variant="secondary" onClick={onDiscard}>
+            <Button
+              busy={busy}
+              variant="secondary"
+              onClick={(event) => {
+                if ((preview.reviewVersion ?? 0) > 0) {
+                  event.currentTarget.focus({ preventScroll: true });
+                  setConfirmDiscard(true);
+                } else onDiscard();
+              }}
+            >
               Discard preview
             </Button>
           </div>
+          <dialog
+            ref={discardDialog}
+            aria-labelledby="discard-preview-title"
+            aria-describedby="discard-preview-effect"
+            onCancel={() => setConfirmDiscard(false)}
+          >
+            <h2 id="discard-preview-title">Discard this corrected preview?</h2>
+            <p className="[overflow-wrap:anywhere]">
+              {fileLabel} · {accountLabel}
+            </p>
+            <p id="discard-preview-effect">
+              Discarding removes the supporting details and statement references
+              you entered for this file. To use them again, you would need to
+              upload the file and enter them again.
+            </p>
+            <div className="actions">
+              <Button
+                variant="secondary"
+                data-modal-cancel
+                onClick={() => setConfirmDiscard(false)}
+              >
+                Keep preview
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  setConfirmDiscard(false);
+                  onDiscard();
+                }}
+              >
+                Discard corrected preview
+              </Button>
+            </div>
+          </dialog>
           {expiry && (
             <p className="caption">
               Preview expires{" "}

@@ -102,7 +102,7 @@ export function GuideLayout({
       ))}
       <PublicNav />
 
-      <main id="main" className="max-w-4xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
+      <main id="main" tabIndex={-1} className="wrap-anywhere max-w-4xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
         {/* Breadcrumb */}
         <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-gray-500 mb-8 flex-wrap">
           <Link href="/" className="hover:text-gray-900 transition-colors">

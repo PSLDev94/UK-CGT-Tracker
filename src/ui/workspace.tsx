@@ -35,7 +35,7 @@ import {
   Notice,
   focusFirstError,
 } from "./primitives";
-import { ImportHistoryDetail, ImportReceiptIdentity } from "./import-history-detail";
+import { ImportHistoryDetail, ImportReceiptIdentity, ImportReceiptStatus } from "./import-history-detail";
 import { ImportReviewPanel } from "./import-review";
 import { ReportRecovery } from "./report-recovery";
 import { SavedImportNextSteps } from "./saved-import-next-steps";
@@ -50,6 +50,12 @@ type History = {
   total: number;
   page: number;
   pageSize: number;
+};
+type CalculationDraft = {
+  portfolioId: string;
+  revision: number;
+  historyThrough: string;
+  confirmedAccountIds: string[];
 };
 type CommitResult =
   | ({ outcome: "review_changed" | "needs_review" } & Omit<Preview, "draftId">)
@@ -123,10 +129,7 @@ function WorkspaceBody({
   const justSaved = data?.savedReceipt?.id === savedImportId ? data.savedReceipt : null;
   const [failedDraft, setFailedDraft] = useState<string | null>(null);
   const [previewAttempt, setPreviewAttempt] = useState(0);
-  const [previewFile, setPreviewFile] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
+  const savedDraft = data?.drafts.find((draft) => draft.id === requestedDraft);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -152,30 +155,39 @@ function WorkspaceBody({
   const savedDate = currentCalculation?.result.historyThrough ?? "";
   const savedAccounts = currentCalculation?.coverage_accounts ??
     (currentCalculation?.coverage_confirmed ? data!.accounts.map((account) => account.id) : []);
-  const [calculationDraft, setCalculationDraft] = useState<{
-    year: string;
-    revision: number;
-    historyThrough: string;
-    confirmedAccountIds: string[];
-  } | null>(null);
-  const draft = calculationDraft?.year === taxYear && calculationDraft.revision === data?.portfolio.revision
-    ? calculationDraft : null;
+  const [calculationDrafts, setCalculationDrafts] = useState<Partial<Record<TaxYear, CalculationDraft>>>({});
+  function isCurrentDraft(entry?: CalculationDraft) {
+    return !!entry && entry.portfolioId === data?.portfolio.id && entry.revision === data.portfolio.revision;
+  }
+  const yearDraft = calculationDrafts[taxYear];
+  const draft = isCurrentDraft(yearDraft) ? yearDraft : undefined;
   const historyThrough = draft?.historyThrough ?? savedDate;
   const confirmedAccountIds = draft?.confirmedAccountIds ?? savedAccounts;
-  const settingsEdited = historyThrough !== savedDate ||
-    confirmedAccountIds.length !== savedAccounts.length ||
-    confirmedAccountIds.some((id) => !savedAccounts.includes(id));
+  function matchesSavedInputs(date: string, accounts: string[]) {
+    return date === savedDate && accounts.length === savedAccounts.length &&
+      accounts.every((id) => savedAccounts.includes(id));
+  }
+  const settingsEdited = !matchesSavedInputs(historyThrough, confirmedAccountIds);
   const withRecoveryYear = (path: string) => Object.hasOwn(TAX_YEARS, requestedYear)
     ? path + (path.includes("?") ? "&" : "?") + "year=" + encodeURIComponent(requestedYear)
     : path;
   function editCalculation(date: string, accounts: string[]) {
-    if (data) setCalculationDraft({ year: taxYear, revision: data.portfolio.revision, historyThrough: date, confirmedAccountIds: accounts });
+    if (!data) return;
+    setCalculationDrafts((previous) => {
+      const next = { ...previous };
+      if (matchesSavedInputs(date, accounts)) {
+        delete next[taxYear];
+      } else {
+        next[taxYear] = { portfolioId: data.portfolio.id, revision: data.portfolio.revision, historyThrough: date, confirmedAccountIds: accounts };
+      }
+      return next;
+    });
     setMessage("");
   }
   const [formDirty, setDirty] = useState(false);
   const [detailsDirty, setDetailsDirty] = useState(false);
   const dirty = formDirty || detailsDirty || (view === "imports" && ordinarySharesConfirmed && !preview) ||
-    (view === "calculations" && settingsEdited);
+    (view === "calculations" && Object.values(calculationDrafts).some(isCurrentDraft));
   const [reverse, setReverse] = useState<HistoryImport | null>(null);
   const navigation = useNavigationGuard(dirty || !!file, busy);
   const reverseDialog = useRef<HTMLDialogElement>(null);
@@ -356,12 +368,12 @@ function WorkspaceBody({
       }
       const result = await workspaceApi<Preview>({
         action: "prepare-import",
+        fileName: file!.name,
         accountId,
         format,
         ordinarySharesConfirmed: values.get("ordinarySharesConfirmed") === "on",
         csv,
       });
-      setPreviewFile({ id: result.draftId, name: file!.name });
       setPreview(result);
       markPendingFile(false);
       window.history.pushState(
@@ -389,7 +401,7 @@ function WorkspaceBody({
         next.historyThrough = "Choose today or an earlier date.";
     } catch {
       next.historyThrough =
-        "Use a valid date in YYYY-MM-DD format, for example 2026-05-05.";
+        "Use a valid date in YYYY-MM-DD format.";
     }
     setErrors(next);
     if (Object.keys(next).length) {
@@ -408,13 +420,17 @@ function WorkspaceBody({
         });
       } catch (caught) {
         if (caught instanceof ApiError && caught.code === "PORTFOLIO_CHANGED") {
-          setCalculationDraft(null);
+          setCalculationDrafts({});
           await reload();
         }
         throw caught;
       }
       await reload();
-      setCalculationDraft(null);
+      setCalculationDrafts((previous) => {
+        const remaining = { ...previous };
+        delete remaining[taxYear];
+        return remaining;
+      });
       setDirty(false);
       setMessage("Calculation saved.");
       setFocusRequest({ heading: "calculation-result-heading" });
@@ -424,6 +440,7 @@ function WorkspaceBody({
   const signOut = () =>
     void perform(async () => {
       await authApi("sign-out", {});
+      setCalculationDrafts({});
       if (file) markPendingFile(false);
       setData(null);
       setPreview(null);
@@ -441,6 +458,10 @@ function WorkspaceBody({
       timeStyle: "short",
       timeZone: "Europe/London",
     }).format(new Date(date));
+  const draftLabel = (draft: Overview["drafts"][number]) =>
+    draft.display_summary?.fileName ?? (draft.created_at
+      ? `Upload from ${new Date(draft.created_at).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "medium", timeStyle: "medium" })} (London)`
+      : `Preview ${draft.id.slice(0, 8)}`);
 
   if (authRequired) {
     return <WorkspaceEntry next={window.location.pathname + window.location.search} message={message} />;
@@ -463,6 +484,7 @@ function WorkspaceBody({
     <div className="workspace">
       <DashboardSidebar
         userEmail={userName}
+        selectedYear={view === "calculations" ? taxYear : undefined}
         brokerSupportHref={view === "imports" ? brokerHelp : undefined}
         busy={busy}
         onSignOut={() => navigation.request(signOut)}
@@ -862,21 +884,17 @@ function WorkspaceBody({
                           reviewVersion: preview.reviewVersion ?? 0,
                         });
                         setPreview(result);
+                        const updated = result.review.records.find((item) => item.record === record);
+                        if (!updated) throw new Error("Reopen this preview to check the result for this record.");
+                        return updated;
                       } finally {
                         busyRef.current = false;
                         setBusy(false);
                       }
                     }}
                     accountLabel={accountName(preview.accountId)}
-                    fileLabel={
-                      (previewFile?.id === preview.draftId
-                        ? previewFile.name + " · "
-                        : "") + `Preview ${preview.draftId.slice(0, 8)}`
-                    }
-                    expiry={
-                      data.drafts.find((d) => d.id === requestedDraft)
-                        ?.expires_at
-                    }
+                    fileLabel={savedDraft ? draftLabel(savedDraft) : `Preview ${preview.draftId.slice(0, 8)}`}
+                    expiry={savedDraft?.expires_at}
                     broker={
                       data.accounts.find((a) => a.id === preview.accountId)
                         ?.broker ?? ""
@@ -899,6 +917,7 @@ function WorkspaceBody({
                         await workspaceApi({
                           action: "discard-draft",
                           draftId: preview.draftId,
+                          reviewVersion: preview.reviewVersion ?? 0,
                         });
                         window.history.replaceState(
                           null,
@@ -907,7 +926,6 @@ function WorkspaceBody({
                             encodeURIComponent(preview.accountId)),
                         );
                         setPreview(null);
-                        setPreviewFile(null);
                         await reload();
                         setMessage(
                           "Preview discarded. Saved transactions were not changed.",
@@ -936,7 +954,6 @@ function WorkspaceBody({
                             encodeURIComponent(result.importId)),
                         );
                         setPreview(null);
-                        setPreviewFile(null);
                         await reload(result.importId);
                         setMessage(
                           result.outcome === "already_committed"
@@ -953,8 +970,16 @@ function WorkspaceBody({
                     <ul className="record-list">
                       {data.drafts.map((d) => (
                         <li key={d.id}>
-                          <div>
-                            <strong>{accountName(d.account_id)}</strong>
+                          <div className="min-w-0 [overflow-wrap:anywhere]">
+                            <strong>{draftLabel(d)}</strong>
+                            <p>{accountName(d.account_id)}
+                              {d.display_summary && ` · ${d.display_summary.recordCount} source ${d.display_summary.recordCount === 1 ? "record" : "records"}`}
+                            </p>
+                            {d.display_summary?.firstTradeDate && <p>
+                              Included trades · {displayDate(d.display_summary.firstTradeDate)}
+                              {d.display_summary.lastTradeDate && d.display_summary.lastTradeDate !== d.display_summary.firstTradeDate && ` to ${displayDate(d.display_summary.lastTradeDate)}`}
+                            </p>}
+                            {d.display_summary?.firstUnresolvedTrade && <p>Needs details · {d.display_summary.firstUnresolvedTrade}</p>}
                             <p>
                               Preview {d.id.slice(0, 8)} · Expires{" "}
                               {auditDate(d.expires_at)} (London)
@@ -962,6 +987,7 @@ function WorkspaceBody({
                           </div>
                           <a
                             className="button secondary"
+                            aria-label={`Open preview · ${draftLabel(d)}`}
                             href={
                               withRecoveryYear("/dashboard/upload?draft=" +
                               encodeURIComponent(d.id))
@@ -987,11 +1013,10 @@ function WorkspaceBody({
                       value={taxYear}
                       disabled={busy}
                       onChange={(e) => {
-                        setCalculationDraft(null);
                         setErrors({});
                         setError("");
                         setMessage("");
-                        window.history.replaceState(
+                        window.history.pushState(
                           null,
                           "",
                           "/dashboard/calculations?year=" +
@@ -1067,7 +1092,7 @@ function WorkspaceBody({
                           disabled={busy}
                           value={historyThrough}
                           onChange={(event) => editCalculation(event.target.value, [])}
-                          placeholder="2026-05-05"
+                          placeholder="YYYY-MM-DD"
                           hint={`Use YYYY-MM-DD. For ${taxYear}, matching can need history through ${plusDays(TAX_YEARS[taxYear].end, 30)}. Confirm only dates covered by your records.`}
                           error={errors.historyThrough}
                         />
@@ -1139,34 +1164,21 @@ function WorkspaceBody({
                         {history.imports.map((item) => (
                           <li key={item.id}>
                             <div>
-                              <strong>{accountName(item.account_id)}</strong>{" "}
-                              <span className="tag">
-                                {item.status === "committed"
-                                  ? "Saved"
-                                  : "Reversed"}
-                              </span>
+                              <ImportReceiptStatus accountLabel={accountName(item.account_id)} status={item.status} reversalReason={item.reversal_reason} />
                               <ImportReceiptIdentity item={item} />
                               <p>
-                                {item.accepted_count} included ·{" "}
+                                {item.accepted_count} included{item.status === "reversed" && " when imported"} ·{" "}
                                 {item.excluded_count} excluded ·{" "}
                                 {item.duplicate_count} duplicate ·{" "}
                                 {item.record_count} total
                               </p>
                               <p>{auditDate(item.created_at)} (London)</p>
-                              {item.reversal_reason && (
-                                <p>Reversal reason: {item.reversal_reason}</p>
-                              )}
                             </div>
-                            <ImportHistoryDetail importId={item.id}>
+                            <ImportHistoryDetail importId={item.id} listStatus={item.status}>
                               <p>Import reference {item.id}</p>
                               <p>
                                 Source account: {accountName(item.account_id)}.
                                 Saved {auditDate(item.created_at)} (London).
-                              </p>
-                              <p>
-                                {item.status === "committed"
-                                  ? "These included transactions are used in your calculations."
-                                  : "These transactions are excluded from future calculations."}
                               </p>
                               {item.status === "committed" && (
                                 <Button

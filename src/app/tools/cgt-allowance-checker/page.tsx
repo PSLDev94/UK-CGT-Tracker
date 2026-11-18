@@ -88,7 +88,7 @@ export default function CGTAllowanceCheckerPage() {
     <div className="min-h-screen bg-white">
       <PublicNav />
 
-      <main id="main" className="max-w-3xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
+      <main id="main" tabIndex={-1} className="wrap-anywhere max-w-3xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
         <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-4">
           UK CGT Allowance Checker 2025-26
         </h1>

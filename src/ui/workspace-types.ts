@@ -1,6 +1,7 @@
 import type { Calculation } from "../domain/cgt/types";
 import type { ImportRecord, ImportReview } from "../domain/imports/review";
 import type { ImportTradeDetail } from "../domain/imports/trade-detail";
+import type { DraftSummary } from "../domain/imports/draft-summary";
 export interface BrokerAccount {
   id: string;
   broker: string;
@@ -28,9 +29,10 @@ export interface Overview {
   portfolio: { id: string; name: string; revision: number };
   accounts: BrokerAccount[];
   imports: SavedImport[];
+  hasActiveTrades?: boolean;
   savedReceipt?: SavedReceipt | null;
   importCount?: number;
-  drafts: { id: string; account_id: string; expires_at: string }[];
+  drafts: { id: string; account_id: string; expires_at: string; created_at?: string; display_summary?: DraftSummary | null }[];
   staleReportYears?: string[];
   previousCalculationInputs?: { taxYear: string; historyThrough: string; confirmedAccountIds: string[] }[];
   calculations: {
@@ -43,6 +45,10 @@ export interface Overview {
     coverage_accounts?: string[];
   }[];
 }
+export function hasActiveTrades(overview: Overview) {
+  return overview.hasActiveTrades ?? overview.imports.some((item) => item.status === "committed" && item.accepted_count > 0);
+}
+
 export interface Preview {
   draftId: string;
   accountId: string;

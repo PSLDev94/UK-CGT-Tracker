@@ -1,6 +1,7 @@
 "use client";
 import { useRef, useState, type FormEvent } from "react";
 import type { ImportRecord } from "../domain/imports/review";
+import { sourceIdentity } from "../domain/imports/source-identity";
 import type { SupportingDetails } from "../domain/imports/supporting-details";
 import { Money } from "../domain/values";
 import { feesInTradeCurrency } from "../domain/imports/exported-terms";
@@ -15,18 +16,24 @@ export function ImportDetailsForm({
   row: ImportRecord;
   broker: string;
   busy: boolean;
-  onSave: (record: number, details: SupportingDetails) => Promise<void>;
+  onSave: (
+    record: number,
+    details: SupportingDetails,
+  ) => Promise<ImportRecord | undefined>;
   onDirty: (dirty: boolean) => void;
 }) {
   const [error, setError] = useState(""),
     [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const form = useRef<HTMLFormElement>(null);
+  const alert = useRef<HTMLDivElement>(null);
   const initial = row.supportingDetails;
   const terms = row.exportedTerms ?? {};
   const initialCurrency = terms.currency ?? initial?.currency ?? "";
   const [currency, setCurrency] = useState(initialCurrency);
   const exportedFees =
     terms.feesGBP !== undefined || terms.feesInCurrency !== undefined;
+  const savedIssue = initial && row.status === "needs_review" ? row.reason : "";
+  const feeIssue = !exportedFees && row.issueField === "fees" ? savedIssue : "";
   const [resetKey, setResetKey] = useState(0);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -34,7 +41,7 @@ export function ImportDetailsForm({
     const values = new FormData(event.currentTarget);
     const text = (key: string) => String(values.get(key) ?? "").trim();
     const details: SupportingDetails = {
-      isin: text("isin"),
+      isin: text("isin").toUpperCase(),
       currency: text("currency"),
       gbpPerUnit: text("gbpPerUnit"),
       fees: feesInTradeCurrency(terms, text("gbpPerUnit")) ?? text("fees"),
@@ -78,9 +85,17 @@ export function ImportDetailsForm({
     }
     setError("");
     try {
-      await onSave(row.record, details);
-
-      onDirty(false);
+      const unresolved = await onSave(row.record, details);
+      if (unresolved) {
+        requestAnimationFrame(() => {
+          const field =
+            unresolved.issueField &&
+            form.current?.elements.namedItem(unresolved.issueField);
+          if (field instanceof HTMLInputElement && field.type !== "hidden")
+            field.focus();
+          else alert.current?.focus();
+        });
+      }
     } catch (e) {
       setError(
         e instanceof Error
@@ -89,8 +104,29 @@ export function ImportDetailsForm({
       );
     }
   }
+  const { description, date, executionReference } = sourceIdentity(row.source);
   return (
     <div className="grid min-w-0 items-start gap-6 lg:grid-cols-2">
+      <div className="min-w-0 lg:col-span-2 [overflow-wrap:anywhere]">
+        {description && <p className="font-semibold">{description}</p>}
+        {date && <p>Trade date · {date}</p>}
+        {executionReference && (
+          <p>Execution reference · {executionReference}</p>
+        )}
+        {terms.isin ? (
+          <p className="caption">
+            Prices in {terms.currency}{terms.accountCurrency && ` · Account currency ${terms.accountCurrency}`}.
+          </p>
+        ) : (
+          terms.currency && (
+            <p className="caption">
+              Export currency: {terms.currency} ·{" "}
+              {terms.priceUnit === "minor" ? "unit cost in pence" : "price in pounds"}.
+            </p>
+          )
+        )}
+        {!initial && <p>{row.reason}</p>}
+      </div>
       <form
         key={resetKey}
         ref={form}
@@ -101,7 +137,11 @@ export function ImportDetailsForm({
         }}
         className="form-stack"
       >
-        {error && <Notice tone="error">{error}</Notice>}
+        {(error || (savedIssue && !feeIssue)) && (
+          <div ref={alert} tabIndex={-1}>
+            <Notice tone="error">{error || savedIssue}</Notice>
+          </div>
+        )}
         <div className="form-columns">
           {terms.isin ? (
             <input type="hidden" name="isin" value={terms.isin} />
@@ -112,6 +152,8 @@ export function ImportDetailsForm({
               error={fieldErrors.isin}
               label="Verified ISIN"
               defaultValue={initial?.isin ?? ""}
+              autoCapitalize="characters"
+              spellCheck={false}
               maxLength={12}
             />
           )}
@@ -164,14 +206,16 @@ export function ImportDetailsForm({
             >
               <option value="">Choose verified units</option>
               <option value="major">Pounds / major currency units</option>
-              <option value="minor">Pence / hundredths of currency unit</option>
+              <option value="minor">
+                Pence / hundredths of currency unit
+              </option>
             </SelectField>
           )}
           {!exportedFees && (
             <Field
               id={`fees-${row.record}`}
               name="fees"
-              error={fieldErrors.fees}
+              error={fieldErrors.fees || feeIssue}
               label="Dealing fees and transaction taxes"
               hint="Total in the trade currency. Enter 0 only if the statement confirms no fees."
               defaultValue={initial?.fees ?? ""}
@@ -199,7 +243,7 @@ export function ImportDetailsForm({
           defaultValue={initial?.reference ?? ""}
           maxLength={500}
         />
-        {terms.isin ? (
+        {terms.isin && (
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
             <dt>ISIN</dt>
             <dd>{terms.isin}</dd>
@@ -239,16 +283,6 @@ export function ImportDetailsForm({
               </>
             )}
           </dl>
-        ) : (
-          terms.currency && (
-            <p className="caption">
-              Export currency: {terms.currency} ·{" "}
-              {terms.priceUnit === "minor"
-                ? "unit cost in pence"
-                : "price in pounds"}
-              .
-            </p>
-          )
         )}
         <label className="checkbox-line">
           <input
@@ -260,8 +294,8 @@ export function ImportDetailsForm({
             type="checkbox"
             defaultChecked={initial?.netAmountConfirmed ?? false}
           />
-          I checked the currency, ISIN, fees and price units. The export’s cash
-          amount is net of these dealing fees.{" "}
+          I checked the currency, ISIN, fees and price units. The export’s
+          cash amount is net of these dealing fees.{" "}
           {broker === "ibkr" &&
             "I confirmed the statement base currency is GBP."}
         </label>

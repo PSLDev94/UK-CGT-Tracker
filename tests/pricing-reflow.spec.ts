@@ -44,8 +44,54 @@ async function expectTextToFit(labels: Locator, width: number) {
   expect(overflowing).toEqual([]);
 }
 
+const publicReadingPages = [
+  "/guide/sa108-how-to-fill-in",
+  "/supported-brokers",
+  "/tools/cgt-allowance-checker",
+];
+
+test("the public skip link appears above the sticky header and moves to main", async ({
+  context,
+  browserName,
+}) => {
+  for (const path of ["/", "/pricing", ...publicReadingPages]) {
+    const page = await context.newPage();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(path);
+    const skip = page.getByRole("link", { name: "Skip to content" });
+    // WebKit's default Tab mode visits controls and can skip ordinary links.
+    if (browserName === "webkit") await skip.focus();
+    else await page.keyboard.press("Tab");
+    await expect(skip).toBeFocused();
+    expect(await skip.evaluate((link) => {
+      const rect = link.getBoundingClientRect();
+      return [0.1, 0.5, 0.9].every((x) =>
+        [0.1, 0.5, 0.9].every((y) =>
+          link.contains(document.elementFromPoint(rect.left + x * rect.width, rect.top + y * rect.height))
+        )
+      );
+    })).toBe(true);
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/#main$/);
+    await expect(page.getByRole("main")).toBeFocused();
+    await page.close();
+  }
+});
+
 for (const width of [320, 390]) {
   for (const enlargement of ["text", "root"] as const) {
+    test(`broker support, the filing guide and allowance checker fit ${width}px with doubled ${enlargement} size`, async ({ context }) => {
+      for (const path of publicReadingPages) {
+        const page = await context.newPage();
+        await page.setViewportSize({ width, height: 844 });
+        await page.goto(path);
+        await enlarge(page, enlargement);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+        await expectTextToFit(page.locator("main h1, .broker-grid h3"), width);
+        await page.close();
+      }
+    });
+
     test(`Home and the workspace fit ${width}px with doubled ${enlargement} size`, async ({
       page,
     }) => {

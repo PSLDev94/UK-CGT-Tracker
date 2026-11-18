@@ -16,6 +16,7 @@ export default async function PricingPage() {
       <PublicNav />
       <main
         id="main"
+        tabIndex={-1}
         className="flex-1 flex flex-col items-center pt-16 px-4 pb-20"
       >
         <div className="w-full max-w-3xl mx-auto text-center [overflow-wrap:anywhere]">

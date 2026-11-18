@@ -1,6 +1,6 @@
 import { Money, calendarDate, decimal } from "../values";
 import type { NativeAdapter } from "./native";
-import type { SupportingDetails } from "./supporting-details";
+import { SupportingFieldError, type SupportingDetails } from "./supporting-details";
 
 export const HL_HEADERS =
   "Trade date,Settle date,Reference,Description,Unit cost (p),Quantity,Value (£)".split(
@@ -39,11 +39,9 @@ const date = (value: string) =>
         ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6)}`
         : value,
   );
-function details(d?: SupportingDetails): SupportingDetails {
+function details(d: SupportingDetails | undefined, instruction: string): SupportingDetails {
   if (!d?.netAmountConfirmed || d.reference.trim().length < 8)
-    throw new Error(
-      "Supply the ISIN, currency, price units and dealing fees from the contract note; confirm that the cash amount includes those fees.",
-    );
+    throw new Error(instruction);
   return d;
 }
 function ordinary(
@@ -95,10 +93,14 @@ function assisted(
     throw new Error(
       "This activity is not a recognised ordinary share purchase or sale.",
     );
-  if (!(side === "BUY" ? gross.plus(fee) : gross.minus(fee)).eq(cash))
-    throw new Error(
-      "Quantity × price, dealing fees and net cash do not reconcile. Check price units and the contract note.",
+  const expectedCash = side === "BUY" ? gross.plus(fee) : gross.minus(fee);
+  if (!expectedCash.eq(cash)) {
+    const places = Math.max(2, expectedCash.decimalPlaces(), cash.decimalPlaces());
+    throw new SupportingFieldError(
+      "fees",
+      `Quantity × price, dealing fees and net cash do not reconcile. With the entered details the cash amount is ${d.currency} ${expectedCash.toFixed(places)}. The export shows ${d.currency} ${cash.toFixed(places)}. Check the fees against your contract note.`,
     );
+  }
   return ordinary(
     id,
     day,
@@ -120,7 +122,7 @@ export const hl: NativeAdapter = {
       throw new Error(
         "HL activity is not an identified buy/sell contract reference. Transfers, distributions and adjustments need specialist review.",
       );
-    const d = details(supplied);
+    const d = details(supplied, "Enter the ISIN and dealing fees from your contract note. Add its reference and confirm the net cash amount.");
     if (d.currency !== "GBP" || d.priceUnit !== "minor")
       throw new Error(
         "This HL layout labels unit cost in pence and cash in pounds. Confirm GBP and pence/minor units.",
@@ -157,7 +159,7 @@ export const ii: NativeAdapter = {
       throw new Error(
         "Interactive Investor activity is not a recognised purchase or sale. Do not omit transfers or corporate actions.",
       );
-    const d = details(supplied),
+    const d = details(supplied, "Enter the ISIN, trade currency, price units and dealing fees from your contract note. Add its reference and confirm the net cash amount."),
       debit = unsigned(r.Debit || "0", "Debit"),
       credit = unsigned(r.Credit || "0", "Credit");
     if (
@@ -189,7 +191,7 @@ export const ajbell: NativeAdapter = {
       throw new Error(
         "AJ Bell activity is not a recognised ordinary purchase or sale. Review transfers and corporate actions separately.",
       );
-    const d = details(supplied);
+    const d = details(supplied, "Enter the ISIN, execution reference, currency, price units and dealing fees from your contract note. Confirm the net cash amount.");
     if (!d.transactionId.trim())
       throw new Error(
         "This export omits a transaction ID. Supply the unique execution/contract-note reference; do not use a row number or ticker.",
@@ -210,7 +212,7 @@ export const ajbellHistory: NativeAdapter = {
   idColumn: "Transaction ID",
   isTrade: (r) => ["Purchase", "Sale"].includes(r.Transaction ?? ""),
   normalize(r, supplied) {
-    const d = details(supplied);
+    const d = details(supplied, "Enter the ISIN, execution reference and dealing fees from your contract note. Confirm the net cash amount.");
     if (d.currency !== "GBP" || d.priceUnit !== "major")
       throw new Error(
         "This AJ Bell history layout requires GBP cash and a contract-note-confirmed price in pounds. Foreign prices and pence need a separately verified mapping.",
@@ -274,7 +276,7 @@ export const ibkr: NativeAdapter = {
       );
     let rate = "1";
     if (r.CurrencyPrimary !== "GBP") {
-      const d = details(supplied);
+      const d = details(supplied, "Check the exported rate and net cash against your statement. Add its reference and confirm the statement base currency is GBP.");
       if (
         d.currency !== r.CurrencyPrimary ||
         d.isin !== r.ISIN ||

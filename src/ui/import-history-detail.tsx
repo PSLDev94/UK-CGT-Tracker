@@ -8,6 +8,9 @@ import type { ImportTradeDetail } from "../domain/imports/trade-detail";
 import type { HistoryImport } from "./workspace-types";
 
 type Receipt = {
+  status: HistoryImport["status"];
+  accountLabel: string;
+  reversalReason: string | null;
   page: number;
   pageSize: number;
   total: number;
@@ -27,6 +30,21 @@ const labels = {
   duplicate: "Duplicate",
 };
 
+export function ImportReceiptStatus({ accountLabel, status, reversalReason }: {
+  accountLabel: string;
+  status: HistoryImport["status"];
+  reversalReason?: string | null;
+}) {
+  return <>
+    <strong>{accountLabel}</strong>{" "}
+    <span className="tag">{status === "reversed" ? "Reversed" : "Saved"}</span>
+    {status === "reversed" && <>
+      <p>These transactions are excluded from future calculations.</p>
+      {reversalReason && <p>Reversal reason: {reversalReason}</p>}
+    </>}
+  </>;
+}
+
 export function ImportReceiptIdentity({ item }: { item: HistoryImport }) {
   return (
     <>
@@ -44,11 +62,13 @@ export function ImportHistoryDetail({
   importId,
   children,
   sourceRecord,
+  listStatus,
   initiallyOpen = false,
 }: {
   importId: string;
   children?: ReactNode;
   sourceRecord?: number;
+  listStatus?: HistoryImport["status"];
   initiallyOpen?: boolean;
 }) {
   const [open, setOpen] = useState(initiallyOpen);
@@ -56,6 +76,7 @@ export function ImportHistoryDetail({
   const [attempt, setAttempt] = useState(0);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [error, setError] = useState("");
+  const reversed = listStatus === "reversed" || receipt?.status === "reversed";
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
@@ -82,6 +103,12 @@ export function ImportHistoryDetail({
     setPage(next);
   };
   return (
+    <>
+    {initiallyOpen && receipt && (
+      <div className="break-words">
+        <ImportReceiptStatus accountLabel={receipt.accountLabel} status={receipt.status} reversalReason={receipt.reversalReason} />
+      </div>
+    )}
     <details
       className="import-history-detail min-w-0 break-words"
       open={open}
@@ -118,7 +145,7 @@ export function ImportHistoryDetail({
                     className="border-b border-gray-200 py-2"
                   >
                     <dt className="font-semibold">
-                      Record {row.record} · {labels[row.status]}
+                      Record {row.record} · {row.status === "accepted" && reversed ? "Included when imported" : labels[row.status]}
                     </dt>
                     <dd>
                       {row.reason}
@@ -157,5 +184,6 @@ export function ImportHistoryDetail({
         </>
       )}
     </details>
+    </>
   );
 }

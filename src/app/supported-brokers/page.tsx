@@ -83,7 +83,7 @@ export default async function BrokerSupport({
   return (
     <>
       <Header backToUpload={backToUpload} />
-      <main id="main" className="public-main broker-directory">
+      <main id="main" tabIndex={-1} className="public-main broker-directory">
         <section className="principles">
           <h1>Find your broker’s CSV export</h1>
           <p className="lead">
