@@ -52,7 +52,7 @@ PSL Digital; support@cgttracker.com; not VAT-registered; retain £49/year, no VA
 - Independent UK tax review of engine, unsupported scope, rounding and report interpretation.
 - Final privacy/retention/consumer terms, business-address disclosure and cancellation/refund review. Owner asked to omit the address; UK online-selling guidance generally requires an address before sales. This is unresolved, not silently waived.
 - Mapped-user renewal, 3DS, disputes and provider recovery. Provider-only sandbox tests covered annual renewal, decline and recovery, and rejected and completed 3DS challenges. The verified staging account passed initial checkout and paid PDF downloads on 18 November.
-- Operator alert delivery for failed and missed staging backups. A scheduler-triggered backup, full encrypted readback and an isolated restore of the earlier manual archive passed on 18 November.
+- Configure equivalent monitoring for production and qualify the separate read-only R2 freshness check. Staging passed a scheduler-triggered backup, encrypted readback and isolated restore. On 18 November the daily staging monitor received a real backup heartbeat, and the operator confirmed receipt of the failed-worker and missed-run emails.
 - Production DNS, live Stripe enablement and launch approval.
 
 Sources: [UK online-selling guidance](https://www.gov.uk/online-and-distance-selling-for-businesses/online-selling), [consumer pre-contract information](https://www.legislation.gov.uk/uksi/2013/3134/schedule/2), [IBKR Flex trade semantics](https://www.ibkrguides.com/reportingreference/reportguide/tradesfq.htm). The implementation evidence and remaining gates must be reviewed together.
