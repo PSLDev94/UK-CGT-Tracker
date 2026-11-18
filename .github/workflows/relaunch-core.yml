@@ -31,10 +31,21 @@ jobs:
           node scripts/prepare-runtime-manifest.mjs "$RUNNER_TEMP/cgt-runtime"
           cd "$RUNNER_TEMP/cgt-runtime"
           npm audit --audit-level=high
-      - name: Report development dependency advisories
-        continue-on-error: true
-        run: npm audit --include=dev --audit-level=high
       - run: npm run build
+      - name: Check the shipped standalone files against the full dependency audit
+        run: |
+          status=0
+          npm audit --include=dev --json > "$RUNNER_TEMP/full-audit.json" || status=$?
+          node scripts/check-standalone-audit.mjs "$RUNNER_TEMP/full-audit.json"
+          if [ "$status" != 0 ]; then
+            echo "::warning::The full dependency audit has findings. Review the full-audit artifact for development dependencies."
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: full-npm-audit
+          path: ${{ runner.temp }}/full-audit.json
+          if-no-files-found: ignore
       - run: node scripts/check-job-bundle.mjs
       - run: npx playwright install --with-deps chromium
       - run: npm run test:ui

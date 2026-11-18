@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { signalBackupOutcome } from "../src/server/backup/heartbeat.ts";
 import { backupKey, encryptArchive } from "../src/server/backup/archive.ts";
 import {
   backupStorage,
@@ -97,7 +98,11 @@ async function main() {
   }
 }
 
-main().catch(() => {
+let succeeded = false;
+try {
+  await main();
+  succeeded = true;
+} catch {
   // Provider errors can contain URLs, SQL or credentials. Log a fixed failure only.
   console.error(
     JSON.stringify({
@@ -107,4 +112,11 @@ main().catch(() => {
     }),
   );
   process.exitCode = 1;
-});
+}
+
+try {
+  await signalBackupOutcome(process.env.BACKUP_HEARTBEAT_URL, succeeded);
+} catch {
+  console.error(JSON.stringify({ event: "database_backup_signal_failed" }));
+  process.exitCode = 1;
+}
