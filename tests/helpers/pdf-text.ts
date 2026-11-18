@@ -6,10 +6,14 @@ import {
 } from "pdf-lib";
 
 /** Read selectable Helvetica text from the rendered pages, excluding PDF metadata. */
-export function reportPageText(document: PDFDocument): string {
+export function reportPageText(
+  document: PDFDocument,
+  pageIndex?: number,
+): string {
   const decodeText = new TextDecoder("windows-1252");
   return document
     .getPages()
+    .filter((_, index) => pageIndex === undefined || index === pageIndex)
     .flatMap((page) => {
       const contents = page.node.Contents();
       const streams =

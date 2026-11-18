@@ -14,6 +14,8 @@ const humanDate = new Intl.DateTimeFormat("en-GB", {
 const date = (value: string | Date) => humanDate.format(new Date(value));
 const pounds = (value: string) =>
   value.startsWith("-") ? "-£" + value.slice(1) : "£" + value;
+const shares = (quantity: string) =>
+  `${quantity} ${quantity === "1" ? "share" : "shares"}`;
 const rules = {
   SAME_DAY: "Same day",
   THIRTY_DAY: "30-day rule",
@@ -159,11 +161,7 @@ export async function reportPdf(
   line(`${r.taxYear}  ${title}`, true, 19);
   if (r.summary) {
     const net = r.summary.netGainGBP;
-    line(
-      `${netOutcome(net)}  ${pounds(net.replace(/^-/, ""))}`,
-      true,
-      22,
-    );
+    line(`${netOutcome(net)}  ${pounds(net.replace(/^-/, ""))}`, true, 22);
   } else {
     line("Total pending acquisition history", true, 17);
   }
@@ -209,7 +207,7 @@ export async function reportPdf(
     for (const [index, d] of r.disposals.entries()) {
       space(85);
       line(
-        `D${index + 1}   ${date(d.date)}   ·   ${d.securityId}   ·   ${d.quantity} shares`,
+        `D${index + 1}   ${date(d.date)}   ·   ${d.securityId}   ·   ${shares(d.quantity)}`,
         true,
         11,
       );
@@ -229,19 +227,19 @@ export async function reportPdf(
       );
       for (const m of d.matches)
         line(
-          `${rules[m.rule]} · ${m.quantity} shares · cost ${pounds(m.costGBP)}${m.acquisitionDate ? " · acquired " + date(m.acquisitionDate) : ""}`,
+          `${rules[m.rule]} · ${shares(m.quantity)} · cost ${pounds(m.costGBP)}${m.acquisitionDate ? " · acquired " + date(m.acquisitionDate) : ""}`,
           false,
           10,
         );
       if (d.unmatchedQuantity !== "0")
-        line(`Unmatched: ${d.unmatchedQuantity} shares`, true);
+        line(`Unmatched: ${shares(d.unmatchedQuantity)}`, true);
       y -= 6;
     }
     heading(`Section 104 pools at ${date(r.poolAsOf)}`);
     if (!r.pools.length) line("No remaining pool balances.");
     for (const p of r.pools)
       line(
-        `${p.securityId} · ${p.quantity} shares · total cost ${pounds(p.costGBP)}`,
+        `${p.securityId} · ${shares(p.quantity)} · total cost ${pounds(p.costGBP)}`,
       );
   }
   if (r.issues.length) {
@@ -252,9 +250,11 @@ export async function reportPdf(
       );
     for (const i of evidence ? r.issues : r.issues.slice(0, 50))
       line(
-        `${i.securityId} · ${date(i.date)} · ${reportIssueMessage(i)} (${i.quantity} shares)`,
+        `${i.securityId} · ${date(i.date)} · ${reportIssueMessage(i)} (${shares(i.quantity)})`,
       );
   }
+  // Keep this fixed filing note together when a disposal table ends near the footer.
+  space(114);
   heading("Before using these figures");
   line(
     "These are ordinary-share gains and losses for the accounts included. Check account coverage, acquisitions and corporate actions before filing. This calculation does not determine personal tax owed or complete an HMRC return.",

@@ -47,3 +47,21 @@ The financial records and broker exports used for this pass were synthetic. The 
 - For AJ Bell, Hargreaves Lansdown and Interactive Investor, supply the missing fields from the synthetic contract notes. Open the evidence PDF and trace the sale to its broker, account, file row, execution reference and supporting document. Repeat with a native Trading 212 reference. Public Pricing also has synthetic examples of both PDF formats.
 - Change the cutoff on a saved calculation. Identify which dates and accounts the saved total covers, then change year. Check the account confirmations before recalculating. Repeat with missing purchase history and follow the upload link back to the same year's calculation.
 - For an observed usability session, give one investor a 201-record statement with a problem on its final page. Ask them to get the file ready to save. Give another investor a year containing a gain and a loss and ask them to explain the total using the spreadsheet. Record the first action, any point where they need help, and whether they can independently reproduce the result.
+
+## Reporting corrections checked on staging, 18 November
+
+A fresh account completed email verification, desktop Trading 212 upload, mobile WebKit preview recovery, calculation, free CSV download, cancelled checkout and one £49 Stripe sandbox subscription. Paid downloads on both browsers reproduced the original 2024–25 £5.25 gain. Returning from Stripe restored the chosen year and PDF. A fast cancel-and-purchase sequence exposed an access retry after payment. After the correction, twelve consecutive Reports visits across desktop and mobile retained access, and the last visit downloaded the evidence PDF. The sandbox customer portal also returned to the selected report.
+
+| 2025–26 synthetic disposal | Signed gain in the export |
+|---|---:|
+| AJ Bell | −£5.00 |
+| Hargreaves Lansdown | +£3.00 |
+| Interactive Investor | £0.00 |
+| Trading 212 | −£1.00 |
+| **Net loss** | **−£3.00** |
+
+The spreadsheet and both PDFs agreed with the screen on £37.00 proceeds and £40.00 allowable costs. The evidence PDF identified all four sale executions and the three assisted brokers’ supporting statements. Before the missing AJ Bell purchase was uploaded, the draft withheld the total and linked back to upload for the selected year.
+
+A native Interactive Brokers Flex preview retained its quantities, commission and taxes across devices. Mobile WebKit repaired the last execution in a 201-record Freetrade statement from the first page and preserved £1,000.00 consideration and £4.50 fees. An unsupported corporate action remained blocked with instructions for the investor.
+
+At 767, 768 and 800 CSS pixels the Accounts heading started 102 pixels down. At 801 it started 33 pixels down alongside the sidebar. Upload selectors measured 44.8 pixels high in mobile WebKit. Twenty-eight desktop and mobile axe scans across 14 public and signed-in routes returned zero detected WCAG A/AA violations.

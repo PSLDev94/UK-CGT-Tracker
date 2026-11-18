@@ -186,6 +186,43 @@ describe("auditable report exports", () => {
       true,
     );
   });
+  it("keeps the filing note on one evidence page and labels single-share trades", async () => {
+    const disposal = snapshot.result.disposals[0]!;
+    for (let accountCount = 1; accountCount <= 8; accountCount++) {
+      const document = await PDFDocument.load(
+        await reportPdf(
+          {
+            ...snapshot,
+            accounts: Array.from({ length: accountCount }, (_, i) => ({
+              label: `Example ${i}`,
+              broker: "hl",
+              confirmed: true,
+            })),
+            result: {
+              ...snapshot.result,
+              disposals: Array.from({ length: 4 }, () => ({
+                ...disposal,
+                quantity: "1",
+                matches: disposal.matches.map((m) => ({ ...m, quantity: "1" })),
+              })),
+            },
+          },
+          true,
+        ),
+      );
+      const pages = document
+        .getPages()
+        .map((_, i) => reportPageText(document, i).replace(/\s+/g, " "));
+      const guidance = pages.find((page) =>
+        page.includes("Before using these figures"),
+      );
+      expect(guidance).toContain(
+        "Matching and pool costs retain calculation precision.",
+      );
+      expect(pages.join(" ")).toContain("1 share · cost");
+      expect(pages.join(" ")).not.toContain("1 shares");
+    }
+  });
   it("authenticates before loading data and rejects cross-origin requests", async () => {
     const load = vi.fn(async () => snapshot);
     const handler = createReportHandler({
