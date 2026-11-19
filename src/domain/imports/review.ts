@@ -3,7 +3,7 @@ export { validISIN } from "./isin";
 import { ibkrExecution, sourceKey as executionKey } from "./ibkr-identity";
 import { createHash } from "node:crypto";
 import Papa from "papaparse";
-import { calendarDate, decimal } from "../values";
+import { calendarDate, decimal, Money } from "../values";
 import type { Trade } from "../cgt/types";
 import { BROKERS, type BrokerId } from "./brokers";
 import { nativeAdapter, NATIVE_GUIDANCE } from "./native";
@@ -570,9 +570,9 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
           decimal(previous.considerationGBP, "Consideration").eq(convertedAmount) &&
           decimal(previous.feesGBP, "Fees").eq(convertedFees) &&
           saved.original.originalCurrency === provenance.originalCurrency &&
-          decimal(saved.original.consideration, "Consideration").eq(amount) &&
-          decimal(saved.original.fees, "Fees").eq(fees) &&
-          decimal(saved.original.gbpPerUnit, "GBP per unit").eq(rate);
+          new Money(saved.original.consideration).eq(amount) &&
+          new Money(saved.original.fees).eq(fees) &&
+          new Money(saved.original.gbpPerUnit).eq(rate);
       }
       const previous = typeof saved === "object" && saved.supportingDetails;
       // Older saves hashed the complete note. Recreate their exact hash using
