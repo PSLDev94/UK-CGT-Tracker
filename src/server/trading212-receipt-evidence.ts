@@ -1,4 +1,4 @@
-import { checkExecutionShapedDividend, ukTradeDate } from "../domain/imports/native";
+import { checkExecutionShapedDividend, trading212TradeDate } from "../domain/imports/native";
 import { query, type Connection } from "./database";
 
 interface SavedDividend {
@@ -33,7 +33,7 @@ export async function trading212DividendIssue(tx: Connection, portfolioId: strin
       if (through) {
         const timestamp = row.fields["Time (UTC)"] ?? row.fields.Time;
         try {
-          if (timestamp && ukTradeDate(timestamp.replace(" ", "T") + "Z") > through) continue;
+          if (timestamp && trading212TradeDate(timestamp) > through) continue;
         } catch {
           // An unreadable date cannot establish that the row is outside the period.
         }

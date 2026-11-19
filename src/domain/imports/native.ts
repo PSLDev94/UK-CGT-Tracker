@@ -79,6 +79,12 @@ export function ukTradeDate(value: string): string {
     throw new Error("Invalid execution timestamp.");
   return ukCalendarDate(parsed);
 }
+
+/** Both the original Time column and the newer Time (UTC) use UTC. */
+export function trading212TradeDate(timestamp: string): string {
+  return ukTradeDate(timestamp.replace(/(?:Z|\+00:00)$/, "").replace(" ", "T") + "Z");
+}
+
 function trade(
   id: string,
   date: string,
@@ -372,7 +378,7 @@ const trading212: NativeAdapter = {
       );
     return trade(
       r.ID!,
-      ukTradeDate(r.Time!.replace(" ", "T") + "Z"),
+      trading212TradeDate(r.Time!),
       r.Action!.endsWith("buy") ? "BUY" : "SELL",
       r.ISIN!,
       quantity.toFixed(),
@@ -441,13 +447,10 @@ const trading212Current: NativeAdapter = {
           `${name} currency cannot be reconciled to the verified trade conversion.`,
         );
     }
-    const timestamp = r["Time (UTC)"]!;
-    // Only documented UTC forms; never interpret a locale-dependent offset.
-    const time = timestamp.replace(/(?:Z|\+00:00)$/, "").replace("T", " ");
     return trading212.normalize(
       {
         ...r,
-        Time: time,
+        Time: r["Time (UTC)"]!,
         "Exchange rate": r["Exchange rate"] || (foreign ? "" : "1"),
         "Transaction fee": fees.toDP(2).toFixed(),
         "Currency (Transaction fee)": "GBP",

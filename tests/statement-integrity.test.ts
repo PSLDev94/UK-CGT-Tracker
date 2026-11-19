@@ -382,9 +382,11 @@ describe("persisted original-statement identity and review", () => {
     const a = await s.account("Invest");
     const [buy, sell] = fixtureRows(brokerCases.find(c => c.file === file)!);
     const time = file === "trading212-gbp" ? "Time" : "Time (UTC)";
+    const timestamp = time === "Time" ? "2024-06-05 23:30:00"
+      : parser.endsWith("-v1") ? "2024-06-05 23:30:00+00:00" : "2024-06-05T23:30:00Z";
     const distribution: Record<string, string> = {
       ...Object.fromEntries(Object.keys(buy!).map(k => [k, ""])),
-      Action: "Dividend (Dividend)", ID: "DIST-007", [time]: "2024-06-05 23:30:00",
+      Action: "Dividend (Dividend)", ID: "DIST-007", [time]: timestamp,
       "No. of shares": "100", "Price / share": "0.05", "Currency (Price / share)": "GBP",
       "Withholding tax": "0.75", "Currency (Withholding tax)": "GBP", Total: "4.25", "Currency (Total)": "GBP",
     };
