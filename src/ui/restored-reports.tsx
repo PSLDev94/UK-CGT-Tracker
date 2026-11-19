@@ -344,6 +344,12 @@ function ReportContents({
                   : result.issues.every(i => i.code === "MISSING_ACQUISITION_HISTORY") ? "Total awaiting complete history" : "Total pending review"}
               </p>
               <p className="text-sm text-gray-600">Share gains and losses before personal allowances, reliefs and other gains.</p>
+              {result.issues.filter(issue => issue.scope === "pool").map(issue => (
+                <p className="text-sm" key={issue.securityId}>
+                  <strong>{issue.securityId} · Tax-pool balance unresolved.</strong>{" "}
+                  {reportIssueMessage(issue)}
+                </p>
+              ))}
               {(noDisposals || result.hasLaterSales) && (
                 <p>
                   {result.hasLaterSales ? <>Your portfolio already includes sales later in {year}. <Link className={linkClass} href={calculationPath + "#historyThrough"}>Extend the history cutoff and recalculate</Link>.</>

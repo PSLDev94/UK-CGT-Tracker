@@ -40,7 +40,7 @@ export async function qualifyReviewedOpeningPool({
       portfolioId,
       taxYear: "2024-25",
       historyThrough: "2025-05-05",
-      personalScopeConfirmed: true,
+      personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2",
       confirmedAccountIds: [accountId],
     });
   async function save(...rows: string[]) {
@@ -165,7 +165,7 @@ export async function qualifyReviewedOpeningPool({
       portfolioId,
       taxYear: "2025-26",
       historyThrough: "2026-05-05",
-      personalScopeConfirmed: true,
+      personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2",
       confirmedAccountIds: [accountId],
     });
   const nextBasis = {

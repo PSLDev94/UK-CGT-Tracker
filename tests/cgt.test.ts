@@ -120,6 +120,29 @@ describe('HMRC share matching regression cases', () => {
     expect(buysOnly.summary?.netGainGBP).toBe('500.00')
   })
 
+  it('isolates a historical cost warning while completing independent current-year disposals', () => {
+    const A = 'historical-security'
+    const old = [
+      trade('a-buy', '2000-01-01', 'BUY', '100', '100', '0', A),
+      trade('a-sell', '2005-01-01', 'SELL', '1', '2', '0', A),
+    ]
+    const current = [trade('b-buy', '2024-06-01', 'BUY', '1', '100'), trade('b-sell', '2024-10-01', 'SELL', '1', '150')]
+    const result = run([...old, ...current])
+    expect(result.status).toBe('complete')
+    expect(result.summary?.netGainGBP).toBe('50.00')
+    expect(result.issues).toMatchObject([{ securityId: A, code: 'HISTORICAL_SHARE_MATCHING', scope: 'pool' }])
+    expect(result.pools.some(pool => pool.securityId === A)).toBe(false)
+    const related = run([...old, ...current, trade('a-again', '2024-08-01', 'SELL', '1', '10', '0', A)])
+    expect(related.status).toBe('blocked')
+    expect(related.summary).toBeNull()
+    expect(run([old[1]!, ...current]).status).toBe('blocked')
+  })
+
+  it('rejects a cutoff before the tax year and permits a first-day provisional draft', () => {
+    expect(() => calculateGains([], { ...options, historyThrough: '2024-04-05' })).toThrow(/first day/)
+    expect(calculateGains([], { ...options, historyThrough: '2024-04-06' }).status).toBe('provisional')
+  })
+
   it('checks ownership through a year-end matched repurchase without blocking unrelated later sales', () => {
     const yearEnd = [trade('opening','2024-06-01','BUY','1','100'), trade('closing','2025-04-05','SELL','1','200')]
     const buy = trade('repurchase','2025-04-15','BUY','1','180')

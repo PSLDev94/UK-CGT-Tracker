@@ -11,15 +11,14 @@ import {
 import {
   reportCsv,
   type ReportSnapshot,
-  type ReportSource,
+  type ReportKind,
 } from "../domain/reports/report";
 import { reportPdf } from "../domain/reports/pdf";
 
 export function createReportHandler(deps: {
   readSession: SessionReader;
   origin: string;
-  snapshot: (identity: Identity, id: string) => Promise<ReportSnapshot>;
-  sources?: (identity: Identity, keys: string[]) => Promise<ReportSource[]>;
+  snapshot: (identity: Identity, id: string, kind: ReportKind) => Promise<ReportSnapshot>;
   entitled: (identity: Identity) => Promise<boolean>;
   consume: (identity: Identity) => Promise<void>;
 }) {
@@ -32,11 +31,12 @@ export function createReportHandler(deps: {
       await deps.consume(identity);
       const input = await jsonInput(request),
         kind = stringField(input, "kind");
-      if (!["csv", "summary", "evidence"].includes(kind))
+      if (kind !== "csv" && kind !== "summary" && kind !== "evidence")
         throw new AppError(400, "INVALID_REPORT", "Choose a report format.");
       const snapshot = await deps.snapshot(
         identity,
         stringField(input, "runId"),
+        kind,
       );
       const issue = kind === "evidence" ? evidenceIssue(snapshot.result) : null;
       if (issue) throw new AppError(400, issue.code, issue.message);
@@ -46,17 +46,6 @@ export function createReportHandler(deps: {
           "SUBSCRIPTION_REQUIRED",
           "An active subscription is required for PDF reports. Your CSV evidence remains available.",
         );
-      if (kind !== "summary" && deps.sources) {
-        const keys = new Set(
-          snapshot.result.disposals.flatMap((d) => [
-            ...d.sourceIds,
-            ...d.matches.flatMap((match) => match.acquisitionIds ?? []),
-          ]),
-        );
-        for (const movement of snapshot.result.poolMovements ?? [])
-          for (const key of movement.sourceIds) keys.add(key);
-        snapshot.sources = await deps.sources(identity, [...keys]);
-      }
       const csv = kind === "csv";
       const body = csv
         ? reportCsv(snapshot)

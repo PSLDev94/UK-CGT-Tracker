@@ -26,6 +26,8 @@ const client = new Client({
 const tables = [
   "published_calculations",
   "calculation_runs",
+  "reviewed_statement_overlaps",
+  "receipt_revalidations",
   "transactions",
   "imports",
   "import_drafts",

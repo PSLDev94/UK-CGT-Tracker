@@ -1,3 +1,4 @@
+import { CURRENT_SCOPE_DECLARATION } from "../cgt/types";
 import { createHash } from "node:crypto";
 import { calculateGains } from "../cgt/calculate";
 import type { Trade } from "../cgt/types";
@@ -68,7 +69,7 @@ export const sampleReport: ReportSnapshot = {
       taxYear: "2025-26",
       historyThrough: "2026-05-05",
     }),
-    scopeDeclaration: "personal-uk-resident-v1",
+    scopeDeclaration: CURRENT_SCOPE_DECLARATION,
   },
   sources,
 };

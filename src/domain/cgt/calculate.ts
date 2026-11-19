@@ -3,10 +3,18 @@ import { calendarDate, decimal, plusDays, TAX_YEARS, type TaxYear } from '../val
 import type { Calculation, CalculationIssue, Disposal, Match, OpeningPool, PoolMovement, Trade } from './types'
 import { missingAcquisitionGuidance } from './types'
 
-export const ENGINE_VERSION = '2.0.0-alpha.4'
+export const ENGINE_VERSION = '2.0.0-alpha.5'
 
 function checkedAmount(value: string, label: string) {
   decimal(value, label)
+  return ExactAmount.from(value)
+}
+
+// Two 12-decimal source operands can produce up to 24 sterling decimal places.
+function sterlingValue(value: string, label: string) {
+  if (!/^(?:0|[1-9]\d{0,25})(?:\.\d{1,24})?$/.test(value)) {
+    throw new Error(`${label} must be a supported non-negative sterling decimal`)
+  }
   return ExactAmount.from(value)
 }
 
@@ -74,6 +82,7 @@ export function calculateGains(
   const year = TAX_YEARS[options.taxYear]
   if (!year) throw new Error('Unsupported tax year')
   const historyThrough = calendarDate(options.historyThrough)
+  if (historyThrough < year.start) throw new Error('History cutoff must include at least the first day of the selected tax year')
   const cutoff = historyThrough < year.end ? historyThrough : year.end
   const requiredHistoryThrough = plusDays(year.end, 30)
   const groups = new Map<string, Map<string, Day>>()
@@ -105,8 +114,8 @@ export function calculateGains(
     if (trade.side !== 'BUY' && trade.side !== 'SELL') throw new Error('Unsupported transaction type')
     const quantity = checkedAmount(trade.quantity, 'Quantity')
     if (!quantity.isPositive()) throw new Error('Quantity must be greater than zero')
-    const amount = checkedAmount(trade.considerationGBP, 'Consideration')
-    const fees = checkedAmount(trade.feesGBP, 'Fees')
+    const amount = sterlingValue(trade.considerationGBP, 'Consideration')
+    const fees = sterlingValue(trade.feesGBP, 'Fees')
     // A sale can have negative net proceeds when disposal fees exceed proceeds.
     const value = trade.side === 'BUY' ? amount.plus(fees) : amount.minus(fees)
     if (!groups.has(trade.securityId)) groups.set(trade.securityId, new Map())
@@ -168,6 +177,10 @@ export function calculateGains(
     }
 
     let quantity = openingApplies ? initialQuantity : ExactAmount.zero
+    const hasAssessedDisposal = days.some(day => day.date >= year.start && day.date <= cutoff && day.sell.quantity.isPositive())
+    // A negative evidenced holding can mean missing transactions as well as an
+    // uncertain historic cost. Keep that wider problem blocking.
+    const historicPoolOnly = !hasAssessedDisposal && !days.some(day => day.date <= cutoff && day.holdingShortfall)
     let basisUnavailable = false
     let cost = openingApplies ? ExactAmount.from(openingApplies.costGBP) : ExactAmount.zero
     function movement(date: string, kind: PoolMovement['kind'], quantityChange: ExactAmount, costChange: ExactAmount, sourceIds: string[]) {
@@ -186,6 +199,7 @@ export function calculateGains(
       if (!basisUnavailable && day.sell.quantity.isPositive() && day.date < modernRulesStart) {
         basisUnavailable = true
         issues.push({
+          ...(historicPoolOnly && { scope: 'pool' as const }),
           code: 'HISTORICAL_SHARE_MATCHING', securityId, date: day.date, quantity: day.sell.quantity.toString(),
           message: 'This holding has a disposal before 6 April 2008. Ask support to record a professionally reviewed opening position before completing this year.',
         })
@@ -259,21 +273,22 @@ export function calculateGains(
   const sum = (values: string[]) => values.reduce((a, b) => a.plus(ExactAmount.from(b)), ExactAmount.zero)
   const gains = sum(disposals.filter(d => ExactAmount.from(d.gainGBP ?? '0').isPositive()).map(d => d.gainGBP!))
   const losses = sum(disposals.filter(d => ExactAmount.from(d.gainGBP ?? '0').isNegative()).map(d => d.gainGBP!)).negated()
+  const annualBlocked = issues.some(issue => issue.scope !== 'pool')
   const reportedAcquisitionCosts = sum(disposals.map(d => d.allowableCostGBP ?? '0'))
   return {
     engineVersion: ENGINE_VERSION, taxYear: options.taxYear, historyThrough, requiredHistoryThrough,
-    poolAsOf: cutoff, status: issues.length ? 'blocked' : historyThrough < requiredHistoryThrough ? 'provisional' : 'complete',
+    poolAsOf: cutoff, status: annualBlocked ? 'blocked' : historyThrough < requiredHistoryThrough ? 'provisional' : 'complete',
     disposals, pools, poolMovements, issues,
     saleBreakdown: {
       grossProceedsGBP: reportedGrossSales.toFixed(2), sellingCostsGBP: reportedSellingCosts.toFixed(2),
-      totalAllowableCostsGBP: issues.length ? null : reportedAcquisitionCosts.plus(reportedSellingCosts).toFixed(2),
+      totalAllowableCostsGBP: annualBlocked ? null : reportedAcquisitionCosts.plus(reportedSellingCosts).toFixed(2),
       proceedsRoundingAdjustmentGBP: reportedProceedsAdjustment.toFixed(2),
     },
-    ...(!issues.length && { annualBeforeDisposalRounding: {
+    ...(!annualBlocked && { annualBeforeDisposalRounding: {
       proceedsGBP: annualProceeds.toFixed(2), allowableCostsGBP: annualCosts.toFixed(2),
       gainsGBP: annualGains.toFixed(2), lossesGBP: annualLosses.toFixed(2), netGainGBP: annualGains.minus(annualLosses).toFixed(2),
     } }),
-    summary: issues.length ? null : {
+    summary: annualBlocked ? null : {
       proceedsGBP: sum(disposals.map(d => d.proceedsGBP)).toFixed(2),
       allowableCostsGBP: reportedAcquisitionCosts.toFixed(2),
       gainsGBP: gains.toFixed(2), lossesGBP: losses.toFixed(2), netGainGBP: gains.minus(losses).toFixed(2),

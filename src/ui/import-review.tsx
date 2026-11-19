@@ -168,6 +168,7 @@ export function ImportReviewPanel({
                   : next ? `Record ${next.record}: ${next.reason}` : "This file cannot be saved yet. Check the original export and keep all source rows in the file."}
             </Notice>
           )}
+          {review.revalidatesReceiptId && <Notice tone="info">The original file matches your saved receipt. Confirm the check to keep its existing transactions and record the verified rows.</Notice>}
           {review.status === "ready" && !!preview.affectedReportYears?.length && (
             <Notice tone="warning">
               <strong>After saving, recalculate {new Intl.ListFormat("en-GB").format(preview.affectedReportYears)}.</strong>{" "}
@@ -177,8 +178,8 @@ export function ImportReviewPanel({
           <div className="actions">
             {review.status === "ready" && (
               <Button busy={busy} onClick={onCommit}>
-                Save {review.counts.accepted.toLocaleString("en-GB")}{" "}
-                {review.counts.accepted === 1 ? "transaction" : "transactions"}
+                {review.revalidatesReceiptId ? "Verify original receipt" :
+                  <>Save {review.counts.accepted.toLocaleString("en-GB")} {review.counts.accepted === 1 ? "transaction" : "transactions"}</>}
               </Button>
             )}
             {next && (

@@ -1,3 +1,5 @@
+export const CURRENT_SCOPE_DECLARATION = 'personal-market-trades-v2' as const
+
 /** One taxpayer, one legal capacity, taxable ordinary shares only. GBP consideration excludes fees. */
 export interface Trade {
   readonly id: string
@@ -56,6 +58,8 @@ export interface Disposal {
 export const missingAcquisitionGuidance = 'Upload the earlier purchases for these shares so their cost can be matched. Short sales require specialist review.'
 
 export interface CalculationIssue {
+  /** A historical basis warning confined to a pool with no sale in the assessed period. */
+  scope?: 'pool'
   code: 'MISSING_ACQUISITION_HISTORY' | 'HISTORICAL_SHARE_MATCHING' | 'UNEVIDENCED_HOLDING'
   securityId: string
   date: string
@@ -84,7 +88,7 @@ export interface AnnualAmounts {
 
 export interface Calculation {
   reviewedOpeningPools?: ReviewedOpeningPool[]
-  scopeDeclaration?: "personal-uk-resident-v1"
+  scopeDeclaration?: "personal-uk-resident-v1" | typeof CURRENT_SCOPE_DECLARATION
   hasLaterSales?: boolean
   engineVersion: string
   status: 'complete' | 'provisional' | 'blocked'

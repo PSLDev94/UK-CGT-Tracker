@@ -129,9 +129,9 @@ export default function CGTRatesPage() {
         </table>
       </div>
       <p>
-        As you can see, both the annual exempt amount and the rates have moved
-        against investors. The exempt amount has fallen from £12,300 to just
-        £3,000, and rates on shares have nearly doubled from 10%/20% to 18%/24%.
+        The annual exempt amount fell from £12,300 in 2022–23 to £3,000 in
+        2024–25. The main rates on share gains rose from 10% to 18% and from
+        20% to 24% on 30 October 2024.
       </p>
 
       <h2>The October 2024 Mid-Year Rate Change</h2>
@@ -151,32 +151,34 @@ export default function CGTRatesPage() {
 
       <h2>How Your Income Determines Your CGT Rate</h2>
       <p>
-        Whether you pay the basic or higher rate of CGT depends on your total
-        taxable income for the year. The process works as follows:
+        For 2025–26, start with your taxable income after your Personal
+        Allowance and any applicable income tax reliefs. If your tax
+        calculation already gives you taxable income, use that figure directly.
+        If you start with gross income, deduct the allowances and reliefs you
+        actually qualify for once. The standard Personal Allowance was £12,570,
+        but your allowance can differ.
       </p>
       <ol>
-        <li>
-          Calculate your total taxable income (salary, dividends, rental income,
-          etc.)
-        </li>
-        <li>
-          Subtract your Personal Allowance (£12,570 for 2025-26) to get your
-          taxable income
-        </li>
-        <li>
-          Check how much of the basic rate band (£37,700) you have remaining
-        </li>
-        <li>
-          Capital gains are &ldquo;stacked on top&rdquo; of your income — gains
-          that fall within the remaining basic rate band are taxed at 18%, gains
-          above are taxed at 24%
-        </li>
+        <li>Find the part of your basic-rate band left after taxable income.
+          The standard band was £37,700 for 2025–26.</li>
+        <li>Work out your taxable gains after allowable losses and any annual
+          exempt amount you qualify for.</li>
+        <li>Apply 18% to taxable share gains that fit in the remaining band
+          and 24% to the balance. <a href="https://www.gov.uk/capital-gains-tax/rates">
+            Check HMRC’s Capital Gains Tax rates</a>.</li>
       </ol>
+      <p>
+        For example, £36,000 of already-taxable income leaves £1,700 of the
+        standard band. With £10,000 of taxable share gains, the tax is
+        £306 on the first £1,700 and £1,992 on the remaining £8,300,
+        giving £2,298.
+      </p>
 
       <h3>Worked Example: Mixed Rate Calculation</h3>
       <p>
-        David has a salary of £45,000 and capital gains of £10,000 in the
-        2025-26 tax year.
+        David starts with a gross salary of £45,000 and share gains of £10,000
+        in 2025–26. He qualifies for the standard Personal Allowance and the
+        £3,000 annual exempt amount and has no other income, reliefs or losses.
       </p>
       <div className="bg-gray-50 border rounded-lg p-6 my-6 not-prose">
         <ul className="space-y-2 text-gray-700 text-sm">
@@ -238,11 +240,12 @@ export default function CGTRatesPage() {
 
       <h3>3. Offset Losses</h3>
       <p>
-        Capital losses can be offset against gains in the same tax year. If your
-        losses exceed your gains, the excess can be carried forward indefinitely
-        to offset future gains. Use our{" "}
-        <Link href="/tools/cgt-allowance-checker">CGT allowance checker</Link>{" "}
-        to see your current position.
+        Claim an allowable loss with HMRC, usually within four years after the
+        end of the tax year in which you made it. Deduct claimed losses from
+        gains in the same year first. If gains still exceed your annual exempt
+        amount, use claimed losses brought forward only to reduce gains to that
+        amount. Carry unused claimed losses forward.{" "}
+        <a href="https://www.gov.uk/capital-gains-tax/losses">Read HMRC’s guidance on claiming losses</a>.
       </p>
 
       <h3>4. Time Your Disposals</h3>

@@ -1,9 +1,9 @@
-import Decimal from "decimal.js";
+import { Money } from "../domain/values";
 import Link from "next/link";
 import { money, Notice } from "./primitives";
 import type { Calculation } from "../domain/cgt/types";
-import { noDisposalsLabel, reportIssueMessage, scopeStatement } from "../domain/reports/eligibility";
-import { displayDate, netOutcome } from "./format";
+import { noDisposalsLabel, reportIssueMessage, scopeStatement, unresolvedPoolIssues } from "../domain/reports/eligibility";
+import { displayDate, netOutcome, unitPrice } from "./format";
 import { SaleAmounts } from "./sale-amounts";
 import { DisposalDetail } from "./disposal-detail";
 import { disposalSourceKeys, type DisposalLocation } from "./disposal-location";
@@ -31,6 +31,8 @@ export function CalculationResult({
   confirmedAccounts: string[];
   settingsEdited: boolean;
 }) {
+  const unknownPools = unresolvedPoolIssues(result);
+  const blockingIssues = result.issues.filter(issue => issue.scope !== "pool");
   const noDisposals = result.disposals.length === 0;
   const previousDisposal = location?.runId === runId ? result.disposals[location.disposal] : undefined;
   const target = previousDisposal && location && location.source < disposalSourceKeys(previousDisposal).length
@@ -98,18 +100,18 @@ export function CalculationResult({
           {displayDate(result.requiredHistoryThrough)}.
         </Notice>
       )}
-      {!!result.issues.length && (
+      {!!blockingIssues.length && (
         <Notice tone="error">
           <strong>Review the calculation issues.</strong>
           <ul>
-            {result.issues.map((issue, i) => (
+            {blockingIssues.map((issue, i) => (
               <li key={i}>
                 {issue.securityId} · {displayDate(issue.date)} · {issue.quantity} shares.{" "}
                 {reportIssueMessage(issue)}
               </li>
             ))}
           </ul>
-          {result.issues.some(i => i.code === "MISSING_ACQUISITION_HISTORY") && (
+          {blockingIssues.some(i => i.code === "MISSING_ACQUISITION_HISTORY") && (
             <Link className="button secondary" href={"/dashboard/upload?year=" + encodeURIComponent(result.taxYear)}>Upload earlier acquisitions</Link>
           )}
         </Notice>
@@ -286,30 +288,33 @@ export function CalculationResult({
             <thead>
               <tr>
                 <th>Asset</th>
-                <th>Total Shares</th>
+                <th>Shares in tax pool</th>
                 <th>Total Allowable Cost</th>
                 <th>Cost Per Share</th>
               </tr>
             </thead>
             <tbody>
-              {result.pools.length ? (
-                result.pools.map((p) => (
-                  <tr key={p.securityId}>
-                    <td>{p.securityId}</td>
-                    <td>{p.quantity}</td>
-                    <td>{money(p.costGBP)}</td>
-                    <td>
-                      {new Decimal(p.quantity).gt(0)
-                        ? money(
-                            new Decimal(p.costGBP).div(p.quantity).toFixed(8),
-                          )
-                        : "—"}
-                    </td>
-                  </tr>
-                ))
-              ) : (
+              {result.pools.map((p) => (
+                <tr key={p.securityId}>
+                  <td>{p.securityId}</td>
+                  <td>{p.quantity}</td>
+                  <td>{money(p.costGBP)}</td>
+                  <td>
+                    {new Money(p.quantity).gt(0)
+                      ? unitPrice(new Money(p.costGBP).div(p.quantity).toString())
+                      : "—"}
+                  </td>
+                </tr>
+              ))}
+              {unknownPools.map(issue => (
+                <tr key={issue.securityId}>
+                  <td>{issue.securityId}</td>
+                  <td colSpan={3}>Tax-pool balance unresolved. {reportIssueMessage(issue)}</td>
+                </tr>
+              ))}
+              {!result.pools.length && !unknownPools.length && (
                 <tr>
-                  <td colSpan={4}>No active holdings in this snapshot.</td>
+                  <td colSpan={4}>No remaining Section 104 pool balances.</td>
                 </tr>
               )}
             </tbody>

@@ -10,8 +10,7 @@ export async function POST(request: Request) {
     return await createReportHandler({
       origin: app.origin,
       readSession: (headers) => app.auth.api.getSession({ headers }),
-      sources: (identity, keys) => app.workspace.reportSources(identity, keys),
-      snapshot: (identity, id) => app.workspace.reportSnapshot(identity, id),
+      snapshot: (identity, id, kind) => app.workspace.reportSnapshot(identity, id, kind),
       consume: (identity) =>
         app.workspace.consumeRequest(identity, "calculate"),
       entitled: async (identity) =>

@@ -1,4 +1,5 @@
 "use client";
+import { CURRENT_SCOPE_DECLARATION } from "../domain/cgt/types";
 
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
@@ -399,14 +400,16 @@ function WorkspaceBody({
     const next: Record<string, string> = {};
     try {
       calendarDate(historyThrough);
-      if (historyThrough > ukCalendarDate(new Date()))
+      if (historyThrough < TAX_YEARS[taxYear].start)
+        next.historyThrough = `Choose ${TAX_YEARS[taxYear].start} or later to include the selected tax year.`;
+      else if (historyThrough > ukCalendarDate(new Date()))
         next.historyThrough = "Choose today or an earlier date.";
     } catch {
       next.historyThrough =
         "Use a valid date in YYYY-MM-DD format.";
     }
-    if (values.get("personalScopeConfirmed") !== "on")
-      next.personalScopeConfirmed = "Confirm the ownership and residence statement, or contact support if it does not fit your history.";
+    if (values.get("personalScopeConfirmed") !== CURRENT_SCOPE_DECLARATION)
+      next.personalScopeConfirmed = "Confirm your ownership, residence and transaction types, or ask support for a specialist review.";
     setErrors(next);
     if (Object.keys(next).length) {
       focusFirstError(form, next);
@@ -421,7 +424,8 @@ function WorkspaceBody({
           taxYear,
           historyThrough,
           confirmedAccountIds: values.getAll("confirmedAccountIds"),
-          personalScopeConfirmed: values.get("personalScopeConfirmed") === "on",
+          personalScopeConfirmed: values.get("personalScopeConfirmed") === CURRENT_SCOPE_DECLARATION,
+          scopeDeclaration: values.get("personalScopeConfirmed"),
         });
       } catch (caught) {
         if (caught instanceof ApiError && caught.code === "PORTFOLIO_CHANGED") {
@@ -1132,12 +1136,12 @@ function WorkspaceBody({
                         Confirm each account up to the date above. Changing that date clears the checkboxes.
                       </p>
                       <label className="checkbox-label">
-                        <input key={`${taxYear}-${historyThrough}-${data.portfolio.revision}`} type="checkbox" name="personalScopeConfirmed"
+                        <input key={`${taxYear}-${historyThrough}-${data.portfolio.revision}`} type="checkbox" name="personalScopeConfirmed" value={CURRENT_SCOPE_DECLARATION}
                           disabled={busy} aria-invalid={!!errors.personalScopeConfirmed}
                           aria-describedby={errors.personalScopeConfirmed ? "scope-error scope-help" : "scope-help"} />
-                        <span>I owned these shares personally in the same capacity and was UK resident throughout the trading history used for this calculation, including later repurchases.</span>
+                        <span>I owned these shares personally in the same capacity and was UK resident throughout the matching history, including later repurchases. The trades used here were ordinary market purchases or sales at arm’s length.</span>
                       </label>
-                      <p id="scope-help" className="caption">Joint or trust holdings, short sales and changes of residence need a specialist review. <Link className="underline" href="/dashboard/contact">Ask about your records</Link>.</p>
+                      <p id="scope-help" className="caption">Private or connected-party deals (including sales to family), gifts, transfers, employee awards and other special tax bases need specialist review. The same applies to joint or trust holdings, short sales and changes of residence. <Link className="underline" href="/dashboard/contact">Ask about your records</Link>.</p>
                       {errors.personalScopeConfirmed && <p id="scope-error" role="alert">{errors.personalScopeConfirmed}</p>}
                       {settingsEdited && currentCalculation && (
                         <Notice tone="warning">

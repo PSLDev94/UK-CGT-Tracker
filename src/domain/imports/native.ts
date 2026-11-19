@@ -95,6 +95,20 @@ function trade(
     "Asset type": "ORDINARY_SHARE",
   };
 }
+// Cash rows have their own schemas. A transaction ID can identify a deposit,
+// and a dividend can quote eligible shares and the distribution per share.
+const ftCashFields = ["Title", "Type", "Timestamp", "Account Currency", "Total Amount", "Order ID"];
+const ftDividendFields = [...ftCashFields, "Ticker", "ISIN", "Quantity", "Instrument Currency", "Base FX Rate", "FX Rate",
+  "Dividend Ex Date", "Dividend Pay Date", "Dividend Eligible Quantity", "Dividend Amount Per Share",
+  "Dividend Gross Distribution Amount", "Dividend Net Distribution Amount", "Dividend Withheld Tax Percentage", "Dividend Withheld Tax Amount"];
+const t212CashFields = ["Action", "Time", "Time (UTC)", "Notes", "ID", "Total", "Currency (Total)"];
+const t212DividendFields = [...t212CashFields, "Ticker", "Name", "ISIN", "No. of shares", "Price / share",
+  "Currency (Price / share)", "Withholding tax", "Currency (Withholding tax)", "Exchange rate"];
+function validateCashFields(row: Row, allowed: string[], optionalZero: string[] = []) {
+  const unexpected = Object.keys(row).find(key => row[key] && !allowed.includes(key) &&
+    !(optionalZero.includes(key) && /^0(?:[.]0+)?$/.test(row[key]!)));
+  if (unexpected) throw new Error(`A cash activity contains an unexpected ${unexpected} value. Check the original statement and execution details before excluding it.`);
+}
 const freetrade: NativeAdapter = {
   version: "freetrade-activity-29-gbp-v1",
   idColumn: "Order ID",
@@ -124,7 +138,14 @@ const freetrade: NativeAdapter = {
       DIVIDEND: "CASH_DIVIDEND",
       INTEREST_FROM_CASH: "CASH_INTEREST",
     };
-    if (exclusions[r.Type!]) return { Type: exclusions[r.Type!]! };
+    if (exclusions[r.Type!]) {
+      const dividend = r.Type === "DIVIDEND";
+      validateCashFields(r, dividend ? ftDividendFields : ftCashFields, ["Stamp Duty", "FX Fee (BPS)", "FX Fee Amount"]);
+      if (dividend && r.Quantity && r["Dividend Eligible Quantity"] &&
+          !decimal(r.Quantity, "Dividend quantity").eq(decimal(r["Dividend Eligible Quantity"], "Eligible quantity")))
+        throw new Error("The share quantity differs from the dividend entitlement. Review the original activity before excluding it.");
+      return { Type: exclusions[r.Type!]! };
+    }
     if (r.Type !== "ORDER")
       throw new Error(
         `Freetrade activity “${r.Type}” needs review. Free shares, pending orders, transfers and corporate actions are not ordinary purchases or sales.`,
@@ -233,9 +254,9 @@ const freetrade: NativeAdapter = {
       ukTradeDate(r.Timestamp!),
       r["Buy / Sell"],
       r.ISIN!,
-      quantity.toString(),
-      gross.toString(),
-      fees.toString(),
+      quantity.toFixed(),
+      gross.toFixed(),
+      fees.toFixed(),
     );
   },
 };
@@ -250,7 +271,14 @@ const trading212: NativeAdapter = {
       "Dividend (Dividend)": "CASH_DIVIDEND",
       "Interest on cash": "CASH_INTEREST",
     };
-    if (exclusions[r.Action!]) return { Type: exclusions[r.Action!]! };
+    if (exclusions[r.Action!]) {
+      const dividend = r.Action === "Dividend (Dividend)";
+      validateCashFields(r, dividend ? t212DividendFields : t212CashFields,
+        ["Transaction fee", "Currency conversion fee", "Stamp duty reserve tax", "French transaction tax", "Finra fee"]);
+      if (dividend && r.ID && r["No. of shares"] && r["Price / share"] && !r["Withholding tax"])
+        throw new Error("This dividend carries an execution identifier, quantity and price without supporting distribution fields. Verify the activity against the dividend statement before excluding it.");
+      return { Type: exclusions[r.Action!]! };
+    }
     if (!this.isTrade(r))
       throw new Error(
         `Trading 212 activity “${r.Action}” needs review. Corporate actions, distributions and adjustments must not be silently excluded.`,
@@ -319,9 +347,9 @@ const trading212: NativeAdapter = {
       ukTradeDate(r.Time!.replace(" ", "T") + "Z"),
       r.Action!.endsWith("buy") ? "BUY" : "SELL",
       r.ISIN!,
-      quantity.toString(),
-      gross.toString(),
-      fees.toString(),
+      quantity.toFixed(),
+      gross.toFixed(),
+      fees.toFixed(),
     );
   },
 };
@@ -385,7 +413,7 @@ const trading212Current: NativeAdapter = {
         ...r,
         Time: time,
         "Exchange rate": r["Exchange rate"] || (foreign ? "" : "1"),
-        "Transaction fee": fees.toDP(2).toString(),
+        "Transaction fee": fees.toDP(2).toFixed(),
         "Currency (Transaction fee)": "GBP",
         "Currency conversion fee": "",
         "Currency (Currency conversion fee)": "",

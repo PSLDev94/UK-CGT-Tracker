@@ -5,7 +5,7 @@ import Link from "next/link";
 import { BarChart3, Plus, Trash2, Calculator } from "lucide-react";
 import type Decimal from "decimal.js";
 import { Money } from "@/domain/values";
-import { money } from "@/ui/format";
+import { money, unitPrice } from "@/ui/format";
 import { SaleAmounts } from "@/ui/sale-amounts";
 import { CalculatorUploadLink } from "@/components/calculator-upload-link";
 import { PublicNav } from "@/components/public-nav";
@@ -349,7 +349,7 @@ export default function Section104CalculatorPage() {
                           £{ps.totalCost.toFixed(2)}
                         </td>
                         <td className="px-3 py-2 text-right">
-                          £{ps.avgCost.toFixed(2)}
+                          {unitPrice(ps.avgCost.toString())}
                         </td>
                       </tr>
                     ))}
@@ -378,7 +378,7 @@ export default function Section104CalculatorPage() {
                     Avg Cost/Share
                   </p>
                   <p className="text-xl font-bold text-gray-900">
-                    £{avgCostPerShare.toFixed(2)}
+                    {unitPrice(avgCostPerShare.toString())}
                   </p>
                 </div>
               </div>
@@ -510,7 +510,7 @@ export default function Section104CalculatorPage() {
           <h2>How the Section 104 Pool Calculator Works</h2>
           <p>
             This calculator uses <strong>precise decimal arithmetic</strong>{" "}
-            (the same library as our main CGT engine) to avoid floating-point
+            to avoid floating-point
             rounding errors that can affect gain calculations. Each purchase you
             add increases the pool&apos;s total shares and total cost. The
             average cost per share is recalculated after each addition.

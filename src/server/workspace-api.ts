@@ -249,6 +249,7 @@ export function createWorkspaceHandler(
               historyThrough: text("historyThrough"),
               confirmedAccountIds: input.confirmedAccountIds,
               personalScopeConfirmed: input.personalScopeConfirmed === true,
+              scopeDeclaration: typeof input.scopeDeclaration === "string" ? input.scopeDeclaration : undefined,
             });
           recordJourney(calculation.result.status === "complete" && calculation.coverageConfirmed ? "calculation_complete" : "calculation_incomplete");
           // The PDF and CSV readers load the full pool ledger from the stored run.

@@ -1,4 +1,4 @@
-import { noDisposalsLabel, reportIssueMessage, scopeStatement } from "./eligibility";
+import { noDisposalsLabel, reportIssueMessage, scopeStatement, unresolvedPoolIssues } from "./eligibility";
 export { reportIssueMessage } from "./eligibility";
 import {
   saleBreakdownUnavailable,
@@ -16,6 +16,22 @@ export interface ReportSource {
   reference: string | null;
   statementReference?: string | null;
   importReference?: string;
+  sterlingSettlement?: {
+    instrumentCurrency: string;
+    quantity: string;
+    price: string;
+    gbpPerUnit: string;
+    considerationGBP: string;
+    feesGBP: string;
+  } | null;
+  conversion?: {
+    currency: string;
+    consideration: string;
+    fees: string;
+    gbpPerUnit: string;
+    considerationGBP: string;
+    feesGBP: string;
+  } | null;
 }
 export interface ReportSnapshot {
   sources?: ReportSource[];
@@ -117,13 +133,14 @@ export function reportCsv(snapshot: ReportSnapshot): string {
       ]),
     ),
     [],
-    ["Pool date", "ISIN", "Quantity", "Pool cost GBP"],
+    ["Pool date", "ISIN", "Section 104 pool quantity", "Pool cost GBP"],
     ...r.pools.map((p) => [
       r.poolAsOf,
       p.securityId,
       numberCell(p.quantity),
       numberCell(p.costGBP),
     ]),
+    ...unresolvedPoolIssues(r).map(issue => [r.poolAsOf, issue.securityId, "UNRESOLVED", "UNRESOLVED"]),
     [],
     ["Issue", "ISIN", "Date", "Quantity"],
     ...r.issues.map((i) => [
@@ -222,6 +239,26 @@ export function reportCsv(snapshot: ReportSnapshot): string {
         source.statementReference ?? "",
         source.importReference ?? "",
       ]);
+  }
+  const convertedSources = snapshot.sources?.filter(source => source.conversion);
+  if (convertedSources?.length) {
+    rows.push([], ["Transaction currency conversions"],
+      ["Trace reference", "Source currency", "Source consideration", "Source fees", "GBP per currency unit", "Converted consideration GBP", "Converted fees GBP"]);
+    for (const source of convertedSources) {
+      const fx = source.conversion!;
+      rows.push([source.key, fx.currency, numberCell(fx.consideration), numberCell(fx.fees),
+        numberCell(fx.gbpPerUnit), numberCell(fx.considerationGBP), numberCell(fx.feesGBP)]);
+    }
+  }
+  const settledSources = snapshot.sources?.filter(source => source.sterlingSettlement);
+  if (settledSources?.length) {
+    rows.push([], ["Foreign executions settled in GBP"],
+      ["Trace reference", "Instrument currency", "Quantity", "Price per share in instrument currency", "Verified GBP per currency unit", "Settled consideration GBP", "Fees GBP"]);
+    for (const source of settledSources) {
+      const trade = source.sterlingSettlement!;
+      rows.push([source.key, trade.instrumentCurrency, numberCell(trade.quantity), numberCell(trade.price),
+        numberCell(trade.gbpPerUnit), numberCell(trade.considerationGBP), numberCell(trade.feesGBP)]);
+    }
   }
   const differences = roundingDifferences(r);
   if (differences.length) {

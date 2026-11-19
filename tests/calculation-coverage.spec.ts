@@ -31,6 +31,32 @@ const purchase: Trade = {
 };
 const cutoff = "2025-05-05";
 
+test("the selected year and ordinary-market declaration must both apply before calculating", async ({ page }) => {
+  const { datedSubmissions } = await workspace(page, [{ ...purchase, date: "2024-04-06" }, sale], true);
+  await page.goto("/dashboard/calculations?year=2024-25");
+  const date = page.getByLabel("History complete through");
+  const declaration = page.getByRole("checkbox", { name: /ordinary market purchases or sales at arm’s length/ });
+  const submit = page.getByRole("button", { name: "Recalculate", exact: true });
+  await date.fill("2024-04-05");
+  await declaration.check();
+  await submit.click();
+  await expect(date).toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByText(/2024-04-06 or later/)).toBeVisible();
+  expect(datedSubmissions).toHaveLength(0);
+  await date.fill("2024-04-06");
+  await submit.click();
+  await expect(declaration).toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByText(/connected-party deals/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Ask about your records" })).toHaveAttribute("href", "/dashboard/contact");
+  expect(datedSubmissions).toHaveLength(0);
+  await declaration.check();
+  const request = page.waitForRequest(req => req.url().endsWith("/api/v2/workspace") && req.postDataJSON()?.action === "calculate");
+  await submit.click();
+  expect((await request).postDataJSON()).toMatchObject({
+    historyThrough: "2024-04-06", personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2",
+  });
+});
+
 test("saved receipts offer only their disposal years and preserve an explicit different year", async ({ page }) => {
   const { state } = await workspace(page, [], true);
   state.accounts.push({ ...account, id: "other", label: "Other account" });
@@ -129,7 +155,7 @@ async function workspace(page: Page, trades: Trade[], confirmed: boolean) {
   const run = (year: TaxYear, date: string, ids: string[]) => ({
     id: "run-" + year,
     tax_year: year,
-    result: calculateGains(trades, { taxYear: year, historyThrough: date }),
+    result: calculateGains(trades.filter(trade => trade.date <= date), { taxYear: year, historyThrough: date }),
     coverage_confirmed: ids.includes(account.id),
     coverage_accounts: ids,
   });
@@ -323,7 +349,7 @@ test("editing saved coverage hides old figures until recalculated and isolates t
     page.getByLabel("Your scenario price (£) for " + sale.securityId),
   ).toBeDisabled();
   await expect(
-    page.getByRole("heading", { name: "Illustrative Holding Scenarios" }),
+    page.getByRole("heading", { name: "Illustrative tax-pool values" }),
   ).toHaveCount(0);
 });
 
@@ -391,7 +417,7 @@ test("missing purchase recovery preserves the year through upload, preview, save
   await expect(page.getByText(/Account coverage confirmed/)).toBeVisible();
   await page.getByLabel("Your scenario price (£) for " + sale.securityId).fill("20");
   await expect(
-    page.getByRole("heading", { name: "Illustrative Holding Scenarios" }),
+    page.getByRole("heading", { name: "Illustrative tax-pool values" }),
   ).toBeVisible();
 });
 
@@ -524,11 +550,55 @@ test("a rate-limited checkout return explains when to retry and restores the sel
   expect(checks).toBe(2);
 });
 
+test("the scenario values tax-pool shares after a year-end repurchase and rounds only the final amounts", async ({ page }) => {
+  const { state } = await workspace(page, [
+    { ...purchase, quantity: "10", considerationGBP: "100" },
+    { ...sale, date: "2025-04-03", quantity: "10", considerationGBP: "300" },
+    { ...purchase, id: "repurchase", date: "2025-04-23", quantity: "10", considerationGBP: "200" },
+  ], true);
+  await page.goto("/dashboard/tax-loss-harvesting");
+  const pool = page.getByRole("region", { name: "Section 104 pool scenario" });
+  await expect(pool).toContainText("Shares in tax pool");
+  await expect(page.getByText(/broker account held none on the snapshot date/)).toBeVisible();
+  const price = pool.getByRole("textbox");
+  await price.fill("15");
+  await expect(page.getByText("Tax-pool value £150.00 · difference from pool cost £50.00")).toBeVisible();
+  state.calculations[0]!.result = calculateGains([
+    { ...purchase, quantity: "5.25", considerationGBP: "5.25" },
+  ], { taxYear: "2024-25", historyThrough: cutoff });
+  await page.reload();
+  for (const [input, value, difference] of [
+    ["1.00095238", "5.25", "£0.00"],
+    ["0.99904762", "5.25", "£0.00"],
+    ["1.00095239", "5.26", "£0.01"],
+    ["0.99904761", "5.24", "−£0.01"],
+  ] as const) {
+    await price.fill(input);
+    await expect(page.getByText(`Tax-pool value £${value} · difference from pool cost ${difference}`)).toBeVisible();
+  }
+});
+
+test("calculation and scenario show an unknown tax-pool balance separately from zero", async ({ page }) => {
+  await workspace(page, [
+    { ...purchase, quantity: "1" },
+    { ...sale, quantity: "2" },
+    { ...purchase, id: "later-buy", date: "2024-12-01", quantity: "12" },
+  ], true);
+  await page.goto("/dashboard/calculations");
+  const calcPool = page.getByRole("region", { name: "Section 104 pool snapshot" });
+  await expect(calcPool).toContainText(sale.securityId);
+  await expect(calcPool).toContainText("Tax-pool balance unresolved");
+  await page.goto("/dashboard/tax-loss-harvesting");
+  const scenario = page.getByRole("region", { name: "Section 104 pool scenario" });
+  await expect(scenario).toContainText("Tax-pool balance unresolved");
+  await expect(scenario.getByRole("textbox")).toHaveCount(0);
+});
+
 test("scenario prices and their labels are visible without sideways scrolling on narrow screens", async ({ page }) => {
   const { state } = await workspace(page, [purchase, sale], true);
   state.instrumentNames = { [sale.securityId]: "Apple Inc" };
   await page.goto("/dashboard/tax-loss-harvesting");
-  const holding = page.getByRole("region", { name: "Holding scenario" });
+  const holding = page.getByRole("region", { name: "Section 104 pool scenario" });
   const price = holding.getByRole("textbox", { name: "Your scenario price (£) for Apple Inc · US0378331005" });
   for (const width of [320, 390, 820]) {
     await page.setViewportSize({ width, height: 844 });
@@ -540,7 +610,7 @@ test("scenario prices and their labels are visible without sideways scrolling on
     await expect(holding.locator('label[for]')).toBeVisible();
   }
   await price.fill("30");
-  await expect(page.getByText(/Scenario value £30.00/)).toBeVisible();
+  await expect(page.getByText(/Tax-pool value £30.00/)).toBeVisible();
   await expect(page.getByText("Apple Inc · US0378331005", { exact: true })).toHaveCount(2);
   await price.fill("-1");
   await expect(price).toHaveAccessibleDescription(/Use a non-negative decimal/);

@@ -112,11 +112,11 @@ describe("auditable report exports", () => {
       expect(content).toContain("Supporting evidence: STATEMENT-10");
     }
   });
-  it("records the saved residence and ownership declaration in all exports", async () => {
-    const saved: ReportSnapshot = { ...snapshot, result: { ...snapshot.result, scopeDeclaration: "personal-uk-resident-v1" } };
+  it("records the saved residence, ownership and ordinary-market declaration in all exports", async () => {
+    const saved: ReportSnapshot = { ...snapshot, result: { ...snapshot.result, scopeDeclaration: "personal-market-trades-v2" } };
     for (const content of [reportCsv(saved), ...await Promise.all([false, true].map(async evidence =>
       reportPageText(await PDFDocument.load(await reportPdf(saved, evidence)))))]) {
-      expect(content.replace(/\s+/g, " ")).toContain("personal ownership in the same capacity and UK residence throughout the matching history, including later repurchases");
+      expect(content.replace(/\s+/g, " ")).toContain("personal ownership in the same capacity, UK residence throughout the matching history including later repurchases, and ordinary market purchases or sales at arm");
     }
     expect(reportCsv(snapshot)).toContain("no recorded ownership and UK residence declaration");
   });
@@ -183,6 +183,28 @@ describe("auditable report exports", () => {
       expect(content).not.toContain("Upload the earlier purchases");
       expect(content).not.toContain("£500.00");
     }
+  });
+  it("identifies each unresolved tax pool separately from genuinely empty and evidenced pools", async () => {
+    const share = { securityId: "US0378331005", quantity: "1", feesGBP: "0" };
+    const buy = { ...share, id: "first", date: "2024-05-03", side: "BUY", considerationGBP: "10" } as const;
+    const sell = { ...share, id: "sale", date: "2024-09-10", side: "SELL", considerationGBP: "40" } as const;
+    const options = { taxYear: "2024-25", historyThrough: "2025-05-05" } as const;
+    const result = calculateGains([
+      buy,
+      { ...sell, quantity: "2" },
+      { ...buy, id: "later-buy", date: "2024-11-20", quantity: "12", considerationGBP: "120" },
+      { ...buy, id: "separate-share", securityId: "GB0008706128" },
+    ], options);
+    const saved = { ...snapshot, result };
+    const csv = Papa.parse<string[]>(reportCsv(saved)).data;
+    expect(csv).toContainEqual(["2025-04-05", share.securityId, "UNRESOLVED", "UNRESOLVED"]);
+    expect(csv).toContainEqual(["2025-04-05", "GB0008706128", "1", "10"]);
+    const text = reportPageText(await PDFDocument.load(await reportPdf(saved, true)));
+    expect(text).toContain(share.securityId + " · Tax-pool balance unresolved.");
+    expect(text).not.toContain("No remaining pool balances.");
+    const closed = { ...snapshot, result: calculateGains([buy, sell], options) };
+    expect(reportPageText(await PDFDocument.load(await reportPdf(closed, true)))).toContain("No remaining pool balances.");
+    expect(reportCsv(closed)).not.toContain("UNRESOLVED");
   });
   it.each([
     { name: "gain", proceeds: [15], gains: ["5.00"], net: "5.00" },

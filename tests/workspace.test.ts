@@ -66,6 +66,45 @@ describe("authenticated PostgreSQL application workflow", () => {
     ).rejects.toMatchObject({ status: 401 });
   });
 
+  it("exports one revision's transaction references when a receipt is reversed during a PDF download", async () => {
+    const { user, account, portfolio } = await setup("concurrent-report-reversal");
+    const draft = await prepare(user, account.id);
+    await workspace.commitImport(user, draft.draftId, draft.revision);
+    const run = await workspace.calculate(user, {
+      portfolioId: portfolio.id, taxYear: "2024-25", historyThrough: "2025-05-05",
+      confirmedAccountIds: [account.id], personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2",
+    });
+    const handler = createReportHandler({
+      origin: "https://cgt.test",
+      readSession: async () => ({
+        user: { id: user.ownerId, emailVerified: true },
+        session: { expiresAt: new Date(Date.now() + 60_000) },
+      }),
+      snapshot: (identity, id, kind) => workspace.reportSnapshot(identity, id, kind),
+      consume: async () => {},
+      entitled: async () => {
+        await workspace.reverseImport(user, draft.draftId, "Replace the synthetic source file");
+        return true;
+      },
+    });
+    const download = (kind: string) => handler(new Request("https://cgt.test/api/v2/reports", {
+      method: "POST", headers: { origin: "https://cgt.test", "content-type": "application/json" },
+      body: JSON.stringify({ runId: run.runId, kind }),
+    }));
+    const csv = await download("csv");
+    expect(csv.status).toBe(200);
+    const rows = Papa.parse<string[]>(await csv.text()).data;
+    expect(rows.some(row => row.slice(1).join("|") === "USD|1000|10|0.8|800|8")).toBe(true);
+    const document = await download("evidence");
+    expect(document.status).toBe(200);
+    const text = reportPageText(await PDFDocument.load(await document.arrayBuffer())).replace(/\s+/g, " ");
+    expect(text).toContain("Execution reference: synthetic-sell");
+    expect(text).toContain("Execution reference: synthetic-buy");
+    expect(text).toContain("USD 1000 consideration and 10 fees");
+    expect((await download("csv")).status).toBe(404);
+    expect((await download("evidence")).status).toBe(404);
+  });
+
   it("creates one shared portfolio across repeated visits", async () => {
     const user = await owner("one-portfolio");
     const first = await workspace.overview(user);
@@ -85,7 +124,7 @@ describe("authenticated PostgreSQL application workflow", () => {
     expect(await receipt(purchase.draftId)).toMatchObject({ accepted_count: 1, disposalYears: [] });
     const target = { year: "2024-25", format: "summary" } as const;
     await workspace.calculate(s.user, {
-      portfolioId: s.portfolio.id, taxYear: target.year, historyThrough: "2025-05-05", personalScopeConfirmed: true, confirmedAccountIds: [s.account.id],
+      portfolioId: s.portfolio.id, taxYear: target.year, historyThrough: "2025-05-05", personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2", confirmedAccountIds: [s.account.id],
     });
     for (const format of ["summary", "evidence"] as const) {
       expect(await workspace.selectedReportIssue(s.user, { ...target, format }, "purchase")).toMatchObject({ code: "NO_DISPOSALS" });
@@ -340,7 +379,7 @@ describe("authenticated PostgreSQL application workflow", () => {
       portfolioId: s.portfolio.id,
       taxYear: "2024-25",
       historyThrough: "2025-05-05",
-      personalScopeConfirmed: true,
+      personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2",
       confirmedAccountIds: [s.account.id],
     };
     const calculation = await workspace.calculate(s.user, input);
@@ -385,13 +424,13 @@ describe("authenticated PostgreSQL application workflow", () => {
     expect(first.affectedReportYears).toEqual([]);
     await workspace.commitImport(s.user, first.draftId, first.revision);
     const input = {
-      portfolioId: s.portfolio.id, historyThrough: "2026-05-05", personalScopeConfirmed: true, confirmedAccountIds: [s.account.id],
+      portfolioId: s.portfolio.id, historyThrough: "2026-05-05", personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2", confirmedAccountIds: [s.account.id],
     };
     const years = ["2025-26", "2024-25"];
     const oldIds = [];
     for (const taxYear of years) oldIds.push((await workspace.calculate(s.user, { ...input, taxYear })).runId);
     // Reusing inputs republishes their immutable run, even if a later run exists.
-    await workspace.calculate(s.user, { ...input, taxYear: "2024-25", historyThrough: "2025-05-05", personalScopeConfirmed: true, confirmedAccountIds: [] });
+    await workspace.calculate(s.user, { ...input, taxYear: "2024-25", historyThrough: "2025-05-05", personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2", confirmedAccountIds: [] });
     expect((await workspace.calculate(s.user, { ...input, taxYear: "2024-25" })).runId).toBe(oldIds[1]);
     const earlier = csv.replaceAll("2024-", "2023-").replaceAll("synthetic-", "earlier-");
     const addition = await prepare(s.user, s.account.id, earlier);
@@ -442,7 +481,7 @@ describe("authenticated PostgreSQL application workflow", () => {
         portfolioId: s.portfolio.id,
         taxYear: "2024-25",
         historyThrough: "2025-05-05",
-        personalScopeConfirmed: true,
+        personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2",
         confirmedAccountIds: [s.account.id],
       };
       expect((await workspace.calculate(s.user, input)).result.status).toBe(
@@ -463,7 +502,7 @@ describe("authenticated PostgreSQL application workflow", () => {
       portfolioId: s.portfolio.id,
       taxYear: "2024-25",
       historyThrough: "2025-05-05",
-      personalScopeConfirmed: true,
+      personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2",
       confirmedAccountIds: [],
     };
     await expect(workspace.calculate(s.user, input)).rejects.toMatchObject({
@@ -734,7 +773,7 @@ it("returns the imported instrument name for scenario holdings only", async () =
   expect((await workspace.commitImport(user, prepared.draftId, prepared.revision)).outcome).toBe("committed");
   const run = await workspace.calculate(user, {
     portfolioId: portfolio.id, taxYear: "2024-25", historyThrough: "2025-05-05",
-    personalScopeConfirmed: true, confirmedAccountIds: [account.id],
+    personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2", confirmedAccountIds: [account.id],
   });
   expect(run.result.pools).toHaveLength(1);
   expect(await workspace.overview(user)).not.toHaveProperty("instrumentNames");
@@ -744,11 +783,13 @@ it("returns the imported instrument name for scenario holdings only", async () =
 });
 
 describe("report ownership and assisted draft concurrency", () => {
-  it.each(["2.0.0-alpha.1", "2.0.0-alpha.2", "2.0.0-alpha.3"])("preserves %s history and requires a new calculation before purchase or download", async (version) => {
+  it.each(["2.0.0-alpha.1", "2.0.0-alpha.2", "2.0.0-alpha.3", "2.0.0-alpha.4"])("preserves %s history and requires a new calculation before purchase or download", async (version) => {
     const s = await setup("legacy-report-" + version);
     const draft = await prepare(s.user, s.account.id);
     await workspace.commitImport(s.user, draft.draftId, draft.revision);
-    const input = { portfolioId: s.portfolio.id, taxYear: "2024-25", historyThrough: "2025-05-05", personalScopeConfirmed: true, confirmedAccountIds: [s.account.id] };
+    const input = { portfolioId: s.portfolio.id, taxYear: "2024-25", historyThrough: "2025-05-05", personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2", confirmedAccountIds: [s.account.id] };
+    await expect(workspace.calculate(s.user, { ...input, scopeDeclaration: undefined })).rejects.toMatchObject({ code: "SCOPE_CONFIRMATION_REQUIRED" });
+    await expect(workspace.calculate(s.user, { ...input, scopeDeclaration: "personal-uk-resident-v1" })).rejects.toMatchObject({ code: "SCOPE_CONFIRMATION_REQUIRED" });
     await expect(workspace.calculate(s.user, { ...input, personalScopeConfirmed: false })).rejects.toMatchObject({ code: "SCOPE_CONFIRMATION_REQUIRED" });
     const run = await workspace.calculate(s.user, input);
     const legacy = { ...run.result, engineVersion: version, scopeDeclaration: undefined };
@@ -766,17 +807,55 @@ describe("report ownership and assisted draft concurrency", () => {
     await expect(workspace.reportSnapshot(s.user, run.runId)).rejects.toMatchObject({ code: "REPORT_UNAVAILABLE" });
     const refreshed = await workspace.calculate(s.user, input);
     expect(refreshed.runId).not.toBe(run.runId);
-    expect((await workspace.reportSnapshot(s.user, refreshed.runId)).result).toMatchObject({ scopeDeclaration: "personal-uk-resident-v1" });
+    expect((await workspace.reportSnapshot(s.user, refreshed.runId)).result).toMatchObject({ scopeDeclaration: "personal-market-trades-v2" });
     const raw = await new OwnedDatabase(database.db).run(s.user, (tx) =>
       query<{ engine_version: string }>(tx, "SELECT engine_version FROM cgt.calculation_runs WHERE id=$1", [run.runId]),
     );
     expect(raw[0]?.engine_version).toBe(version);
   });
+  it("retains original FX below a half-penny boundary when saving and when reading an older conversion", async () => {
+    const s = await setup("precise-fx-readback");
+    const file = [
+      csv.split("\n")[0],
+      "original,2024-06-01,BUY,US0378331005,1,451.66665,0,USD,0.81300003,ORDINARY_SHARE",
+      "sale,2024-10-01,SELL,US0378331005,1,400,0,GBP,1,ORDINARY_SHARE",
+    ].join("\n");
+    const draft = await prepare(s.user, s.account.id, file);
+    expect(draft.review.records[0]?.trade?.considerationGBP).toBe("367.2049999999995");
+    await workspace.commitImport(s.user, draft.draftId, draft.revision);
+    const inputs = { portfolioId: s.portfolio.id, taxYear: "2024-25", historyThrough: "2025-05-05",
+      confirmedAccountIds: [s.account.id], personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2" };
+    const run = await workspace.calculate(s.user, inputs);
+    expect(run.result.summary).toMatchObject({ allowableCostsGBP: "367.20", netGainGBP: "32.80" });
+    const owned = new OwnedDatabase(database.db);
+    await owned.run(s.user, async tx => {
+      const [trade] = await query<{ amount: string }>(tx,
+        "SELECT trim_scale(consideration_gbp)::text AS amount FROM cgt.transactions WHERE side='BUY'");
+      expect(trade?.amount).toBe("367.2049999999995");
+      await query(tx, "UPDATE cgt.transactions SET consideration_gbp=round(consideration_gbp,12) WHERE side='BUY'");
+    });
+    const legacy = await workspace.calculate(s.user, inputs);
+    expect(legacy.result.summary).toEqual(run.result.summary);
+    const [ledger] = await owned.run(s.user, tx => query<{ original: string; supported: string; ambiguous: string }>(tx,
+      `SELECT consideration_gbp::text AS original, cgt.ledger_gbp(consideration_gbp,provenance->>'consideration',provenance->>'gbpPerUnit')::text AS supported,
+      cgt.ledger_gbp(consideration_gbp,'1.00','1')::text AS ambiguous FROM cgt.transactions WHERE side='BUY'`));
+    expect(ledger?.original).toMatch(/^367\.2050*$/);
+    expect(ledger?.supported).toBe("367.2049999999995");
+    expect(ledger?.ambiguous).toBe("367.205");
+    await owned.run(s.user, tx => query(tx, "UPDATE cgt.transactions SET provenance=provenance-'gbpPerUnit' WHERE side='BUY'"));
+    await expect(workspace.calculate(s.user, inputs)).rejects.toMatchObject({ code: "IMPORT_REVIEW_REQUIRED" });
+    await expect(workspace.reportSnapshot(s.user, run.runId, "csv")).rejects.toMatchObject({ code: "REPORT_UNAVAILABLE" });
+    await owned.run(s.user, tx => query(tx, `UPDATE cgt.transactions SET provenance=provenance || '{"gbpPerUnit":"1"}'::jsonb WHERE side='BUY'`));
+    await expect(workspace.calculate(s.user, inputs)).rejects.toMatchObject({ code: "IMPORT_REVIEW_REQUIRED" });
+
+  });
+
   it("keeps a later saved sale out of partial-year figures and offers a route back to it", async () => {
     const s = await setup("partial-year-with-later-sale");
     const draft = await prepare(s.user, s.account.id);
     await workspace.commitImport(s.user, draft.draftId, draft.revision);
-    const input = { portfolioId: s.portfolio.id, taxYear: "2024-25", historyThrough: "2024-06-30", personalScopeConfirmed: true, confirmedAccountIds: [s.account.id] };
+    const input = { portfolioId: s.portfolio.id, taxYear: "2024-25", historyThrough: "2024-06-30", personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2", confirmedAccountIds: [s.account.id] };
+    await expect(workspace.calculate(s.user, { ...input, historyThrough: "2024-04-05" })).rejects.toMatchObject({ code: "HISTORY_BEFORE_TAX_YEAR" });
     const part = await workspace.calculate(s.user, input);
     expect(part.result).toMatchObject({ hasLaterSales: true, disposals: [], status: "provisional" });
     expect(await workspace.selectedReportIssue(s.user, { year: input.taxYear, format: "summary" }, "purchase"))
@@ -794,7 +873,7 @@ describe("report ownership and assisted draft concurrency", () => {
       portfolioId: a.portfolio.id,
       taxYear: "2024-25",
       historyThrough: "2025-05-05",
-      personalScopeConfirmed: true,
+      personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2",
       confirmedAccountIds: [a.account.id],
     });
     expect(
@@ -951,7 +1030,7 @@ it.each(brokerCases)(
       portfolioId: portfolio.id,
       taxYear: "2024-25",
       historyThrough: "2025-05-05",
-      personalScopeConfirmed: true,
+      personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2",
       confirmedAccountIds: [account.id],
     });
     expect(run.result.summary?.netGainGBP).toBe(c.gain);
@@ -971,8 +1050,7 @@ it.each(brokerCases)(
         user: { id: user.ownerId, emailVerified: true },
         session: { expiresAt: new Date(Date.now() + 3600000) },
       }),
-      snapshot: (identity, id) => workspace.reportSnapshot(identity, id),
-      sources: (identity, keys) => workspace.reportSources(identity, keys),
+      snapshot: (identity, id, kind) => workspace.reportSnapshot(identity, id, kind),
       consume: (identity) => workspace.consumeRequest(identity, "calculate"),
       entitled,
     });
@@ -1072,7 +1150,7 @@ it.each(brokerCases)(
         portfolioId: portfolio.id,
         taxYear: "2024-25",
         historyThrough: "2025-05-05",
-        personalScopeConfirmed: true,
+        personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2",
         confirmedAccountIds: [account.id],
       }),
     ).rejects.toMatchObject({ code: "NO_TRANSACTIONS" });
@@ -1123,7 +1201,7 @@ describe("assisted cumulative broker exports", () => {
       const receipt = await workspace.importDetail(investor, cumulative.draftId, 1);
       expect(receipt.records[0]).toMatchObject({ status: "duplicate", statementReference: revised.reference });
       const run = await workspace.calculate(investor, {
-        portfolioId: portfolio.id, taxYear: "2024-25", historyThrough: "2025-05-05", personalScopeConfirmed: true, confirmedAccountIds: [account.id],
+        portfolioId: portfolio.id, taxYear: "2024-25", historyThrough: "2025-05-05", personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2", confirmedAccountIds: [account.id],
       });
       expect(run.result.summary?.netGainGBP).toBe(c.gain);
     });

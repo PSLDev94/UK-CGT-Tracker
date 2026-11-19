@@ -156,6 +156,28 @@ test("the allowance is available before income and distinguishes a loss, full al
   );
 });
 
+test("sub-penny pool unit prices stay visible in the ledger and summary", async ({ page }) => {
+  await page.goto("/tools/section-104-calculator");
+  await page.getByLabel("Quantity — purchase 1").fill("1000");
+  await page.getByLabel("Price/share (£) — purchase 1").fill("0.004");
+  await expect(page.getByText("£0.004", { exact: true })).toHaveCount(2);
+  await expect(page.getByRole("cell", { name: "£4.00", exact: true })).toHaveCount(2);
+  await page.getByLabel("Quantity to sell").fill("1000");
+  await page.getByLabel("Sale price per share").fill("0.005");
+  await expect(page.getByText("+£1.00", { exact: true })).toBeVisible();
+});
+
+test("the rates guide and checker agree when taxable income already includes allowances", async ({ page }) => {
+  await page.goto("/guide/cgt-rates-2025-26");
+  await expect(page.getByText(/already gives you taxable income, use that figure directly/)).toBeVisible();
+  await expect(page.getByText(/giving £2,298/)).toBeVisible();
+  await expect(page.getByRole("link", {name: "Read HMRC’s guidance on claiming losses"})).toHaveAttribute("href", "https://www.gov.uk/capital-gains-tax/losses");
+  await page.goto("/tools/cgt-allowance-checker");
+  await page.locator("#gains").fill("13000");
+  await page.locator("#taxable-income").fill("36000");
+  await expect(page.getByText("£2,298.00", { exact: true })).toBeVisible();
+});
+
 test("the 30-day illustration reconciles rounded sale and acquisition amounts", async ({ page }) => {
   await page.goto("/tools/bed-and-breakfast-calculator");
   await page.getByLabel("Date of sale").fill("2025-07-01");

@@ -2,7 +2,7 @@
 import { Kysely, PostgresDialect } from "kysely";
 import { Pool } from "pg";
 import { calculateGains, ENGINE_VERSION } from "../src/domain/cgt/calculate";
-import type { Calculation } from "../src/domain/cgt/types";
+import { CURRENT_SCOPE_DECLARATION, type Calculation } from "../src/domain/cgt/types";
 import { TAX_YEARS, type TaxYear } from "../src/domain/values";
 import { query } from "../src/server/database";
 import { activeImportIssue } from "../src/server/import-integrity";
@@ -52,6 +52,7 @@ async function main() {
             unsafeImport: 0,
             unsupportedYear: 0,
             missingTrades: 0,
+            invalidCutoff: 0,
             basisReviewRequired: 0,
             blockedMatching: 0,
             changedStatusOrTotal: 0,
@@ -63,7 +64,7 @@ async function main() {
             year.previous.engineVersion !== ENGINE_VERSION
           )
             counts.obsolete++;
-          if (year.previous.scopeDeclaration !== "personal-uk-resident-v1")
+          if (year.previous.scopeDeclaration !== CURRENT_SCOPE_DECLARATION)
             counts.scopeUnconfirmed++;
           if (year.revision_changed) {
             counts.revisionChanged++;
@@ -75,6 +76,10 @@ async function main() {
           }
           if (!Object.hasOwn(TAX_YEARS, year.tax_year)) {
             counts.unsupportedYear++;
+            continue;
+          }
+          if (year.cutoff < TAX_YEARS[year.tax_year as TaxYear].start) {
+            counts.invalidCutoff++;
             continue;
           }
           let inputs: Awaited<ReturnType<typeof reviewedCalculationInputs>>;
@@ -120,12 +125,25 @@ async function main() {
         for (const p of portfolios)
           if (await activeImportIssue(tx, p.id))
             portfoliosRequiringImportReview++;
+        const receiptsNeedingOriginalFile = await query<{
+          parser: string; reason: string; receipts: number;
+        }>(tx, `SELECT i.parser_version AS parser, v.issue AS reason, count(*)::int AS receipts
+          FROM cgt.unverified_import_receipts v JOIN cgt.imports i ON i.id=v.id
+          GROUP BY i.parser_version,v.issue ORDER BY i.parser_version,v.issue`);
+        const correctedFx = await query<{ parser: string; trades: number }>(tx,
+          `SELECT i.parser_version AS parser, count(*)::int AS trades
+           FROM cgt.transactions t JOIN cgt.imports i ON i.id=t.import_id
+           WHERE t.active AND (t.consideration_gbp <> cgt.ledger_gbp(t.consideration_gbp,t.provenance->>'consideration',t.provenance->>'gbpPerUnit')
+             OR t.fees_gbp <> cgt.ledger_gbp(t.fees_gbp,t.provenance->>'fees',t.provenance->>'gbpPerUnit'))
+           GROUP BY i.parser_version ORDER BY i.parser_version`);
         console.log(
           JSON.stringify(
             {
               engine: ENGINE_VERSION,
               portfolios: portfolios.length,
               portfoliosRequiringImportReview,
+              receiptsNeedingOriginalFile,
+              correctedFx,
               years: summary,
             },
             null,

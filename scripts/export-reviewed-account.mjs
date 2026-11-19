@@ -33,6 +33,8 @@ try {
     "portfolios",
     "broker_accounts",
     "reviewed_opening_pools",
+    "reviewed_statement_overlaps",
+    "receipt_revalidations",
     "import_drafts",
     "imports",
     "transactions",

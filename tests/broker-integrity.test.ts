@@ -264,7 +264,7 @@ describe("persisted IBKR execution and report integrity", () => {
     ).toBe(1);
     const calc = await ws.calculate(s.user, {
       portfolioId: s.portfolio.id, taxYear: "2024-25", historyThrough: "2025-05-05",
-      confirmedAccountIds: [main.id,alt.id], personalScopeConfirmed: true,
+      confirmedAccountIds: [main.id,alt.id], personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2",
     });
     expect(calc.result.summary?.netGainGBP).toBe("71.62");
     const wrong = await s.preview(alt.id, native, "native");
@@ -347,7 +347,7 @@ describe("persisted IBKR execution and report integrity", () => {
         taxYear: "2024-25",
         historyThrough: "2025-05-05",
         confirmedAccountIds: [a.id],
-        personalScopeConfirmed: true,
+        personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2",
       });
     async function checkReports() {
       const calc = await calculate();

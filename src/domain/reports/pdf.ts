@@ -1,4 +1,4 @@
-import { noDisposalsLabel, reportIssueMessage, scopeStatement } from "./eligibility";
+import { noDisposalsLabel, reportIssueMessage, scopeStatement, unresolvedPoolIssues } from "./eligibility";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { roundingDifferences } from "./rounding";
 import { Money, netOutcome } from "../values";
@@ -208,6 +208,20 @@ export async function reportPdf(
           text: `Import reference: ${source.importReference}`,
           size: 8,
         });
+      if (source.conversion) {
+        const fx = source.conversion;
+        entries.push({
+          text: `Currency conversion: ${fx.currency} ${fx.consideration} consideration and ${fx.fees} fees at GBP ${fx.gbpPerUnit} per ${fx.currency}. Converted consideration £${fx.considerationGBP} and fees £${fx.feesGBP}.`,
+          size: 9,
+        });
+      }
+      if (source.sterlingSettlement) {
+        const trade = source.sterlingSettlement;
+        entries.push({
+          text: `${shares(trade.quantity)} at ${trade.instrumentCurrency} ${trade.price} per share. Verified rate GBP ${trade.gbpPerUnit} per ${trade.instrumentCurrency}. Settled consideration £${trade.considerationGBP} and fees £${trade.feesGBP}.`,
+          size: 9,
+        });
+      }
       entries.push({ text: `Trace reference: ${key}`, size: 8 });
     } else {
       entries.push({
@@ -444,7 +458,9 @@ export async function reportPdf(
       }
     }
     heading(`Section 104 pools at ${date(r.poolAsOf)}`);
-    if (!r.pools.length) line("No remaining pool balances.");
+    const unknownPools = unresolvedPoolIssues(r);
+    if (!r.pools.length && !unknownPools.length) line("No remaining pool balances.");
+    for (const issue of unknownPools) line(issue.securityId + " · Tax-pool balance unresolved.");
     for (const p of r.pools)
       line(
         `${p.securityId} · ${shares(p.quantity)} · total cost ${narrativeCost(p.costGBP)}`,

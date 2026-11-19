@@ -1,3 +1,4 @@
+import { ExactAmount } from "../cgt/exact-amount";
 import { validISIN } from "./isin";
 export { validISIN } from "./isin";
 import { ibkrExecution, sourceKey as executionKey } from "./ibkr-identity";
@@ -30,7 +31,7 @@ export const CANONICAL_HEADERS = [
   "GBP per unit",
   "Asset type",
 ] as const;
-export const PARSER_VERSION = "canonical-v1.1.0";
+export const PARSER_VERSION = "canonical-v1.2.0";
 export const MAX_CSV_BYTES = 10 * 1024 * 1024;
 export const MAX_RECORDS = 100_000;
 
@@ -47,9 +48,18 @@ export interface ImportOptions {
   ibkrUnverifiedHistory?: boolean;
   ibkrOtherAccounts?: ReadonlyMap<string, string>;
   ibkrUnboundKeys?: ReadonlyMap<string, ReadonlySet<string>>;
+  otherAccountExecutions?: ReadonlyMap<string, ReadonlyMap<string, string>>;
+  identicalStatementReceipt?: string;
   supportingDetails?: ImportDetails;
   /** Stable source key -> normalised-content digest, loaded server-side. */
   existing?: ReadonlyMap<string, string | SavedExecution>;
+}
+
+interface ExecutionAmounts {
+  originalCurrency: string;
+  consideration: string;
+  fees: string;
+  gbpPerUnit: string;
 }
 
 export interface SavedExecution {
@@ -57,7 +67,20 @@ export interface SavedExecution {
   supportingDetails?: SupportingDetails;
   trade?: Omit<Trade, "id">;
   native?: boolean;
-  original?: { originalCurrency: string; consideration: string; fees: string; gbpPerUnit: string };
+  original?: ExecutionAmounts;
+  instrumentGross?: string | null;
+  instrumentPrice?: string | null;
+}
+
+// Freetrade and Trading 212 reconcile native orders in sterling cash. When a
+// matched template supplies foreign amounts, compare the original instrument
+// consideration, charges and evidenced rate as well as the sterling posting.
+function evidencedAmounts(settlement: ExecutionAmounts, note: SupportingDetails | undefined,
+  gross: string | null | undefined, price: string | null | undefined, qty: string): ExecutionAmounts | undefined {
+  if (settlement.originalCurrency !== "GBP" || !note || note.currency === "GBP") return settlement;
+  if (!gross && !price) return undefined;
+  return { originalCurrency: note.currency, consideration: gross || new Money(price!).mul(qty).toFixed(),
+    fees: note.fees, gbpPerUnit: note.gbpPerUnit };
 }
 
 export interface ImportIssue {
@@ -101,6 +124,7 @@ export interface ImportRecord {
 
 export interface ImportReview {
   fileDigest: string;
+  revalidatesReceiptId?: string;
   ibkrClientAccountId?: string;
   parserVersion: string;
   status: "ready" | "needs_review" | "unsupported";
@@ -302,7 +326,8 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
     return finish(headers, true);
   }
 
-  if (adapter) parserVersion = adapter.version;
+  if (adapter) parserVersion = ["freetrade", "trading212"].includes(options.broker)
+    ? adapter.version.replace(/-v1$/, "-v2") : adapter.version;
   if (
     options.broker === "ibkr" &&
     adapter &&
@@ -316,19 +341,21 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
     return finish(headers);
   }
   const repeatedIds = new Set<string>();
-  const nativeIds = new Set<string>();
-  if (adapter)
+  const fileIds = new Set<string>();
+  const idField = adapter?.idColumn ?? "Transaction ID";
+  const idIndex = headers.indexOf(idField);
+  if (idIndex >= 0) {
     for (const values of data) {
-      const r = Object.fromEntries(
-        headers.map((h, i) => [h, values[i]?.trim() ?? ""]),
-      );
-      if (adapter.isTrade(r) && r[adapter.idColumn]) {
-        if (nativeIds.has(r[adapter.idColumn]!))
-          repeatedIds.add(r[adapter.idColumn]!);
-        nativeIds.add(r[adapter.idColumn]!);
-      }
+      const id = values[idIndex]?.trim();
+      if (!id) continue;
+      const isTrade = adapter ? adapter.isTrade(Object.fromEntries(headers.map((h, i) => [h, values[i]?.trim() ?? ""])))
+        : ["BUY", "SELL"].includes(values[headers.indexOf("Type")]?.trim() ?? "");
+      if (!isTrade) continue;
+      if (fileIds.has(id)) repeatedIds.add(id);
+      fileIds.add(id);
     }
-  const seen = new Map(options.existing);
+  }
+  const seen = options.existing;
   const executionIds = new Set<string>();
   data.forEach((values, index) => {
     const record = index + headerIndex + 2; // CSV record number; quoted multi-line fields are one record.
@@ -353,18 +380,20 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
       : entered;
     const detailMetadata = adapter ? { source, supportingDetails, exportedTerms: terms, canSupplyDetails } : {};
     try {
+      if (options.identicalStatementReceipt)
+        throw new Error(`This statement is already saved on ${options.identicalStatementReceipt}. Review that receipt or ask support to verify separate broker accounts against the statements.`);
       if (values.length !== headers.length)
         throw new Error(
           "The record has a different number of fields from the header.",
         );
-      if (
-        adapter &&
-        adapter.isTrade(source) &&
-        repeatedIds.has(source[adapter.idColumn]!)
-      )
-        throw new Error(
-          "This native file repeats a trade ID. It may contain several executions or duplicate rows; review it before importing.",
-        );
+      if ((isNativeTrade || (!adapter && ["BUY", "SELL"].includes(source.Type!))) && repeatedIds.has(source[idField]!)) {
+        const message = adapter
+          ? "This native file repeats a trade ID. It may contain several executions or duplicate rows; review it before importing."
+          : "This template repeats a transaction ID within the file. Verify each fill using its broker execution reference, remove a line only if the statement confirms it is a duplicate, or use an evidenced order total including all fills and fees.";
+        issues.push({ code: "DUPLICATE_CONFLICT", record, message });
+        records.push({ record, ...detailMetadata, status: "needs_review", reason: message });
+        return;
+      }
       if (isNativeTrade && options.ordinarySharesConfirmed !== true)
         throw new Error(
           "Confirm that every traded instrument in this file is an ordinary share. If your broker evidence confirms this, discard the preview, select the file again and tick the ordinary-share confirmation. If you are unsure, leave the file in review.",
@@ -411,6 +440,7 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
         records.push({
           record,
           status: "excluded",
+          source,
           reason: `${row.Type}: excluded from share gains; income tax is outside this calculation.`,
         });
         return;
@@ -431,11 +461,6 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
         /[\r\n\x00-\x1f]/.test(row["Transaction ID"])
       )
         throw new Error("A stable transaction identifier is required.");
-      if (adapter && executionIds.has(row["Transaction ID"]))
-        throw new Error(
-          "A native execution reference is repeated within this file. Verify individual fills; repeated rows cannot be silently removed.",
-        );
-      if (adapter) executionIds.add(row["Transaction ID"]);
       const date = calendarDate(row["Trade date"]);
       if (date < "1982-04-01")
         throw new Error(
@@ -473,8 +498,13 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
         throw new Error(
           "Provide GBP per one unit of the source currency; GBP must use 1.",
         );
-      const convertedAmount = amount.times(rate).toDP(12);
-      const convertedFees = fees.times(rate).toDP(12);
+      // Both source operands have at most twelve decimal places. Multiplication
+      // must retain all of them until the calculated disposal is rounded.
+      const exactRate = ExactAmount.from(rate.toFixed());
+      const convert = (source: typeof amount) =>
+        new Money(ExactAmount.from(source.toFixed()).times(exactRate).toFixed(24));
+      const convertedAmount = convert(amount);
+      const convertedFees = convert(fees);
       if (
         [quantity, convertedAmount, convertedFees].some((value) =>
           value.gte("1e26"),
@@ -482,14 +512,6 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
       ) {
         throw new Error(
           "A value exceeds the supported financial precision. Check the quantity, currency units and exchange rate.",
-        );
-      }
-      if (
-        (amount.gt(0) && convertedAmount.isZero()) ||
-        (fees.gt(0) && convertedFees.isZero())
-      ) {
-        throw new Error(
-          "A converted value is too small to preserve at 12 decimal places. Review the currency and exchange rate.",
         );
       }
       let transactionId = row["Transaction ID"];
@@ -508,13 +530,20 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
         ibkrTradeId = execution;
         transactionId = external + ":" + execution;
       }
+      if (executionIds.has(transactionId))
+        throw new Error("An execution reference is repeated within this file. Verify individual fills on the statement before saving.");
+      executionIds.add(transactionId);
+      for (const [otherAccount, keys] of options.otherAccountExecutions ?? []) {
+        const receipt = keys.get(executionKey(options.broker, otherAccount, transactionId));
+        if (receipt) throw new Error(`This execution overlaps ${receipt}. Select that account for a cumulative statement or ask support to verify the original statements for separate accounts.`);
+      }
       const sourceKey = executionKey(options.broker, options.accountId, transactionId);
       const trade: Trade = {
         id: sourceKey,
         securityId: row.ISIN,
         date,
         side: row.Type,
-        quantity: quantity.toString(),
+        quantity: quantity.toFixed(),
         considerationGBP: convertedAmount.toFixed(),
         feesGBP: convertedFees.toFixed(),
       };
@@ -558,21 +587,37 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
       });
       const digest = note ? digestWith(materialDetails(note)) : hash(JSON.stringify({ trade, provenance }));
       // Older IBKR template records were hashed without the broker account ID.
-      const current = seen.get(sourceKey);
+      const current = seen?.get(sourceKey);
       const saved = current ?? (ibkrTradeId
-        ? seen.get(executionKey("ibkr", options.accountId, ibkrTradeId)) : undefined);
+        ? seen?.get(executionKey("ibkr", options.accountId, ibkrTradeId)) : undefined);
       const savedDigest = typeof saved === "string" ? saved : saved?.digest;
       let matches = savedDigest === digest;
-      if (!matches && ibkrTradeId && typeof saved === "object" && saved.trade && saved.original && (saved.native !== !!adapter || (!adapter && !current))) {
+      const crossFormat = typeof saved === "object" && saved.native !== !!adapter;
+      // Earlier template versions used a different fixed-point or FX precision.
+      const templateReplay = !adapter && typeof saved === "object" && !saved.native;
+      let difference = "";
+      if (!matches && typeof saved === "object" && saved.trade && saved.original && (crossFormat || templateReplay)) {
         const previous = saved.trade;
-        matches = previous.date === date && previous.side === trade.side && previous.securityId === trade.securityId &&
-          decimal(previous.quantity, "Quantity").eq(quantity) &&
-          decimal(previous.considerationGBP, "Consideration").eq(convertedAmount) &&
-          decimal(previous.feesGBP, "Fees").eq(convertedFees) &&
-          saved.original.originalCurrency === provenance.originalCurrency &&
-          new Money(saved.original.consideration).eq(amount) &&
-          new Money(saved.original.fees).eq(fees) &&
-          new Money(saved.original.gbpPerUnit).eq(rate);
+        const savedAmounts = evidencedAmounts(saved.original, saved.supportingDetails,
+          saved.instrumentGross, saved.instrumentPrice, previous.quantity);
+        const submitted = evidencedAmounts(provenance, note,
+          source["Total Shares Amount"] || source["Total Amount in Instrument Currency"],
+          source["Price / share"], trade.quantity);
+        const differences = [
+          previous.date !== date && "trade date",
+          previous.side !== trade.side && "direction",
+          previous.securityId !== trade.securityId && "ISIN",
+          !new Money(previous.quantity).eq(quantity) && "quantity",
+          !new Money(previous.considerationGBP).eq(convertedAmount) && "GBP consideration",
+          !new Money(previous.feesGBP).eq(convertedFees) && "GBP fees",
+          (!savedAmounts || !submitted) && "unverified original amounts",
+          savedAmounts && submitted && savedAmounts.originalCurrency !== submitted.originalCurrency && "currency",
+          savedAmounts && submitted && !new Money(savedAmounts.consideration).eq(submitted.consideration) && "original consideration",
+          savedAmounts && submitted && !new Money(savedAmounts.fees).eq(submitted.fees) && "original fees",
+          savedAmounts && submitted && !new Money(savedAmounts.gbpPerUnit).eq(submitted.gbpPerUnit) && "exchange rate",
+        ].filter(Boolean);
+        matches = !differences.length;
+        difference = differences.join(", ");
       }
       const previous = typeof saved === "object" && saved.supportingDetails;
       // Older saves hashed the complete note. Recreate their exact hash using
@@ -584,8 +629,9 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
         issues.push({
           code: "DUPLICATE_CONFLICT",
           record,
-          message:
-            "The same transaction ID has different values. Review the correction instead of overwriting or skipping it.",
+          message: difference
+            ? `The same transaction ID has different values for ${difference}. Check both records against the original execution.`
+            : "The same transaction ID has different values. Review the correction instead of overwriting or skipping it.",
         });
         records.push({
           record,
@@ -604,7 +650,6 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
           reason: "This transaction has already been included.",
         });
       } else {
-        seen.set(sourceKey, digest);
         records.push({
           record,
           ...detailMetadata,

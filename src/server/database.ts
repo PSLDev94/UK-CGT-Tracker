@@ -11,9 +11,10 @@ export async function query<T>(db: Connection, statement: string, values: readon
 export class OwnedDatabase {
   constructor(private readonly db: Database) {}
 
-  async run<T>(identity: Identity, work: (connection: Connection) => Promise<T>): Promise<T> {
+  async run<T>(identity: Identity, work: (connection: Connection) => Promise<T>, isolation?: "repeatable read"): Promise<T> {
     assertIdentity(identity)
-    return this.db.transaction().execute(async tx => {
+    const transaction = this.db.transaction()
+    return (isolation ? transaction.setIsolationLevel(isolation) : transaction).execute(async tx => {
       await query(tx, "SELECT set_config('cgt.owner_id', $1, true)", [identity.ownerId])
       return work(tx)
     })

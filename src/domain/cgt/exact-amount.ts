@@ -39,6 +39,10 @@ export class ExactAmount {
     return ExactAmount.reduced(this.numerator * left + other.numerator * right, this.denominator * left)
   }
 
+  times(other: ExactAmount) {
+    return ExactAmount.reduced(this.numerator * other.numerator, this.denominator * other.denominator)
+  }
+
   minus(other: ExactAmount) { return this.plus(other.negated()) }
   negated() { return new ExactAmount(-this.numerator, this.denominator) }
   isZero() { return this.numerator === zero }

@@ -30,8 +30,7 @@ export async function qualifyBillingLifecycle(
       session: { expiresAt: new Date(Date.now() + 60000) },
     }),
     consume: async () => {},
-    snapshot: (identity, id) => workspace.reportSnapshot(identity, id),
-    sources: (identity, keys) => workspace.reportSources(identity, keys),
+    snapshot: (identity, id, kind) => workspace.reportSnapshot(identity, id, kind),
     entitled: async (identity) => (await billing.status(identity)).entitled,
   });
   async function deliver(

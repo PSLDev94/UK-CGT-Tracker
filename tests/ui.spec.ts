@@ -1070,14 +1070,14 @@ test("restored reports export saved evidence and settings retain edits after fai
   );
   await price.fill("1");
   await expect(
-    page.getByRole("heading", { name: "Illustrative Holding Scenarios" }),
+    page.getByRole("heading", { name: "Illustrative tax-pool values" }),
   ).toBeVisible();
   await price.fill("-1");
   await expect(price).toHaveAttribute("aria-invalid", "true");
   await expect(
-    page.getByRole("heading", { name: "Illustrative Holding Scenarios" }),
+    page.getByRole("heading", { name: "Illustrative tax-pool values" }),
   ).toHaveCount(0);
-  await expect(page.getByText(/not model a disposal/)).toBeVisible();
+  await expect(page.getByText(/uses the tax-pool quantity and omits sale costs and tax/)).toBeVisible();
   let calls = 0;
   await page.route("**/api/v2/auth/update-user", (route) => {
     calls++;

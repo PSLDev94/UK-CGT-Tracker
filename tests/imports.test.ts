@@ -106,11 +106,20 @@ describe('import contract', () => {
     expect(reviewCsv('abc\0def', opts).status).toBe('needs_review')
   })
 
-  it('routes values beyond database precision and FX underflow to review', () => {
+  it('holds oversized values and preserves even the smallest allowed FX product', () => {
     const huge = [...row]; huge[5] = '100000000000000000000000000'
     expect(reviewCsv(file(huge), opts).issues[0]?.message).toContain('precision')
     const tiny = [...row]; tiny[5] = '0.000000000001'; tiny[7] = 'USD'; tiny[8] = '0.000000000001'
-    expect(reviewCsv(file(tiny), opts).issues[0]?.message).toContain('too small')
+    expect(reviewCsv(file(tiny), opts).records[0]?.trade?.considerationGBP).toBe('0.000000000000000000000001')
+  })
+
+  it.each([
+    ['451.66665', '0.81300003', '367.2049999999995'],
+    ['451.66665', '0.813000030001', '367.20500000045116665'],
+  ])('keeps the exact sterling consideration and fees around a half-penny boundary', (foreign, rate, expected) => {
+    const trade = [...row]
+    trade[5] = foreign; trade[6] = foreign; trade[7] = 'USD'; trade[8] = rate
+    expect(reviewCsv(file(trade), opts).records[0]?.trade).toMatchObject({ considerationGBP: expected, feesGBP: expected })
   })
 
   it('blocks specialist pre-1982 history and dates after the server cutoff', () => {

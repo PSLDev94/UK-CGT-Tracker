@@ -9,7 +9,7 @@ import {
   type ImportReview,
 } from "../domain/imports/review";
 import { calculateGains, ENGINE_VERSION } from "../domain/cgt/calculate";
-import type { Calculation, Trade } from "../domain/cgt/types";
+import { CURRENT_SCOPE_DECLARATION as scopeDeclaration, type Calculation, type Trade } from "../domain/cgt/types";
 import { calendarDate, TAX_YEARS, ukCalendarDate } from "../domain/values";
 import { type Connection, OwnedDatabase, query } from "./database";
 import { activeImportIssue } from "./import-integrity";
@@ -21,7 +21,7 @@ import {
   type ImportDetails,
   type SupportingDetails,
 } from "../domain/imports/supporting-details";
-import type { ReportSnapshot, ReportSource } from "../domain/reports/report";
+import type { ReportKind, ReportSnapshot, ReportSource } from "../domain/reports/report";
 import { importTradeDetail, type ImportTradeDetail } from "../domain/imports/trade-detail";
 
 interface Portfolio {
@@ -71,7 +71,6 @@ const missing = () =>
 const fingerprint = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
-const scopeDeclaration = "personal-uk-resident-v1";
 
 interface EvidenceRun {
   result: Calculation;
@@ -79,6 +78,41 @@ interface EvidenceRun {
   portfolio_id: string;
   portfolio_revision: number;
   coverage_accounts: string[];
+}
+
+async function transactionSources(tx: Connection, sourceKeys: string[]): Promise<ReportSource[]> {
+  if (!sourceKeys.length) return [];
+  return query<ReportSource>(
+    tx,
+    `
+      SELECT t.source_key AS key, a.label, a.broker, t.source_record AS record, t.import_id::text AS "importReference",
+        left(coalesce(nullif(f.fields->>'Name',''), nullif(f.fields->>'Stock name',''),
+                      nullif(f.fields->>'Ticker',''), nullif(f.fields->>'Symbol',''),
+                      nullif(f.fields->>'Description','')),120) AS instrument,
+        coalesce(nullif(t.provenance->>'executionReference',''), nullif(f.fields->>'ID',''), nullif(f.fields->>'Reference',''),
+                 nullif(f.fields->>'TradeID',''), nullif(f.fields->>'Order ID',''),
+                 nullif(btrim(f.details->>'transactionId'),'')) AS reference,
+        nullif(btrim(f.details->>'reference'),'') AS "statementReference",
+        CASE WHEN t.provenance->>'originalCurrency' <> 'GBP' THEN jsonb_build_object(
+          'currency', t.provenance->>'originalCurrency', 'consideration', t.provenance->>'consideration',
+          'fees', t.provenance->>'fees', 'gbpPerUnit', t.provenance->>'gbpPerUnit',
+          'considerationGBP', trim_scale(cgt.ledger_gbp(t.consideration_gbp, t.provenance->>'consideration', t.provenance->>'gbpPerUnit'))::text,
+          'feesGBP', trim_scale(cgt.ledger_gbp(t.fees_gbp, t.provenance->>'fees', t.provenance->>'gbpPerUnit'))::text
+        ) END AS conversion,
+        CASE WHEN t.provenance->>'originalCurrency'='GBP' AND f.details->>'currency' <> 'GBP'
+          AND coalesce(f.fields->>'Price per Share', f.fields->>'Price / share') IS NOT NULL
+          THEN jsonb_build_object('instrumentCurrency', f.details->>'currency',
+            'price', coalesce(f.fields->>'Price per Share', f.fields->>'Price / share'),
+            'quantity', trim_scale(t.quantity)::text, 'gbpPerUnit', f.details->>'gbpPerUnit',
+            'considerationGBP', trim_scale(t.consideration_gbp)::text, 'feesGBP', trim_scale(t.fees_gbp)::text)
+        END AS "sterlingSettlement"
+      FROM cgt.transactions t JOIN cgt.broker_accounts a ON a.id=t.account_id
+      CROSS JOIN LATERAL (SELECT t.provenance->'native'->'fields' AS fields,
+                                 t.provenance->'native'->'supportingDetails' AS details) f
+      WHERE t.active AND t.source_key=ANY($1::text[]) ORDER BY t.source_key
+    `,
+    [sourceKeys],
+  );
 }
 
 async function account(tx: Connection, id: string): Promise<Account> {
@@ -128,6 +162,9 @@ async function publishedReportYears(tx: Connection, portfolioId: string) {
   return rows.map((row) => row.tax_year);
 }
 
+const cashEvidence = (source: Record<string, string>) =>
+  Object.fromEntries(Object.entries(source).filter(([key,value]) => value && !["Notes","Title","Name"].includes(key)));
+
 async function preview(
   tx: Connection,
   a: Account,
@@ -136,23 +173,40 @@ async function preview(
   ordinarySharesConfirmed = false,
   supportingDetails: ImportDetails = {},
 ): Promise<ImportReview> {
-  // A selected-account replay always compares active records. For IBKR also
-  // check the intrinsic statement account across labels in this portfolio.
   const ibkr = a.broker === "ibkr";
+  const fileDigest = createHash("sha256").update(csv).digest("hex");
+  const peerReceipts = await query<{ id: string; label: string; file_digest: string }>(tx,
+    `SELECT i.id,a.label,i.file_digest FROM cgt.imports i JOIN cgt.broker_accounts a ON a.id=i.account_id
+     WHERE a.portfolio_id=$1 AND a.broker=$2 AND a.id<>$3 AND i.status='committed' AND NOT EXISTS(
+       SELECT 1 FROM cgt.reviewed_statement_overlaps r WHERE r.account_id=$3 AND r.file_digest=$4 AND r.other_import_id=i.id)`,
+    [a.portfolio_id,a.broker,a.id,fileDigest]);
+  const peers = new Map(peerReceipts.map(r => [r.id, r.label + " (receipt " + r.id + ")"]));
   const existing = await query<{
-    account_id: string; source_key: string; content_digest: string;
+    account_id: string; import_id: string; source_key: string; content_digest: string;
     supporting_details: SupportingDetails | null; native: boolean;
+    instrument_gross: string | null; instrument_price: string | null;
     original: { originalCurrency: string; consideration: string; fees: string; gbpPerUnit: string } | null;
     external: string | null; binding: string | null; trade: Omit<Trade, "id"> | null;
-  }>(tx, `SELECT t.account_id,t.source_key,t.content_digest,t.provenance->'native'->'supportingDetails' AS supporting_details,
+  }>(tx, `SELECT t.account_id,t.import_id,t.source_key,t.content_digest,t.provenance->'native'->'supportingDetails' AS supporting_details,
       t.provenance ? 'native' AS native,t.provenance#>>'{native,fields,ClientAccountID}' AS external,
       a.ibkr_client_account_id AS binding,
-      CASE WHEN $3::boolean THEN t.provenance - 'native' END AS original,
-      CASE WHEN $3::boolean THEN jsonb_build_object('securityId',security_id,'date',trade_date::text,'side',side,
-        'quantity',quantity::text,'considerationGBP',consideration_gbp::text,'feesGBP',fees_gbp::text) END AS trade
+      CASE WHEN t.account_id=$1 THEN t.provenance - 'native' END AS original,
+      coalesce(t.provenance#>>'{native,fields,Total Shares Amount}',t.provenance#>>'{native,fields,Total Amount in Instrument Currency}') AS instrument_gross,
+      t.provenance#>>'{native,fields,Price / share}' AS instrument_price,
+      CASE WHEN t.account_id=$1 THEN jsonb_build_object('securityId',security_id,'date',trade_date::text,'side',side,
+        'quantity',quantity::text,'considerationGBP',trim_scale(cgt.ledger_gbp(t.consideration_gbp,t.provenance->>'consideration',t.provenance->>'gbpPerUnit'))::text,
+        'feesGBP',trim_scale(cgt.ledger_gbp(t.fees_gbp,t.provenance->>'fees',t.provenance->>'gbpPerUnit'))::text) END AS trade
       FROM cgt.transactions t JOIN cgt.broker_accounts a ON a.id=t.account_id
-      WHERE t.active AND (t.account_id=$1 OR ($3 AND a.portfolio_id=$2 AND a.broker='ibkr'))`,
-    [a.id,a.portfolio_id,ibkr]);
+      WHERE t.active AND a.portfolio_id=$2 AND a.broker=$3`,
+    [a.id,a.portfolio_id,a.broker]);
+  const peerKeys = new Map<string, Map<string,string>>();
+  for (const row of existing) {
+    const receipt = peers.get(row.import_id);
+    if (!receipt || ibkr) continue;
+    let keys = peerKeys.get(row.account_id);
+    if (!keys) peerKeys.set(row.account_id, keys = new Map());
+    keys.set(row.source_key, receipt);
+  }
   const ibkrOtherAccounts = new Map<string,string>();
   const ibkrUnboundKeys = new Map<string,Set<string>>();
   let binding = a.ibkr_client_account_id;
@@ -167,7 +221,10 @@ async function preview(
       records.add(row.source_key);
     }
   }
-  return reviewCsv(csv, {
+  const identical = peerReceipts.find(r => r.file_digest === fileDigest);
+  const review = reviewCsv(csv, {
+    otherAccountExecutions: peerKeys,
+    identicalStatementReceipt: !ibkr && identical ? peers.get(identical.id) : undefined,
     broker: a.broker, accountId: a.id, accountType: a.account_type, format,
     ordinarySharesConfirmed, supportingDetails, latestTradeDate: ukCalendarDate(new Date()),
     ibkrClientAccountId: binding, ibkrOtherAccounts, ibkrUnboundKeys,
@@ -175,8 +232,15 @@ async function preview(
     existing: new Map(existing.filter(row => row.account_id === a.id).map(row => [row.source_key, {
       digest: row.content_digest, supportingDetails: row.supporting_details ?? undefined,
       native: row.native, trade: row.trade ?? undefined, original: row.original ?? undefined,
+      instrumentGross: row.instrument_gross, instrumentPrice: row.instrument_price,
     }])),
   });
+  if (review.counts.duplicate && !review.counts.accepted && !review.issues.length && !review.counts.needsReview) {
+    const [legacy] = await query<{id:string}>(tx, `SELECT id FROM cgt.unverified_import_receipts
+      WHERE account_id=$1 AND file_digest=$2 LIMIT 1`, [a.id, fileDigest]);
+    if (legacy) return { ...review, status: "ready", revalidatesReceiptId: legacy.id };
+  }
+  return review;
 }
 
 export class Workspace {
@@ -303,8 +367,8 @@ export class Workspace {
         >(
           tx,
           `SELECT t.source_record AS record, t.security_id AS "securityId",
-          t.trade_date::text AS date, t.side, t.quantity::text, t.consideration_gbp::text AS "considerationGBP",
-          t.fees_gbp::text AS "feesGBP", t.provenance FROM cgt.transactions t
+          t.trade_date::text AS date, t.side, t.quantity::text, cgt.ledger_gbp(t.consideration_gbp,t.provenance->>'consideration',t.provenance->>'gbpPerUnit')::text AS "considerationGBP",
+          cgt.ledger_gbp(t.fees_gbp,t.provenance->>'fees',t.provenance->>'gbpPerUnit')::text AS "feesGBP", t.provenance FROM cgt.transactions t
           WHERE t.import_id = $1 AND ($2::boolean OR t.source_record = ANY($3::int[]))
           ORDER BY t.source_record LIMIT 25 OFFSET $4`,
           [importId, receipt.legacy, accepted, receipt.legacy ? start : 0],
@@ -501,38 +565,16 @@ export class Workspace {
     });
   }
 
-  async reportSources(
-    identity: Identity,
-    sourceKeys: string[],
-  ): Promise<ReportSource[]> {
-    if (!sourceKeys.length) return [];
-    return this.db.run(identity, (tx) =>
-      query<ReportSource>(
-        tx,
-        `
-      SELECT t.source_key AS key, a.label, a.broker, t.source_record AS record, t.import_id::text AS "importReference",
-        left(coalesce(nullif(f.fields->>'Name',''), nullif(f.fields->>'Stock name',''),
-                      nullif(f.fields->>'Ticker',''), nullif(f.fields->>'Symbol',''),
-                      nullif(f.fields->>'Description','')),120) AS instrument,
-        coalesce(nullif(t.provenance->>'executionReference',''), nullif(f.fields->>'ID',''), nullif(f.fields->>'Reference',''),
-                 nullif(f.fields->>'TradeID',''), nullif(f.fields->>'Order ID',''),
-                 nullif(btrim(f.details->>'transactionId'),'')) AS reference,
-        nullif(btrim(f.details->>'reference'),'') AS "statementReference"
-      FROM cgt.transactions t JOIN cgt.broker_accounts a ON a.id=t.account_id
-      CROSS JOIN LATERAL (SELECT t.provenance->'native'->'fields' AS fields,
-                                 t.provenance->'native'->'supportingDetails' AS details) f
-      WHERE t.active AND t.source_key=ANY($1::text[]) ORDER BY t.source_key
-    `,
-        [sourceKeys],
-      ),
-    );
+  async reportSources(identity: Identity, sourceKeys: string[]): Promise<ReportSource[]> {
+    return this.db.run(identity, (tx) => transactionSources(tx, sourceKeys));
   }
 
   async reportSnapshot(
     identity: Identity,
     runId: string,
+    kind?: ReportKind,
   ): Promise<ReportSnapshot> {
-    return this.currentSnapshot(identity, { id: requireUuid(runId) });
+    return this.currentSnapshot(identity, { id: requireUuid(runId) }, kind);
   }
 
   async selectedReportIssue(
@@ -561,6 +603,7 @@ export class Workspace {
   private async currentSnapshot(
     identity: Identity,
     target: { id: string } | { year: string },
+    kind?: ReportKind,
   ): Promise<ReportSnapshot> {
     return this.db.run(identity, async (tx) => {
       const rows = await query<ReportSnapshot & EvidenceRun>(
@@ -592,8 +635,25 @@ export class Workspace {
         );
       const integrity = await activeImportIssue(tx, rows[0].portfolio_id, rows[0].result.historyThrough);
       if (integrity) throw new AppError(409, "REPORT_UNAVAILABLE", integrity);
-      return rows[0];
-    });
+      const snapshot = rows[0];
+      if (kind === "csv" || kind === "evidence") {
+        const issue = kind === "evidence" && evidenceIssue(snapshot.result);
+        if (issue) throw new AppError(400, issue.code, issue.message);
+        const keys = new Set<string>();
+        for (const disposal of snapshot.result.disposals) {
+          for (const key of disposal.sourceIds) keys.add(key);
+          for (const match of disposal.matches)
+            for (const key of match.acquisitionIds ?? []) keys.add(key);
+        }
+        for (const movement of snapshot.result.poolMovements ?? [])
+          for (const key of movement.sourceIds) keys.add(key);
+        snapshot.sources = await transactionSources(tx, [...keys]);
+        if (snapshot.sources.length !== keys.size)
+          throw new AppError(409, "REPORT_UNAVAILABLE",
+            "The transaction evidence for this calculation is incomplete. Review the imports and recalculate before downloading.");
+      }
+      return snapshot;
+    }, "repeatable read");
   }
 
   async addAccount(
@@ -901,7 +961,8 @@ export class Workspace {
       const done = (
         await query<Import>(
           tx,
-          "SELECT id, status, account_id FROM cgt.imports WHERE id = $1",
+          `SELECT id,status,account_id FROM cgt.imports WHERE id=$1
+           UNION ALL SELECT i.id,i.status,i.account_id FROM cgt.receipt_revalidations r JOIN cgt.imports i ON i.id=r.import_id WHERE r.request_id=$1`,
           [draftId],
         )
       )[0];
@@ -924,7 +985,8 @@ export class Workspace {
         const completed = (
           await query<Import>(
             tx,
-            "SELECT id, status, account_id FROM cgt.imports WHERE id = $1",
+            `SELECT id,status,account_id FROM cgt.imports WHERE id=$1
+           UNION ALL SELECT i.id,i.status,i.account_id FROM cgt.receipt_revalidations r JOIN cgt.imports i ON i.id=r.import_id WHERE r.request_id=$1`,
             [draftId],
           )
         )[0];
@@ -946,7 +1008,8 @@ export class Workspace {
       const retry = (
         await query<Import>(
           tx,
-          "SELECT id, status, account_id FROM cgt.imports WHERE id = $1",
+          `SELECT id,status,account_id FROM cgt.imports WHERE id=$1
+           UNION ALL SELECT i.id,i.status,i.account_id FROM cgt.receipt_revalidations r JOIN cgt.imports i ON i.id=r.import_id WHERE r.request_id=$1`,
           [draftId],
         )
       )[0];
@@ -1016,6 +1079,15 @@ export class Workspace {
           affectedReportYears: await publishedReportYears(tx, p.id),
           review,
         };
+      if (review.revalidatesReceiptId) {
+        const verified = review.records.map(r => ({record:r.record,status:r.status,sourceKey:r.sourceKey,
+          ...(r.status==="excluded" && r.source && { cashFields: cashEvidence(r.source) })}));
+        await query(tx, `INSERT INTO cgt.receipt_revalidations(request_id,import_id,account_id,owner_id,verified_records)
+          VALUES($1,$2,$3,$4,$5::jsonb)`, [draftId,review.revalidatesReceiptId,a.id,identity.ownerId,JSON.stringify(verified)]);
+        await invalidate(tx,a.portfolio_id);
+        await query(tx,"DELETE FROM cgt.import_drafts WHERE id=$1",[draftId]);
+        return { outcome: "committed" as const, importId: review.revalidatesReceiptId, counts: review.counts };
+      }
       if (a.broker === "ibkr" && review.ibkrClientAccountId) {
         await query(tx, "UPDATE cgt.broker_accounts SET ibkr_client_account_id=$2 WHERE id=$1", [a.id, review.ibkrClientAccountId]);
       }
@@ -1037,13 +1109,14 @@ export class Workspace {
           c.duplicate,
           JSON.stringify(
             review.records.map(
-              ({ record, status, reason, sourceKey, digest, statementReference }) => ({
+              ({ record, status, reason, sourceKey, digest, statementReference, source }) => ({
                 record,
                 status,
                 reason,
                 sourceKey,
                 digest,
                 statementReference,
+                ...(status === "excluded" && source && { cashFields: cashEvidence(source) }),
               }),
             ),
           ),
@@ -1131,6 +1204,7 @@ export class Workspace {
       historyThrough: string;
       confirmedAccountIds: string[];
       personalScopeConfirmed: boolean;
+      scopeDeclaration?: string;
     },
   ) {
     if (!Object.hasOwn(TAX_YEARS, input.taxYear))
@@ -1144,6 +1218,10 @@ export class Workspace {
         "Enter a valid history date in YYYY-MM-DD format.",
       );
     }
+    const taxYear = input.taxYear as keyof typeof TAX_YEARS;
+    if (input.historyThrough < TAX_YEARS[taxYear].start)
+      throw new AppError(400, "HISTORY_BEFORE_TAX_YEAR",
+        `History must include at least ${TAX_YEARS[taxYear].start}, the first day of ${taxYear}.`);
     if (input.historyThrough > ukCalendarDate(new Date()))
       throw new AppError(
         400,
@@ -1189,12 +1267,11 @@ export class Workspace {
           "PENDING_IMPORTS",
           "Finish or discard your import previews before calculating. Unresolved files may change the result.",
         );
-      if (input.personalScopeConfirmed !== true)
+      if (input.personalScopeConfirmed !== true || input.scopeDeclaration !== scopeDeclaration)
         throw new AppError(400, "SCOPE_CONFIRMATION_REQUIRED",
-          "Confirm that the shares belong to you personally and you were UK resident throughout the history used for matching. If your circumstances changed, request a specialist review.");
+          "Confirm personal ownership, UK residence and ordinary market transactions. For a private sale, gift, transfer or other special tax basis, contact support for specialist review.");
       const integrity = await activeImportIssue(tx, p.id, input.historyThrough);
       if (integrity) throw new AppError(409, "IMPORT_REVIEW_REQUIRED", integrity);
-      const taxYear = input.taxYear as keyof typeof TAX_YEARS;
       const { trades, openingPools } = await reviewedCalculationInputs(tx, p.id, taxYear, input.historyThrough);
       if (!trades.length && !openingPools.length)
         throw new AppError(

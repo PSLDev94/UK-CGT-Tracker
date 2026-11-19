@@ -101,7 +101,7 @@ describe('PostgreSQL 18 deployment qualification',()=> {
     const native=readFileSync('tests/fixtures/brokers/trading212-gbp.csv','utf8')
     const draft=await workspace.prepareImport(s.user,{accountId:s.account.id,csv:native,format:'native',ordinarySharesConfirmed:true})
     await workspace.commitImport(s.user,draft.draftId,draft.revision,draft.reviewVersion)
-    const run=await workspace.calculate(s.user,{portfolioId:s.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',personalScopeConfirmed:true,confirmedAccountIds:[s.account.id]})
+    const run=await workspace.calculate(s.user,{portfolioId:s.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',personalScopeConfirmed:true, scopeDeclaration: "personal-market-trades-v2",confirmedAccountIds:[s.account.id]})
     expect(run.result.summary?.netGainGBP).toBe('5.25')
     await qualifyBillingLifecycle(billingDb,workspace,s.user,run.runId)
   })
@@ -123,7 +123,7 @@ describe('PostgreSQL 18 deployment qualification',()=> {
     ].join('\n')
     const draft=await workspace.prepareImport(s.user,{accountId:s.account.id,csv:data,format:'canonical-v1'})
     await workspace.commitImport(s.user,draft.draftId,draft.revision,draft.reviewVersion)
-    const input={portfolioId:s.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',personalScopeConfirmed:true,confirmedAccountIds:[s.account.id]}
+    const input={portfolioId:s.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',personalScopeConfirmed:true, scopeDeclaration: "personal-market-trades-v2",confirmedAccountIds:[s.account.id]}
     expect((await workspace.calculate(s.user,input)).result.summary).toBeNull()
     const operator=new Kysely<Record<string,never>>({dialect:new PostgresDialect({pool:new Pool({connectionString:env.MIGRATION_DATABASE_URL})})})
     try {
@@ -174,6 +174,24 @@ describe('PostgreSQL 18 deployment qualification',()=> {
     const second=await workspace.prepareImport(s.user,{accountId:s.account.id,csv:csv.replaceAll('synthetic-','second-'),format:'canonical-v1'})
     const outcomes=await Promise.all([first,second].map(draft=>workspace.commitImport(s.user,draft.draftId,draft.revision)))
     expect(outcomes.map(result=>result.outcome).sort()).toEqual(['committed','review_changed'])
+  })
+
+  it('serializes copies of one statement under two broker labels and checks the operator clearance', async()=>{
+    const s=await setup('parallel-label-replay');
+    const other=await workspace.addAccount(s.user,{portfolioId:s.portfolio.id,broker:'trading212',label:'Other GIA',accountType:'GIA'});
+    const drafts=await Promise.all([s.account.id,other.id].map(accountId=>workspace.prepareImport(s.user,{accountId,csv,format:'canonical-v1'})));
+    const outcomes=await Promise.all(drafts.map(d=>workspace.commitImport(s.user,d.draftId,d.revision)));
+    const saved=outcomes.find(r=>r.outcome==='committed'), blocked=outcomes.find(r=>r.outcome==='review_changed');
+    expect(saved?.outcome).toBe('committed');
+    if (!blocked || !('review' in blocked) || !saved || !('importId' in saved)) throw new Error('Expected exactly one save');
+    expect(blocked.review.status).toBe('needs_review');
+    expect(blocked.review.issues[0]?.message).toContain(saved.importId);
+    const otherDraft=drafts.find(d=>d.draftId!==saved.importId)!;
+    const env={...process.env,OPERATOR_DATABASE_URL:process.env.POSTGRES_TEST_DATABASE_URL!};
+    const args=['scripts/review-statement-overlap.mjs','--draft',otherDraft.draftId,'--other',saved.importId];
+    expect(execFileSync(process.execPath,args,{env,encoding:'utf8'})).toMatch(/eligible for review/i);
+    expect(execFileSync(process.execPath,[...args,'--apply','--case','synthetic','--evidence','two verified synthetic statements','--verified-separate-accounts'],{env,encoding:'utf8'})).toMatch(/review recorded/i);
+    expect((await workspace.commitImport(s.user,otherDraft.draftId,blocked.revision)).outcome).toBe('committed');
   })
 
   it('returns the saved receipt when another request commits between the receipt and draft reads', async()=> {
@@ -263,7 +281,7 @@ it.each(brokerCases)('qualifies $file import/report/retry using PostgreSQL 18 ru
   const draft=await review()
   expect(draft.review.status).toBe('ready')
   expect((await workspace.commitImport(s.user,draft.draftId,draft.revision,draft.reviewVersion)).outcome).toBe('committed')
-  const result=await workspace.calculate(s.user,{portfolioId:s.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',personalScopeConfirmed: true, confirmedAccountIds:[s.account.id,account.id]})
+  const result=await workspace.calculate(s.user,{portfolioId:s.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2", confirmedAccountIds:[s.account.id,account.id]})
   expect(result.result.summary?.netGainGBP).toBe(c.gain)
   expect((await workspace.reportSnapshot(s.user,result.runId)).result).toEqual(result.result)
   const duplicate=await review()
@@ -320,7 +338,7 @@ it('exports one verified owner, guards a billing hold and erases only the resolv
   const holder = await setup('erasure-review'), unaffected = await setup('erasure-neighbour')
   const draft = await workspace.prepareImport(holder.user,{accountId:holder.account.id,csv,format:'canonical-v1'})
   await workspace.commitImport(holder.user,draft.draftId,draft.revision)
-  await workspace.calculate(holder.user,{portfolioId:holder.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',confirmedAccountIds:[holder.account.id],personalScopeConfirmed:true})
+  await workspace.calculate(holder.user,{portfolioId:holder.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',confirmedAccountIds:[holder.account.id],personalScopeConfirmed:true, scopeDeclaration: "personal-market-trades-v2"})
   await owner.query(`INSERT INTO auth.verification(id,identifier,value,"expiresAt") VALUES('erasure-token','reset-password:test','erasure-review',now()+interval '1 hour')`)
   const directory = mkdtempSync(join(tmpdir(),'cgt-case-'))
   const output = join(directory,'private-export.json')

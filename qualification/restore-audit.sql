@@ -32,6 +32,18 @@ WHERE n.nspname IN ('cgt', 'auth', 'cgt_migrations') AND c.relkind = 'r'
   AND a.attnum > 0 AND NOT a.attisdropped
 ORDER BY n.nspname, c.relname, a.attnum;
 
+-- Restored reports rely on the receipt review view and the precise sterling
+-- conversion function, including the view's invoker settings.
+SELECT 'view', n.nspname, c.relname, c.reloptions, pg_get_viewdef(c.oid)
+FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+WHERE n.nspname='cgt' AND c.relkind='v'
+ORDER BY c.relname;
+
+SELECT 'function', p.oid::regprocedure::text, md5(pg_get_functiondef(p.oid))
+FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+WHERE n.nspname='cgt' AND p.prokind='f'
+ORDER BY p.oid::regprocedure::text;
+
 SELECT 'constraint', n.nspname, c.relname, co.conname, co.convalidated,
   pg_get_constraintdef(co.oid)
 FROM pg_constraint co JOIN pg_class c ON c.oid = co.conrelid

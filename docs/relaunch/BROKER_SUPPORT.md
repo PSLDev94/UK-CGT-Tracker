@@ -39,7 +39,7 @@ The currently implemented format is an internal template, not a native broker CS
 - GBP per unit: the number of pounds per one major source-currency unit, using the applicable trade-date conversion; exactly `1` for GBP. No reciprocal guessing.
 - Asset type: `ORDINARY_SHARE` in this first increment. Other classifications require explicit handling.
 
-Decimal points are `.` with no currency symbols, grouping separators or exponent notation. CSV quoting and UTF-8 BOMs are supported. Binary/control characters other than tabs and line endings are rejected. JSON transport overhead is allowed separately from the decoded file-size cap. The limit is 10 MiB and 100,000 data records. Original monetary values, currency and exchange rate are retained in provenance. Converted GBP values use up to 12 decimal places; reporting rounds only at the documented output boundary.
+Decimal points are `.` with no currency symbols, grouping separators or exponent notation. CSV quoting and UTF-8 BOMs are supported. Binary/control characters other than tabs and line endings are rejected. JSON transport overhead is allowed separately from the decoded file-size cap. The limit is 10 MiB and 100,000 data records. Original monetary values, currency and exchange rate are retained in provenance. Converted GBP values retain the full product of the original amount and rate, up to 24 decimal places; reporting rounds only at the documented output boundary.
 
 The preview classifies all parsed data records as accepted, excluded, duplicate or needs review. A single unresolved record blocks committing the entire file. Duplicate IDs with conflicting contents are flagged, not overwritten. An all-duplicate file is a no-op requiring an explanatory result, never a successful new import.
 
@@ -87,3 +87,18 @@ Older IBKR receipts with ambiguous account assignments, overlapping executions o
 In the template, deposits, withdrawals and interest can carry a cash amount and its currency. Leave the ISIN and asset type empty. Set share quantity and dealing fees to zero or leave them empty. A cash dividend may name its share by valid ISIN and ordinary-share classification. Native dividend files may also report the eligible share count. A quantity acquired through a reinvestment needs a separate evidenced purchase.
 
 An ordinary buy or sale requires positive gross consideration. A gift, transfer or negligible-value claim can require different treatment. Obtain specialist advice before recording it. Use a documented positive tax value only when the adviser confirms that the ordinary-share template represents that event and verifies the basis, date and costs. Keep genuine nil-basis and other specialist cases outside completed reports until handled appropriately. [HMRC market-value guidance](https://www.gov.uk/capital-gains-tax/market-value)
+
+## Rechecking receipts and overlapping statements
+
+A repeated execution reference within a single template holds that file. Obtain the fill-level identifiers or a documented aggregate containing the exact total quantity, proceeds and fees of that order. A cumulative statement can include saved executions alongside new ones. The preview compares the financial terms and identifies conflicting fields when a template and a native statement disagree.
+
+For an older receipt with unverified cash exclusions or ambiguous same-file duplicate rows, upload the identical original statement under the same account. Re-enter any required statement details. When every execution reconciles and the latest reader validates every excluded entry, select **Verify original receipt** and recalculate. This records the recheck without adding trades. Where a row still needs review, resolve it against the broker evidence and replace the affected receipt through reversal and re-import. New receipts retain the financial fields used to exclude cash activity.
+
+For an overlap between account labels, first check whether the wrong account was selected for a cumulative statement. Correct the selection or reverse an incorrect receipt. A support reviewer can clear a genuine coincidence only after checking two original statements identifying separate taxable accounts and verifying the underlying fills and fees. Record the evidence in the controlled case file. Keep personal identifiers in that file. Use the existing administrative database connection and the saved receipt ID shown in the overlap message.
+
+```sh
+node scripts/review-statement-overlap.mjs --draft DRAFT_ID --other OTHER_RECEIPT
+node scripts/review-statement-overlap.mjs --draft DRAFT_ID --other OTHER_RECEIPT --case CASE_REF --evidence SOURCE_REF --verified-separate-accounts --apply
+```
+
+Use `--receipt EXISTING_RECEIPT` instead of `--draft` when checking a historical overlap. The decision covers the exact file, target account and other receipt. Changed files and further overlaps are checked again. A customer-facing login has read access only. A reviewer can withdraw an incorrect decision using its exact account ID, file digest and other receipt ID in an administrative transaction, then recheck affected reports. IBKR continues to use the broker’s ClientAccountID and TradeID.

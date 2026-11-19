@@ -19,6 +19,16 @@ export async function activeImportIssue(
   portfolioId: string,
   through?: string,
 ): Promise<string | null> {
+  const [foreign] = await query<{ label: string; import_id: string }>(tx,
+    `SELECT a.label,t.import_id FROM cgt.transactions t JOIN cgt.broker_accounts a ON a.id=t.account_id
+     WHERE a.portfolio_id=$1 AND t.active AND t.provenance->>'originalCurrency'<>'GBP'
+       AND ($2::date IS NULL OR t.trade_date<=$2)
+       AND (cgt.supported_fx_product(t.consideration_gbp,t.provenance->>'consideration',t.provenance->>'gbpPerUnit') IS NULL
+         OR cgt.supported_fx_product(t.fees_gbp,t.provenance->>'fees',t.provenance->>'gbpPerUnit') IS NULL)
+     LIMIT 1`, [portfolioId, through ?? null]);
+  if (foreign)
+    return `The foreign amount, fees and exchange rate on receipt ${foreign.import_id} for ${foreign.label} cannot be reconciled to sterling. Verify the original statement and replace the affected import before calculating.`;
+
   const [unsupported] = await query<{ label: string; import_id: string }>(
     tx,
     `SELECT a.label,t.import_id FROM cgt.transactions t JOIN cgt.broker_accounts a ON a.id=t.account_id
@@ -29,17 +39,49 @@ export async function activeImportIssue(
   if (unsupported)
     return `Review the zero-consideration trade in ${unsupported.label} (receipt ${unsupported.import_id}). Verify its tax treatment before publishing a new calculation.`;
 
-  // Old excluded template rows retained their disposition but no source
-  // values. A fresh preview of that file is the only way to validate the exclusions.
-  const [unverified] = await query<{ label: string; id: string }>(
-    tx,
-    `SELECT a.label,i.id FROM cgt.imports i JOIN cgt.broker_accounts a ON a.id=i.account_id
-      WHERE a.portfolio_id=$1 AND i.status='committed' AND i.parser_version IN ('canonical-v1.0.0','canonical-v1.0.1')
-      AND i.excluded_count>0 LIMIT 1`,
-    [portfolioId],
-  );
+  const [unverified] = await query<{ label: string; id: string; issue: string }>(tx,
+    `SELECT a.label,i.id,i.issue FROM cgt.unverified_import_receipts i JOIN cgt.broker_accounts a ON a.id=i.account_id
+     WHERE a.portfolio_id=$1 LIMIT 1`, [portfolioId]);
   if (unverified)
-    return `The older template receipt ${unverified.id} on ${unverified.label} contains cash exclusions whose source fields were not retained. Reverse it and re-import the original template for validation.`;
+    return `Review the older ${unverified.issue} on receipt ${unverified.id} for ${unverified.label}. Upload the identical original file to verify its rows. If the file contains ambiguous entries, reverse it and re-import with the original execution evidence.`;
+
+  const [overlap] = await query<{ first_id: string; second_id: string; first_label: string; second_label:string }>(tx,
+    `WITH receipts AS MATERIALIZED (
+       SELECT i.id,i.account_id,i.file_digest,a.broker,a.label FROM cgt.imports i JOIN cgt.broker_accounts a ON a.id=i.account_id
+       WHERE a.portfolio_id=$1 AND a.broker<>'ibkr' AND i.status='committed'
+         AND EXISTS (SELECT 1 FROM cgt.broker_accounts other_account
+           JOIN cgt.imports other_import ON other_import.account_id=other_account.id AND other_import.status='committed'
+           WHERE other_account.portfolio_id=$1 AND other_account.broker=a.broker AND other_account.id<>a.id)
+     ), executions AS MATERIALIZED (
+       SELECT r.id,r.account_id,r.broker,t.source_key,t.trade_date,t.security_id,t.side,t.quantity,t.consideration_gbp,t.fees_gbp,
+         coalesce(nullif(t.provenance->>'executionReference',''),nullif(t.provenance#>>'{native,fields,Reference}',''),
+           nullif(t.provenance#>>'{native,fields,ID}',''),nullif(t.provenance#>>'{native,fields,Order ID}',''),
+           nullif(t.provenance#>>'{native,supportingDetails,transactionId}','')) AS execution
+       FROM receipts r JOIN cgt.transactions t ON t.import_id=r.id AND t.active
+       WHERE $2::date IS NULL OR t.trade_date<=$2
+     ), possible_overlaps AS (
+       SELECT a.id first_id,b.id second_id FROM receipts a JOIN receipts b ON b.broker=a.broker AND b.file_digest=a.file_digest
+         AND b.account_id>a.account_id
+       UNION ALL
+       SELECT a.id,b.id FROM executions a JOIN executions b ON b.broker=a.broker AND b.execution=a.execution
+         AND b.account_id>a.account_id
+       UNION ALL
+       SELECT a.id,b.id FROM executions a JOIN executions b ON a.broker=b.broker AND b.account_id<>a.account_id
+         AND a.execution IS NULL AND b.execution IS NOT NULL
+         AND a.source_key=encode(sha256(convert_to('['||to_json(a.broker)::text||','||to_json(a.account_id::text)::text||','||to_json(b.execution)::text||']','UTF8')),'hex')
+       UNION ALL
+       SELECT a.id,b.id FROM executions a JOIN executions b ON a.broker=b.broker AND b.account_id<>a.account_id
+         AND b.trade_date=a.trade_date AND b.security_id=a.security_id AND b.side=a.side AND b.quantity=a.quantity
+         AND b.consideration_gbp=a.consideration_gbp AND b.fees_gbp=a.fees_gbp
+         AND a.execution IS NULL AND (b.execution IS NOT NULL OR b.account_id>a.account_id)
+     )
+     SELECT a.id AS first_id,b.id AS second_id,a.label AS first_label,b.label AS second_label
+     FROM possible_overlaps o JOIN receipts a ON a.id=o.first_id JOIN receipts b ON b.id=o.second_id
+     WHERE NOT EXISTS(SELECT 1 FROM cgt.reviewed_statement_overlaps r WHERE
+       (r.other_import_id=b.id AND r.account_id=a.account_id AND r.file_digest=a.file_digest) OR
+       (r.other_import_id=a.id AND r.account_id=b.account_id AND r.file_digest=b.file_digest)) LIMIT 1`, [portfolioId,through ?? null]);
+  if (overlap)
+    return `Review overlapping broker records on ${overlap.first_label} (receipt ${overlap.first_id}) and ${overlap.second_label} (receipt ${overlap.second_id}). Reverse the duplicate or ask support to verify the statements identify genuinely separate accounts.`;
 
   const rows = await query<StoredIbkr>(
     tx,
