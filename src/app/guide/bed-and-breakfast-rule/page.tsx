@@ -37,7 +37,7 @@ export default function BedAndBreakfastRulePage() {
         name: "How do I avoid triggering the bed and breakfast rule?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "Wait at least 31 days before repurchasing the same shares. Alternatively, consider legitimate strategies: buy shares in your spouse's name, repurchase within an ISA (bed and ISA), or repurchase within a SIPP pension (bed and SIPP).",
+          text: "A repurchase on day 31 is outside the 30-day window for that sale. The rule looks at beneficial ownership, the capacity in which the shares are held and UK residence when the shares are acquired. Changing the broker or the name on an account does not by itself change the owner.",
         },
       },
     ],
@@ -64,9 +64,9 @@ export default function BedAndBreakfastRulePage() {
       jsonLd={[faqLd]}
     >
       <p>
-        If you sell shares and then buy the same shares back within 30 days, you
-        might think you&apos;ve crystallised a gain or loss for tax purposes.
-        But HMRC disagrees. The <strong>30-day bed and breakfast rule</strong>{" "}
+        A sale is still a disposal if you buy the same shares back within 30 days.
+        The repurchase can change the cost used to work out your gain or loss.
+        The <strong>30-day bed and breakfast rule</strong>{" "}
         (formally known as the &ldquo;identification rule&rdquo;) overrides the
         normal <Link href="/guide/section-104-pool">Section 104 pool</Link>{" "}
         matching and instead matches your sale against the repurchase. This
@@ -94,7 +94,7 @@ export default function BedAndBreakfastRulePage() {
         <p className="text-sm text-amber-900">
           <strong>Key point:</strong> The 30-day window starts from the day{" "}
           <em>after</em> the sale. If you sell on 1 June, the rule applies to
-          any repurchase between 2 June and 1 July (inclusive). A repurchase on
+          an eligible repurchase between 2 June and 1 July (inclusive). A repurchase on
           2 July would be outside the window.
         </p>
       </div>
@@ -103,8 +103,11 @@ export default function BedAndBreakfastRulePage() {
       <ol>
         <li>Start with shares sold that are still unmatched after checking same-day purchases.</li>
         <li>
-          Check eligible purchases of the same class in the same company during
-          the next 30 calendar days, earliest first.
+          Check purchases of the same class in the same company by the same
+          person in the same capacity during the next 30 calendar days, earliest
+          first. UK residence at the time of the purchase matters. Include
+          purchases at other taxable brokers.{" "}
+          <a href="https://www.gov.uk/hmrc-internal-manuals/capital-gains-manual/cg51560">See HMRC’s matching rules</a>.
         </li>
         <li>
           Use each purchase to match as many outstanding shares as it covers.
@@ -191,36 +194,29 @@ export default function BedAndBreakfastRulePage() {
       <p>
         In this case, the B&amp;B rule actually <em>reduces</em> Emma&apos;s
         gain (from £400 to £100) because she repurchased at a lower price. The
-        remaining pool cost of £600 is preserved for future disposals. This can
-        occasionally work in the investor&apos;s favour, but it&apos;s not
-        something you should plan around.
+        remaining pool cost of £600 is preserved for future disposals. That cost will be available for a later sale matched to the pool.
       </p>
 
       <h2>
-        Legitimate Alternatives: Bed and ISA, Bed and SIPP, Bed and Spouse
+        ISAs, pensions and shares owned by a spouse
       </h2>
       <p>
-        While the classic bed and breakfast is caught by the 30-day rule, HMRC
-        does allow several legitimate alternatives:
+        The tax treatment depends on who beneficially owns each holding and
+        whether it is in a taxable account.
       </p>
 
       <h3>Bed and ISA</h3>
       <p>
-        Sell shares in your taxable general investment account and repurchase
-        them within your Stocks &amp; Shares ISA. The sale is a genuine disposal
-        for CGT purposes (the 30-day rule does not apply because the repurchase
-        is in a different tax wrapper). Any future gains on those shares within
-        the ISA are entirely tax-free. This is one of the most effective CGT
-        planning strategies available to UK investors.
+        A sale in your general investment account remains a taxable disposal.
+        A purchase inside your Stocks &amp; Shares ISA is outside personal taxable
+        share matching. Check any other purchases in your taxable accounts.
       </p>
 
       <h3>Bed and SIPP</h3>
       <p>
-        Similar to bed and ISA, but you repurchase within your Self-Invested
-        Personal Pension. The disposal crystallises the gain or loss, and the
-        shares then grow tax-free within the pension. You also receive tax
-        relief on the pension contribution. However, you cannot access pension
-        funds until age 55 (rising to 57 in 2028).
+        A purchase inside a registered pension falls outside your personal
+        taxable share pool. Contribution relief and pension withdrawals have
+        separate rules. Include the sale made through your taxable account.
       </p>
 
       <h3>Bed and Spouse</h3>

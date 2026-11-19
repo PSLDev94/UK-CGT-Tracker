@@ -155,9 +155,10 @@ export default async function BrokerSupport({
           <section id="flex-fields" className="panel mt-8 scroll-mt-20">
             <h2>Interactive Brokers Flex setup</h2>
             <p>
-              Use an Activity Flex Query with Trades at execution level, one
-              taxable account, CSV output and trade dates in YYYY-MM-DD or
-              YYYYMMDD. Select these fields (any order):
+              Use a Trades Activity Flex Query for one GBP-base taxable account.
+              Select individual stock executions and CSV output. Choose the
+              TradeDate format YYYYMMDD or YYYY-MM-DD so 4 May and 5 April
+              cannot be confused. Include the following fields in any order.
             </p>
             <p className="text-sm break-words">{IBKR_HEADERS.join(", ")}</p>
             <p>

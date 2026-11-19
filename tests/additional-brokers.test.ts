@@ -95,6 +95,25 @@ const ib = Papa.unparse([
 ]);
 describe("additional broker readers with explicit evidence", () => {
   it.each([
+    ["20240405", "2024-04-05"], ["2024-05-04", "2024-05-04"],
+    ["11/19/2024", "2024-11-19"], ["19/11/2024", "2024-11-19"],
+    ["04/04/2024", "2024-04-04"], ["02/29/2024", "2024-02-29"],
+  ])("reads unambiguous Flex trade date %s", (input, expected) => {
+    const result = reviewCsv(ib.replace("20240601", input), config("ibkr", {}));
+    expect(result.status, JSON.stringify(result.issues)).toBe("ready");
+    expect(result.parserVersion).toBe("ibkr-flex-executions-v2");
+    expect(result.records[0]?.trade?.date).toBe(expected);
+  });
+  it.each(["04/05/2024", "05/04/2024", "02/29/2023", "02/05/24"])(
+    "holds the whole Flex export for the ambiguous or invalid date %s",
+    (input) => {
+      const result = reviewCsv(ib.replace("20240601", input), config("ibkr", {}));
+      expect(result.counts.needsReview).toBe(1);
+      expect(() => tradesFromReview(result)).toThrow();
+      if (input.endsWith("2024")) expect(result.issues[0]?.message).toContain("yyyyMMdd");
+    },
+  );
+  it.each([
     ["hl", hl],
     ["ii", ii],
     ["ajbell", aj],
@@ -229,7 +248,7 @@ it.each([
   ["hl", "hl-assisted", "70.88"],
   ["ii", "ii-assisted", "70.88"],
   ["ajbell", "ajbell-assisted-candidate", "70.88"],
-  ["ibkr", "ibkr-flex-gbp", "71.62"],
+  ["ibkr", "ibkr-flex-gbp", "71.63"],
 ] as const)(
   "derives independently checked gains from the %s buy/sell fixture",
   async (broker, file, expected) => {

@@ -2,8 +2,9 @@ import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { PDFDocument } from "pdf-lib";
 import { reportPageText } from "./helpers/pdf-text";
+import { calculateGains } from "../src/domain/cgt/calculate";
 import { sampleReport } from "../src/domain/reports/sample";
-import { sa108Edition } from "../src/domain/reports/filing-guidance";
+import { adjustment2024Url, sa108Edition } from "../src/domain/reports/filing-guidance";
 
 test("homepage jump and fee-bearing example reconcile with both downloadable samples", async ({
   page,
@@ -88,7 +89,10 @@ test("filing guidance uses the report year, including archived editions and the 
     tax_year: year,
     coverage_confirmed: true,
     coverage_accounts: [account.id],
-    result: { ...sampleReport.result, taxYear: year },
+    result: year === "2024-25" ? calculateGains([
+      { id: "buy", securityId: "GB0008706128", side: "BUY", date: "2024-06-01", quantity: "2", considerationGBP: "20", feesGBP: "0" },
+      { id: "sell", securityId: "GB0008706128", side: "SELL", date: "2024-10-30", quantity: "2", considerationGBP: "30", feesGBP: "0" },
+    ], { taxYear: "2024-25", historyThrough: "2025-05-05" }) : { ...sampleReport.result, taxYear: year },
   }));
   await page.route("**/api/v2/auth/**", (route) =>
     route.fulfill({
@@ -121,6 +125,15 @@ test("filing guidance uses the report year, including archived editions and the 
     await select.selectOption(year);
     const edition = sa108Edition(year);
     const label = year.replace("-", "–");
+    const rateChange = summary.getByRole("link", { name: "HMRC’s adjustment guidance" });
+    if (year === "2024-25") {
+      await expect(rateChange).toHaveAttribute("href", adjustment2024Url);
+      const periods = page.getByRole("region", { name: "2024–25 rate periods" });
+      await expect(periods).toContainText("Gains £10.00 · Losses £0.00 · Net £10.00");
+      await expect(summary.getByText(/SA108 box 51/)).toBeVisible();
+    } else {
+      await expect(rateChange).toHaveCount(0);
+    }
     if (year === "2025-26") {
       await summary
         .getByRole("link", { name: `Read the ${label} SA108 filing guide` })

@@ -1,5 +1,7 @@
 import { decimal, Money } from "../values";
 
+export const supportedCurrencies: ReadonlySet<string> = new Set(Intl.supportedValuesOf("currency"));
+
 /** Read-only terms from a recognised native trade layout. The adapter still
  * checks identifiers, amounts, fee denominations and net cash before a save. */
 export interface ExportedTerms {

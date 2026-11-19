@@ -136,6 +136,10 @@ async function main() {
            WHERE t.active AND (t.consideration_gbp <> cgt.ledger_gbp(t.consideration_gbp,t.provenance->>'consideration',t.provenance->>'gbpPerUnit')
              OR t.fees_gbp <> cgt.ledger_gbp(t.fees_gbp,t.provenance->>'fees',t.provenance->>'gbpPerUnit'))
            GROUP BY i.parser_version ORDER BY i.parser_version`);
+        const brokerEvidenceIssues = await query<{ parser: string; issue: string; receipts: number; trades: number }>(tx,
+          `SELECT i.parser_version AS parser,v.issue,count(DISTINCT v.import_id)::int AS receipts,count(*)::int AS trades
+           FROM cgt.broker_evidence_issues v JOIN cgt.imports i ON i.id=v.import_id
+           GROUP BY i.parser_version,v.issue ORDER BY i.parser_version,v.issue`);
         console.log(
           JSON.stringify(
             {
@@ -143,6 +147,7 @@ async function main() {
               portfolios: portfolios.length,
               portfoliosRequiringImportReview,
               receiptsNeedingOriginalFile,
+              brokerEvidenceIssues,
               correctedFx,
               years: summary,
             },

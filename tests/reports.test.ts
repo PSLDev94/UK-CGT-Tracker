@@ -3,6 +3,7 @@ import { PDFDocument } from "pdf-lib";
 import Papa from "papaparse";
 import Decimal from "decimal.js";
 import { reportPageText } from "./helpers/pdf-text";
+import { CURRENT_SCOPE_DECLARATION } from "../src/domain/cgt/types";
 import { calculateGains } from "../src/domain/cgt/calculate";
 import {
   reportCsv,
@@ -113,11 +114,18 @@ describe("auditable report exports", () => {
     }
   });
   it("records the saved residence, ownership and ordinary-market declaration in all exports", async () => {
-    const saved: ReportSnapshot = { ...snapshot, result: { ...snapshot.result, scopeDeclaration: "personal-market-trades-v2" } };
+    const saved: ReportSnapshot = { ...snapshot, result: { ...snapshot.result, scopeDeclaration: CURRENT_SCOPE_DECLARATION } };
     for (const content of [reportCsv(saved), ...await Promise.all([false, true].map(async evidence =>
       reportPageText(await PDFDocument.load(await reportPdf(saved, evidence)))))]) {
-      expect(content.replace(/\s+/g, " ")).toContain("personal ownership in the same capacity, UK residence throughout the matching history including later repurchases, and ordinary market purchases or sales at arm");
+      const text = content.replace(/\s+/g, " ");
+      expect(text).toContain("personal ownership in the same capacity, UK residence throughout the matching history including later repurchases, and ordinary market purchases or sales at arm");
+      expect(text).toContain("require no special valuation, tax relief or election");
+      expect(text).toContain("Reconcile all taxable accounts");
+      expect(text).toContain("SA108 box 51");
     }
+    const legacy = { ...snapshot, result: { ...snapshot.result, scopeDeclaration: "personal-market-trades-v2" as const } };
+    expect(reportCsv(legacy)).toContain("earlier declaration did not confirm costs, special valuations");
+    expect(reportCsv({ ...saved, result: { ...saved.result, taxYear: "2025-26" } })).not.toContain("SA108 box 51");
     expect(reportCsv(snapshot)).toContain("no recorded ownership and UK residence declaration");
   });
   it("keeps the exact receipt references for Unicode text extraction and distinct printed references", async () => {
@@ -342,7 +350,7 @@ describe("auditable report exports", () => {
       quantityAfter: "0",
       costAfterGBP: "0",
     });
-    expect(result.summary?.netGainGBP).toBe("5.01");
+    expect(result.summary?.netGainGBP).toBe("5.00");
     const saved = {
       ...snapshot,
       result,
@@ -371,8 +379,8 @@ describe("auditable report exports", () => {
       "10",
       "source-buy",
     ]);
-    expect(rows).toContainEqual(["Matched acquisition cost", "10.00", "-0.01", "9.99"]);
-    expect(rows).toContainEqual(["Net gain or loss", "5.00", "0.01", "5.01"]);
+    expect(rows).toContainEqual(["Matched acquisition cost", "9.99", "0.01", "10.00"]);
+    expect(rows).toContainEqual(["Net gain or loss", "5.01", "-0.01", "5.00"]);
     const pdf = reportPageText(
       await PDFDocument.load(await reportPdf(saved, true)),
     );
@@ -384,11 +392,67 @@ describe("auditable report exports", () => {
     expect(pdf).toContain("Statement reference: CN-BUY");
     expect(pdf).toContain("Balance: 0 shares · cost £0");
     expect(pdf).toContain(
-      "Matched acquisition cost: annual £10.00 · rounding difference -£0.01 · reported £9.99",
+      "Matched acquisition cost: sum of displayed disposals £9.99 · rounding difference £0.01 · reported £10.00",
     );
     expect(
       reportPageText(await PDFDocument.load(await reportPdf(saved, false))),
     ).toContain("Annual rounding reconciliation");
+
+    // An archived pre-alpha.6 result stored the sum of displayed sale figures
+    // as its reported total and stored the exact annual amount for comparison.
+    const archived = { ...saved, result: {
+      ...result, engineVersion: "2.0.0-alpha.5", scopeDeclaration: "personal-market-trades-v2" as const,
+      ratePeriods: undefined, annualBeforeDisposalRounding: result.summary!,
+      summary: result.displayedDisposalTotals!, displayedDisposalTotals: undefined,
+      saleBreakdown: { ...result.saleBreakdown!, totalAllowableCostsGBP: "9.99" },
+    } };
+    const archivedRows = Papa.parse<string[]>(reportCsv(archived), { delimiter: "," }).data;
+    expect(archivedRows).toContainEqual(["Measure", "Rounded once for the year", "Difference to reported total", "Reported total"]);
+    expect(archivedRows).toContainEqual(["Net gain or loss", "5.00", "0.01", "5.01"]);
+    for (const evidence of [false, true]) {
+      const text = reportPageText(await PDFDocument.load(await reportPdf(archived, evidence))).replace(/\s+/g, " ");
+      expect(text).toContain("This earlier calculation added the displayed disposal amounts.");
+      expect(text).toContain("Net gain or loss: rounded once for the year £5.00 · rounding difference £0.01 · reported £5.01");
+      expect(text).toContain("earlier declaration did not confirm costs, special valuations");
+      expect(text).not.toContain("2024-25 rate periods");
+    }
+  });
+
+  it("explains when subtracting the displayed sale numbers would change the gain by a penny", async () => {
+    const common = { securityId: "GB0008706128", quantity: "1", feesGBP: "0" };
+    const result = calculateGains([
+      { ...common, id: "fraction-buy", side: "BUY", date: "2024-03-01", considerationGBP: "10.004" },
+      { ...common, id: "fraction-sale", side: "SELL", date: "2024-08-01", considerationGBP: "20.006" },
+    ], { taxYear: "2024-25", historyThrough: "2025-05-05" });
+    const saved = { ...snapshot, result };
+    const explanation = "Net sale proceeds less matched cost gives £10.01 from the displayed figures. The underlying amounts rounded once give £10.00.";
+    expect(result.summary?.netGainGBP).toBe("10.00");
+    for (const content of [reportCsv(saved), ...await Promise.all([true, false].map(async evidence =>
+      reportPageText(await PDFDocument.load(await reportPdf(saved, evidence)))))])
+      expect(content.replace(/\s+/g, " ")).toContain(explanation);
+  });
+
+  it("exports confirmed gains and losses on both sides of 30 October 2024 without allocating tax", async () => {
+    const trade = { securityId: "GB0008706128", feesGBP: "0" };
+    const result = calculateGains([
+      { ...trade, id: "buy", side: "BUY", date: "2024-03-01", quantity: "2", considerationGBP: "20" },
+      { ...trade, id: "first", side: "SELL", date: "2024-10-29", quantity: "1", considerationGBP: "25" },
+      { ...trade, id: "second", side: "SELL", date: "2024-10-30", quantity: "1", considerationGBP: "3" },
+    ], { taxYear: "2024-25", historyThrough: "2025-05-05" });
+    const saved = { ...snapshot, result };
+    const csvRows = Papa.parse<string[]>(reportCsv(saved), { delimiter: "," }).data;
+    expect(csvRows).toContainEqual(["2024-04-06", "2024-10-29", "15.00", "0.00", "15.00"]);
+    expect(csvRows).toContainEqual(["2024-10-30", "2025-04-05", "0.00", "7.00", "-7.00"]);
+    expect(calculateGains([], { taxYear: "2024-25", historyThrough: "2025-03-01" }).ratePeriods).toBeUndefined();
+    for (const evidence of [false, true]) {
+      const pdf = reportPageText(await PDFDocument.load(await reportPdf(saved, evidence))).replace(/\s+/g, " ");
+      expect(pdf).toContain("29 October 2024 · gains £15.00 · losses £0.00 · net £15.00");
+      expect(pdf).toContain("5 April 2025 · gains £0.00 · losses £7.00 · net -£7.00");
+      expect(pdf).toContain("SA108 box 51");
+      const draft = { ...saved, coverage_confirmed: false };
+      expect(reportPageText(await PDFDocument.load(await reportPdf(draft, evidence)))).not.toContain("2024-25 rate periods");
+    }
+    expect(reportCsv({ ...saved, coverage_confirmed: false })).not.toContain("2024-25 rate periods");
   });
 
   it("exports saved decimal figures, matching details, pools and provenance", () => {
@@ -511,7 +575,7 @@ describe("auditable report exports", () => {
         page.includes("Before using these figures"),
       );
       expect(guidance).toContain(
-        "The CSV retains full precision for matching and pool costs.",
+        "The CSV retains matching and pool costs.",
       );
       expect(pages.join(" ")).toContain("1 share · cost");
       expect(pages.join(" ")).not.toContain("1 shares");

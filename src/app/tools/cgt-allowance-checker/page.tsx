@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Money } from "@/domain/values";
+import { Money, TAX_YEARS, type TaxYear } from "@/domain/values";
+import { adjustment2024Url, sa108Collection, sa108Edition } from "@/domain/reports/filing-guidance";
 import { money } from "@/ui/format";
 import { CheckCircle, AlertTriangle, XCircle } from "lucide-react";
 import { CalculatorUploadLink } from "@/components/calculator-upload-link";
@@ -11,11 +12,20 @@ import { CalculatorFields } from "@/components/calculator-fields";
 import { CgtReportingGuidance } from "@/components/cgt-reporting-guidance";
 import { PublicFooter } from "@/components/public-footer";
 
-const EXEMPT_AMOUNT = 3000;
-const BASIC_RATE = 0.18;
-const HIGHER_RATE = 0.24;
+type Period = "mixed" | "early" | "late";
+const fieldStyle = "w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none";
 
 export default function CGTAllowanceCheckerPage() {
+  const [taxYear, setTaxYear] = useState<TaxYear>("2025-26");
+  const [period, setPeriod] = useState<Period>("mixed");
+  const yearLabel = taxYear.replace("-", "–");
+  const exemptAmount = new Money(TAX_YEARS[taxYear].annualExemptionGBP);
+  const exemptionLabel = exemptAmount.toNumber().toLocaleString("en-GB");
+  const splitYear = taxYear === "2024-25";
+  const needsDisposalDates = splitYear && period === "mixed";
+  const earlyRates = taxYear < "2024-25" || (splitYear && period === "early");
+  const basicPercent = earlyRates ? 10 : 18;
+  const higherPercent = earlyRates ? 20 : 24;
   const [gains, setGains] = useState("");
   const [losses, setLosses] = useState("");
 
@@ -28,28 +38,29 @@ export default function CGTAllowanceCheckerPage() {
   const netGain = new Money(gainsInvalid ? 0 : gains || 0).minus(
     lossesInvalid ? 0 : losses || 0,
   );
-  const allowanceUsed = Money.clamp(netGain, 0, EXEMPT_AMOUNT);
-  const exemptionRemaining = new Money(EXEMPT_AMOUNT).minus(allowanceUsed);
-  const taxableGain = Money.max(0, netGain.minus(EXEMPT_AMOUNT));
-  const needIncome = hasInput && taxableGain.gt(0);
+  const allowanceUsed = Money.clamp(netGain, 0, exemptAmount);
+  const exemptionRemaining = new Money(exemptAmount).minus(allowanceUsed);
+  const taxableGain = Money.max(0, netGain.minus(exemptAmount));
+  const taxable = hasInput && taxableGain.gt(0);
+  const needIncome = taxable && !needsDisposalDates;
   const incomeInvalid =
     needIncome && taxableIncome !== "" && !valid(taxableIncome);
   let taxOwed = null;
-  if (!needIncome || valid(taxableIncome)) {
+  if (!taxable || (needIncome && valid(taxableIncome))) {
     const basicBandRemaining = needIncome
       ? Money.max(0, new Money(37700).minus(taxableIncome))
       : 0;
     const basicPortion = Money.min(taxableGain, basicBandRemaining);
     taxOwed = basicPortion
-      .mul(BASIC_RATE)
-      .plus(taxableGain.minus(basicPortion).mul(HIGHER_RATE));
+      .mul(basicPercent).div(100)
+      .plus(taxableGain.minus(basicPortion).mul(higherPercent).div(100));
   }
-  const light: "green" | "amber" | "red" = netGain.gt(EXEMPT_AMOUNT)
+  const light: "green" | "amber" | "red" = netGain.gt(exemptAmount)
     ? "red"
-    : netGain.gte(2500)
+    : netGain.times(6).gte(exemptAmount.times(5))
       ? "amber"
       : "green";
-  const pctUsed = allowanceUsed.div(EXEMPT_AMOUNT).times(100).toNumber();
+  const pctUsed = allowanceUsed.div(exemptAmount).times(100).toNumber();
   const lightConfig = {
     green: {
       icon: CheckCircle,
@@ -66,7 +77,7 @@ export default function CGTAllowanceCheckerPage() {
       border: "border-amber-200",
       text: "text-amber-700",
       iconColor: "text-amber-600",
-      label: netGain.eq(EXEMPT_AMOUNT) ? "Allowance fully used" : "Approaching allowance limit",
+      label: netGain.eq(exemptAmount) ? "Allowance fully used" : "Approaching allowance limit",
       gradient: "from-amber-400 to-orange-500",
     },
     red: {
@@ -88,17 +99,15 @@ export default function CGTAllowanceCheckerPage() {
 
       <main id="main" tabIndex={-1} className="wrap-anywhere max-w-3xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
         <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-4">
-          UK CGT Allowance Checker 2025-26
+          UK CGT Allowance Checker
         </h1>
         <p className="text-lg text-gray-600 mb-2 max-w-3xl leading-relaxed">
-          Estimate your tax on ordinary share gains for 6 April 2025 to 5 April
-          2026. This checker assumes you qualify for the individual{" "}
-          <strong>£3,000 annual exempt amount</strong>.
+          Estimate tax on ordinary share gains for {yearLabel}. This checker assumes you qualify for the standard individual <strong>£{exemptionLabel} annual exempt amount</strong>.
         </p>
         <p className="text-gray-600 mb-8 max-w-3xl leading-relaxed">
-          If you claimed the foreign income and gains regime or Overseas
-          Workday Relief for this year, you have no annual exempt amount and
-          this estimate does not apply.{" "}
+          {taxYear >= "2025-26"
+            ? "If you claimed the foreign income and gains regime or Overseas Workday Relief for this year, you have no annual exempt amount and this estimate does not apply."
+            : "A remittance basis claim can affect your annual exemption. If your entitlement differs from the standard allowance, check your position before using the figures."}{" "}
           <a className="text-blue-700 underline" href="https://www.gov.uk/guidance/capital-gains-tax-rates-and-allowances">
             Check allowance eligibility with HMRC
           </a>.
@@ -114,11 +123,25 @@ export default function CGTAllowanceCheckerPage() {
           />
           <div className="p-6 sm:p-8 space-y-6">
             <div>
+              <label htmlFor="allowance-year" className="block text-sm font-semibold text-gray-700 mb-1">Tax year</label>
+              <select id="allowance-year" className={fieldStyle} value={taxYear} aria-describedby="year-hint"
+                onChange={(event) => {
+                  setTaxYear(event.target.value as TaxYear);
+                  setPeriod("mixed");
+                  setGains("");
+                  setLosses("");
+                  setTaxableIncome("");
+                }}>
+                {Object.keys(TAX_YEARS).reverse().map(year => <option key={year} value={year}>{year.replace("-", "–")}</option>)}
+              </select>
+              <p id="year-hint" className="mt-2 text-sm text-gray-600">Changing the year clears your figures.{taxYear === "2026-27" && " This tax year is still open. Treat the result as an estimate for the year so far."}</p>
+            </div>
+            <div>
               <label
                 htmlFor="gains"
                 className="block text-sm font-semibold text-gray-700 mb-1"
               >
-                Total gains for 2025–26 (£)
+                Total gains for {yearLabel} (£)
               </label>
               <input
                 id="gains"
@@ -137,7 +160,7 @@ export default function CGTAllowanceCheckerPage() {
                 htmlFor="losses"
                 className="block text-sm font-semibold text-gray-700 mb-1"
               >
-                Total allowable losses for 2025–26 (£)
+                Total allowable losses for {yearLabel} (£)
               </label>
               <input
                 id="losses"
@@ -153,6 +176,17 @@ export default function CGTAllowanceCheckerPage() {
             </div>
           </div>
 
+          {splitYear && taxable && (
+            <div className="px-6 pb-6">
+              <label htmlFor="disposal-period" className="block text-sm font-semibold text-gray-700 mb-1">When did you dispose of the shares?</label>
+              <select id="disposal-period" className={fieldStyle} value={period} onChange={e => setPeriod(e.target.value as Period)}>
+                <option value="mixed">Both periods, or unsure</option>
+                <option value="early">All before 30 October 2024</option>
+                <option value="late">All on or after 30 October 2024</option>
+              </select>
+              <p className="mt-2 text-sm text-gray-600">The main rates changed on 30 October. For disposals in both periods, separate your dated gains and losses and check <a className="text-blue-700 underline" href={adjustment2024Url}>HMRC’s 2024–25 adjustment</a>.</p>
+            </div>
+          )}
           {needIncome && (
             <div className="px-6 pb-6">
               <label
@@ -172,9 +206,7 @@ export default function CGTAllowanceCheckerPage() {
               />
               <p id="income-hint" className="text-sm text-gray-600 mt-2">
                 Use income after your Personal Allowance, including if you pay Scottish Income Tax.
-                The UK CGT basic-rate band is £37,700 for 2025–26. This estimate uses 18%
-                on gains within the remaining band and 24% above it, and excludes other gains,
-                reliefs and band extensions.
+                The standard UK basic-rate band is £37,700 for {yearLabel}. This estimate uses {basicPercent}% on gains within the remaining band and {higherPercent}% above it. It assumes no other gains, reliefs or band extensions.
               </p>
             </div>
           )}
@@ -229,11 +261,11 @@ export default function CGTAllowanceCheckerPage() {
                       {money(taxOwed.toString())}
                     </p>
                   ) : (
-                    <p className="text-sm font-medium text-gray-700">Enter your taxable income for an estimate.</p>
+                    <p className="text-sm font-medium text-gray-700">{needsDisposalDates ? "An annual total is insufficient to estimate tax across the rate change." : "Enter your taxable income for an estimate."}</p>
                   )}
                   {needIncome && taxOwed && (
                     <p className="text-xs text-gray-600 mt-1">
-                      18% within the remaining UK basic-rate band and 24% above it
+                      {basicPercent}% within the remaining UK basic-rate band and {higherPercent}% above it
                     </p>
                   )}
                 </div>
@@ -251,7 +283,7 @@ export default function CGTAllowanceCheckerPage() {
               <div className="mt-6">
                 <div className="flex justify-between text-xs text-gray-500 mb-1.5">
                   <span>£0</span>
-                  <span>£{EXEMPT_AMOUNT.toLocaleString()} exempt</span>
+                  <span>£{exemptionLabel} exempt</span>
                 </div>
                 <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
                   <div
@@ -277,7 +309,7 @@ export default function CGTAllowanceCheckerPage() {
             for a worked example of how the income bands apply.
           </p>
           <h2>When do I report share gains?</h2>
-          <CgtReportingGuidance />
+          <CgtReportingGuidance year={taxYear} />
 
           <h2>Checking the figures for your return</h2>
           <p>
@@ -285,7 +317,7 @@ export default function CGTAllowanceCheckerPage() {
             your broker statements. The estimate uses the gains and losses you
             enter. Your return may also include other assets, reliefs or losses
             brought forward. See the{" "}
-            <Link href="/guide/sa108-how-to-fill-in">2025–26 SA108 guide</Link>.
+            <a href={sa108Edition(taxYear)?.notes ?? sa108Collection}>HMRC capital gains guidance for {yearLabel}</a>.
           </p>
         </div>
 

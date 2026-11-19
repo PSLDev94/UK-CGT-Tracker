@@ -6,7 +6,7 @@ import type { Trade } from "../src/domain/cgt/types";
 
 // Independent exact-rational oracle. One token represents a quarter share.
 // It allocates individual tokens, instead of using the production engine's
-// Decimal daily-side quantity/cost representation. Monetary inputs are pence.
+// daily-side quantity/cost representation. Monetary inputs are pence.
 const zero = BigInt(0),
   one = BigInt(1),
   two = BigInt(2),
@@ -42,6 +42,24 @@ type Entry = {
   pence: number;
   fee: number;
 };
+type MatchedSale = { date: string; proceeds: bigint; cost: Fraction };
+
+function annualAmounts(sales: MatchedSale[]) {
+  let proceeds = zero, cost = fraction(zero), gains = fraction(zero), losses = fraction(zero);
+  for (const sale of sales) {
+    proceeds += sale.proceeds;
+    cost = add(cost, sale.cost);
+    const gain = sub(fraction(sale.proceeds), sale.cost);
+    if (gain.n < zero) losses = sub(losses, gain);
+    else gains = add(gains, gain);
+  }
+  return {
+    proceedsGBP: money(proceeds), allowableCostsGBP: money(rounded(cost)),
+    gainsGBP: money(rounded(gains)), lossesGBP: money(rounded(losses)),
+    netGainGBP: money(rounded(sub(fraction(proceeds), cost))),
+  };
+}
+
 function oracle(entries: Entry[]) {
   const dates = [...new Set(entries.map((e) => e.day))].sort((a, b) => a - b);
   const buys = new Map<number, Fraction[]>(),
@@ -83,12 +101,7 @@ function oracle(entries: Entry[]) {
     }
   let poolUnits = 200,
     poolCost = fraction(BigInt(100000));
-  const output: {
-    date: string;
-    proceedsGBP: string;
-    allowableCostGBP: string;
-    gainGBP: string;
-  }[] = [];
+  const matched: MatchedSale[] = [];
   for (const day of dates) {
     const date = plusDays("2024-04-01", day);
     if (date > "2025-04-05") break;
@@ -105,15 +118,23 @@ function oracle(entries: Entry[]) {
       s.cost = add(s.cost, unit);
       s.units--;
     }
-    if (date >= "2024-04-06")
-      output.push({
-        date,
-        proceedsGBP: money(s.proceeds),
-        allowableCostGBP: money(rounded(s.cost)),
-        gainGBP: money(s.proceeds - rounded(s.cost)),
-      });
+    if (date >= "2024-04-06") matched.push({ date, proceeds: s.proceeds, cost: s.cost });
   }
-  return { output, poolUnits };
+  const output = matched.map(({ date, proceeds, cost }) => ({
+    date,
+    proceedsGBP: money(proceeds),
+    allowableCostGBP: money(rounded(cost)),
+    gainGBP: money(rounded(sub(fraction(proceeds), cost))),
+  }));
+  const ratePeriods = [
+    { from: "2024-04-06", through: "2024-10-29" },
+    { from: "2024-10-30", through: "2025-04-05" },
+  ].map(({ from, through }) => {
+    const period = matched.filter(sale => sale.date >= from && sale.date <= through);
+    const { gainsGBP, lossesGBP, netGainGBP } = annualAmounts(period);
+    return { from, through, gainsGBP, lossesGBP, netGainGBP };
+  });
+  return { output, poolUnits, summary: annualAmounts(matched), ratePeriods };
 }
 it("agrees with an exact rational token model over 500 varied trading histories", () => {
   fc.assert(
@@ -165,6 +186,8 @@ it("agrees with an exact rational token model over 500 varied trading histories"
             }),
           ),
         ).toEqual(expected.output);
+        expect(actual.summary).toEqual(expected.summary);
+        expect(actual.ratePeriods).toEqual(expected.ratePeriods);
         expect(actual.pools[0]?.quantity ?? "0").toBe(
           String(expected.poolUnits / 4),
         );

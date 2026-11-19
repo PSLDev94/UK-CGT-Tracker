@@ -153,6 +153,29 @@ describe('HMRC share matching regression cases', () => {
     expect(run([...yearEnd, buy, trade('unrelated','2025-04-21','SELL','2','300')]).summary?.netGainGBP).toBe('20.00')
   })
 
+  it('withholds a year-end pool match when a missing purchase could still replace it', () => {
+    const opening = trade('opening', '2024-11-12', 'BUY', '10', '100')
+    const closing = trade('closing', '2025-04-05', 'SELL', '10', '200')
+    const unexplained = trade('unexplained', '2025-04-07', 'SELL', '10', '200')
+    const runThroughMay = (trades: Trade[]) => calculateGains(trades, { ...options, historyThrough: '2025-05-06' })
+    const held = runThroughMay([opening, closing, unexplained])
+    expect(held).toMatchObject({
+      status: 'blocked', summary: null,
+      issues: [{ code: 'UNEVIDENCED_HOLDING', date: '2025-04-07', quantity: '10' }],
+      disposals: [{ allowableCostGBP: null, gainGBP: null }],
+    })
+    const recovered = runThroughMay([opening, closing, trade('recovered', '2025-04-06', 'BUY', '10', '180'), unexplained])
+    expect(recovered.status).toBe('complete')
+    expect(recovered.summary?.netGainGBP).toBe('20.00')
+    expect(recovered.disposals[0]?.matches).toMatchObject([{ rule: 'THIRTY_DAY', quantity: '10' }])
+
+    const partial = trade('some', '2025-04-06', 'BUY', '4', '72')
+    expect(runThroughMay([opening, closing, partial, unexplained]).status).toBe('blocked')
+    expect(runThroughMay([opening, closing, { ...unexplained, date: '2025-05-05' }]).status).toBe('blocked')
+    expect(runThroughMay([opening, closing, { ...unexplained, date: '2025-05-06' }]).summary?.netGainGBP).toBe('100.00')
+    expect(runThroughMay([opening, closing, { ...unexplained, securityId: 'other' }]).summary?.netGainGBP).toBe('100.00')
+  })
+
   it('honours a closed historical holding unless a cross-transition repurchase could identify the sale', () => {
     const purchase = trade('old', '2005-06-10', 'BUY', '5', '100')
     const sale = trade('old-sale', '2008-04-05', 'SELL', '5', '120')
@@ -162,6 +185,23 @@ describe('HMRC share matching regression cases', () => {
     expect(run([purchase, sale, { ...refill, date: '2008-05-05' }, current]).status).toBe('blocked')
     expect(run([purchase, sale]).status).toBe('complete')
     expect(run([purchase, { ...sale, date: '2006-04-01' }, { ...refill, date: '2007-03-15' }, current]).summary?.netGainGBP).toBe('50.00')
+  })
+
+  it('uses unindexed cost for ordinary post-March-1982 purchases carried forward and refers older histories', () => {
+    const purchase = trade('old-purchase', '1982-11-01', 'BUY', '10', '100', '5')
+    const sale = trade('current-sale', '2024-06-03', 'SELL', '5', '150')
+    expect(run([purchase, sale]).summary?.netGainGBP).toBe('97.50')
+    expect(() => run([{ ...purchase, date: '1982-03-31' }, sale])).toThrow(/specialist handling/)
+  })
+
+  it('requires evidence for an apparent short sale covered by a purchase outside 30 days', () => {
+    const sale = trade('sale', '2024-06-03', 'SELL', '5', '150')
+    const latePurchase = trade('purchase', '2024-07-04', 'BUY', '5', '50')
+    const result = run([sale, latePurchase])
+    expect(result).toMatchObject({
+      status: 'blocked', summary: null, disposals: [{ gainGBP: null, matches: [] }],
+      issues: [{ code: 'MISSING_ACQUISITION_HISTORY' }],
+    })
   })
 
   it('requires ownership at disposal even when a later buy is available for 30-day matching', () => {
@@ -178,8 +218,8 @@ describe('HMRC share matching regression cases', () => {
   })
 
   it.each([
-    ['6', '0.13', '1', '3', '0.07', '3.13', '4.61'],
-    ['26', '100.01', '10', '13', '50.01', '-46.81', '-83.78'],
+    ['6', '0.13', '1', '3', '0.07', '3.14', '4.61'],
+    ['26', '100.01', '10', '13', '50.01', '-46.81', '-83.77'],
   ])('rounds successive partial disposals exactly at a half penny for %s shares', (quantity, cost, firstSale, nextSale, allocated, gain, net) => {
     const result = run([
       trade('pool', '2023-10-01', 'BUY', quantity, cost),
@@ -189,6 +229,24 @@ describe('HMRC share matching regression cases', () => {
     expect(result.disposals[1]).toMatchObject({ allowableCostGBP: allocated, gainGBP: gain })
     expect(result.summary?.netGainGBP).toBe(net)
   })
+
+  it('sums exact costs and gains before rounding the year and the two 2024 rate periods', () => {
+    const trades = [
+      trade('pool', '2024-01-01', 'BUY', '3', '10'),
+      trade('early', '2024-10-29', 'SELL', '1', '5'),
+      trade('late', '2024-10-30', 'SELL', '1', '5'),
+      trade('late-loss', '2025-03-01', 'SELL', '1', '1'),
+    ];
+    const result = run(trades);
+    expect(result.summary).toMatchObject({allowableCostsGBP:'10.00', gainsGBP:'3.33', lossesGBP:'2.33', netGainGBP:'1.00'});
+    expect(result.displayedDisposalTotals).toMatchObject({allowableCostsGBP:'9.99', gainsGBP:'3.34', netGainGBP:'1.01'});
+    expect(result.ratePeriods).toEqual([
+      {from:'2024-04-06',through:'2024-10-29',gainsGBP:'1.67',lossesGBP:'0.00',netGainGBP:'1.67'},
+      {from:'2024-10-30',through:'2025-04-05',gainsGBP:'1.67',lossesGBP:'2.33',netGainGBP:'-0.67'},
+    ]);
+    expect(calculateGains(trades,{taxYear:'2024-25',historyThrough:'2025-04-05'}).ratePeriods).toBeUndefined();
+    expect(run(trades.slice(1)).ratePeriods).toBeUndefined();
+  });
 
   it('accepts explicit opening pools without requiring fabricated purchases', () => {
     const result = calculateGains([trade('s', '2024-06-01', 'SELL', '5', '500')], { ...options, openingPools: [{ securityId: 'GB00TEST00001', asOf: '2024-04-05', quantity: '10', costGBP: '600' }] })

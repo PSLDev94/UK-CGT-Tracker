@@ -48,10 +48,10 @@ describe("source-documented native GBP preview readers", () => {
         historyThrough: "2025-05-05",
       });
       // Freetrade: allocated cost (500+2.50)/1000*250 = 125.625.
-      // Report policy rounds the displayed cost to 125.63, then reconciles 200-125.63 = 74.37.
+      // Exact gain is 200 − 125.625 = 74.375, displayed as 74.38.
       // Trading 212: 10.50 - 10.50/10.5*5.25 = 5.25.
       expect(result.summary?.netGainGBP).toBe(
-        broker === "freetrade" ? "74.37" : "5.25",
+        broker === "freetrade" ? "74.38" : "5.25",
       );
       expect(review.records[0]?.provenance?.native).toMatchObject({
         ordinarySharesConfirmed: true,

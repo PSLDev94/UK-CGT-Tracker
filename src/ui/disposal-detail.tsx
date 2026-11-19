@@ -201,6 +201,7 @@ export function DisposalDetail({
             breakdown={disposal.saleBreakdown}
             net={disposal.proceedsGBP}
             matched={disposal.allowableCostGBP}
+            gain={disposal.gainGBP}
           />
           <ul className="match-list mt-3">
             {disposal.matches.map((match, i) => (

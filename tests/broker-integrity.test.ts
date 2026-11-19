@@ -1,3 +1,4 @@
+import { CURRENT_SCOPE_DECLARATION } from "../src/domain/cgt/types";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import Papa from "papaparse";
 import { PDFDocument } from "pdf-lib";
@@ -264,14 +265,14 @@ describe("persisted IBKR execution and report integrity", () => {
     ).toBe(1);
     const calc = await ws.calculate(s.user, {
       portfolioId: s.portfolio.id, taxYear: "2024-25", historyThrough: "2025-05-05",
-      confirmedAccountIds: [main.id,alt.id], personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2",
+      confirmedAccountIds: [main.id,alt.id], personalScopeConfirmed: true, scopeDeclaration: CURRENT_SCOPE_DECLARATION,
     });
-    expect(calc.result.summary?.netGainGBP).toBe("71.62");
+    expect(calc.result.summary?.netGainGBP).toBe("71.63");
     const wrong = await s.preview(alt.id, native, "native");
     expect(wrong.review.counts.needsReview).toBe(2);
     expect((await s.save(wrong)).outcome).not.toBe("committed");
     await ws.discardDraft(s.user,wrong.draftId,wrong.reviewVersion);
-    expect((await ws.reportSnapshot(s.user,calc.runId)).result.summary?.netGainGBP).toBe("71.62");
+    expect((await ws.reportSnapshot(s.user,calc.runId)).result.summary?.netGainGBP).toBe("71.63");
     expect(
       (await s.inspect(alt.id, template(), "canonical-v1")).counts.needsReview,
     ).toBe(2);
@@ -347,15 +348,15 @@ describe("persisted IBKR execution and report integrity", () => {
         taxYear: "2024-25",
         historyThrough: "2025-05-05",
         confirmedAccountIds: [a.id],
-        personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2",
+        personalScopeConfirmed: true, scopeDeclaration: CURRENT_SCOPE_DECLARATION,
       });
     async function checkReports() {
       const calc = await calculate();
       expect(calc.result.disposals.map((r) => r.gainGBP).sort()).toEqual([
         "57.30",
-        "71.62",
+        "71.63",
       ]);
-      expect(calc.result.summary?.netGainGBP).toBe("128.92");
+      expect(calc.result.summary?.netGainGBP).toBe("128.93");
       expect(
         calc.result.pools.map((p) => [p.securityId, p.quantity, p.costGBP]),
       ).toEqual([
@@ -363,12 +364,12 @@ describe("persisted IBKR execution and report integrity", () => {
         ["US0378331005", "750", "303.3"],
       ]);
       const snap = await ws.reportSnapshot(s.user, calc.runId);
-      expect(reportCsv(snap)).toContain('"netGainGBP","128.92"');
+      expect(reportCsv(snap)).toContain('"netGainGBP","128.93"');
       for (const evidence of [false, true]) {
         const text = reportPageText(
           await PDFDocument.load(await reportPdf(snap, evidence)),
         );
-        expect(text).toContain("128.92");
+        expect(text).toContain("128.93");
       }
     }
     await checkReports();
@@ -444,6 +445,30 @@ describe("persisted IBKR execution and report integrity", () => {
     );
     expect(await s.issue()).toBeNull();
   });
+  it("withholds a saved Flex date from the earliest possible tax period until replaced", async () => {
+    const s = await setup("legacy-flex-day");
+    const acc = await s.account("Flex date check");
+    const d = await s.preview(acc.id, native, "native");
+    await s.save(d);
+    const calc = await ws.calculate(s.user, {
+      portfolioId: s.portfolio.id, taxYear: "2024-25", historyThrough: "2025-05-05",
+      confirmedAccountIds: [acc.id], personalScopeConfirmed: true, scopeDeclaration: CURRENT_SCOPE_DECLARATION,
+    });
+    await owner.run(s.user, tx => query(tx,
+      `UPDATE cgt.transactions SET trade_date='2024-05-04',
+        provenance=jsonb_set(provenance,'{native,fields,TradeDate}','"04/05/2024"')
+       WHERE import_id=$1 AND side='BUY'`, [d.draftId]));
+    const check = (through: string) => owner.run(s.user, tx => activeImportIssue(tx, s.portfolio.id, through));
+    expect(await check("2024-04-04")).toBeNull();
+    expect(await check("2024-04-05")).toMatch(/year-first dates/);
+    await expect(ws.reportSnapshot(s.user, calc.runId, "csv")).rejects.toMatchObject({code:"REPORT_UNAVAILABLE"});
+    await expect(ws.reportSnapshot(s.user, calc.runId, "summary")).rejects.toMatchObject({code:"REPORT_UNAVAILABLE"});
+    expect(await ws.selectedReportIssue(s.user, {year:"2024-25",format:"evidence"}, "purchase"))
+      .toMatchObject({code:"REPORT_UNAVAILABLE"});
+    await ws.reverseImport(s.user, d.draftId, "Verified year-first original requested");
+    expect(await s.issue()).toBeNull();
+  });
+
   it("holds legacy unsafe FX until its receipt is reversed, without modifying the source trade", async () => {
     const s = await setup("legacy-rate");
     const acc = await s.account("IB");

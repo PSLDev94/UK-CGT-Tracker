@@ -149,7 +149,7 @@ describe("Freetrade verified foreign fees and explicit renamed columns", () => {
           taxYear: "2024-25",
           historyThrough: "2025-05-05",
         }).summary?.netGainGBP,
-      ).toBe("74.37");
+      ).toBe("74.38");
       const existing = new Map(
         reviewCsv(csv, options)
           .records.filter((r) => r.sourceKey)

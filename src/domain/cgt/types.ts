@@ -1,4 +1,4 @@
-export const CURRENT_SCOPE_DECLARATION = 'personal-market-trades-v2' as const
+export const CURRENT_SCOPE_DECLARATION = 'personal-standard-basis-v3' as const
 
 /** One taxpayer, one legal capacity, taxable ordinary shares only. GBP consideration excludes fees. */
 export interface Trade {
@@ -31,7 +31,7 @@ export interface Match {
   acquisitionIds?: string[]
 }
 
-/** Reporting amounts after rounding each same-day disposal group to pence. */
+/** Independently rounded display amounts for a disposal group or the whole year. */
 export interface SaleBreakdown {
   grossProceedsGBP: string
   sellingCostsGBP: string
@@ -88,7 +88,7 @@ export interface AnnualAmounts {
 
 export interface Calculation {
   reviewedOpeningPools?: ReviewedOpeningPool[]
-  scopeDeclaration?: "personal-uk-resident-v1" | typeof CURRENT_SCOPE_DECLARATION
+  scopeDeclaration?: "personal-uk-resident-v1" | "personal-market-trades-v2" | typeof CURRENT_SCOPE_DECLARATION
   hasLaterSales?: boolean
   engineVersion: string
   status: 'complete' | 'provisional' | 'blocked'
@@ -101,6 +101,8 @@ export interface Calculation {
   // Earlier saved runs predate this evidence. Report readers verify their inputs before enrichment.
   poolMovements?: PoolMovement[]
   annualBeforeDisposalRounding?: AnnualAmounts
+  displayedDisposalTotals?: AnnualAmounts
+  ratePeriods?: { from: string; through: string; gainsGBP: string; lossesGBP: string; netGainGBP: string }[]
   issues: CalculationIssue[]
   summary: AnnualAmounts | null
   saleBreakdown?: SaleBreakdown

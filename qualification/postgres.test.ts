@@ -1,3 +1,4 @@
+import { CURRENT_SCOPE_DECLARATION } from "../src/domain/cgt/types";
 import { randomBytes } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { readFileSync, readdirSync, mkdtempSync, statSync, rmSync } from 'node:fs'
@@ -12,6 +13,7 @@ import { Workspace } from '../src/server/workspace'
 import { createAuth, type AuthMail } from '../src/server/auth'
 import { Billing, type BillingGateway } from '../src/server/billing'
 import { qualifyBillingLifecycle } from './billing-lifecycle'
+import { qualifyRatePeriodReports } from './rate-period-reports'
 import { qualifyReviewedOpeningPool } from './reviewed-opening-pool'
 import { recordReviewedOpeningPool } from '../src/server/reviewed-opening-pools'
 
@@ -59,6 +61,35 @@ beforeAll(async () => {
 afterAll(async()=> { await Promise.allSettled([app?.destroy(),authDb?.destroy(),billingDb?.destroy(),owner?.end()]) })
 
 describe('PostgreSQL 18 deployment qualification',()=> {
+  it('reconciles a native closed pool and the October rate boundary across saved CSV and paid PDFs', async () => {
+    const {user, portfolio, account} = await setup('broker-rate-period-exports')
+    await qualifyRatePeriodReports(workspace, user, portfolio.id, account.id)
+  })
+
+  it('withholds a report from the earliest plausible date in an older Flex receipt', async () => {
+    const {user, portfolio, account} = await setup('flex-ambiguous-year-end')
+    const flex = await workspace.addAccount(user, {portfolioId: portfolio.id, broker: 'ibkr', label: 'Flex executions', accountType: 'GIA'})
+    const csv = readFileSync('tests/fixtures/brokers/ibkr-flex-gbp.csv','utf8')
+      .replace('20240601', '20240212').replace('20240701', '20240504')
+    const draft = await workspace.prepareImport(user, {accountId: flex.id, csv, format: 'native', ordinarySharesConfirmed: true})
+    expect((await workspace.commitImport(user, draft.draftId, draft.revision, draft.reviewVersion)).outcome).toBe('committed')
+    const input = {portfolioId: portfolio.id, taxYear: '2023-24' as const, historyThrough: '2024-04-05',
+      personalScopeConfirmed: true, scopeDeclaration: CURRENT_SCOPE_DECLARATION, confirmedAccountIds: [account.id,flex.id]}
+    const original = await workspace.calculate(user, input)
+    // The former reader stored 4 May. The same original text could mean 5 April.
+    await owner.query(`UPDATE cgt.transactions SET provenance=jsonb_set(provenance, '{native,fields,TradeDate}', '"04/05/2024"')
+      WHERE import_id=$1 AND side='SELL'`, [draft.draftId])
+    await expect(workspace.reportSnapshot(user, original.runId)).rejects.toMatchObject({status:409,code:'REPORT_UNAVAILABLE'})
+    await expect(workspace.calculate(user, input)).rejects.toMatchObject({status:409,code:'IMPORT_REVIEW_REQUIRED'})
+    const before = await workspace.calculate(user, {...input, historyThrough:'2024-04-04'})
+    expect(before.result.disposals).toHaveLength(0)
+    await workspace.reverseImport(user,draft.draftId,'Replacing ambiguous Flex export with year-first dates')
+    const replacement = await workspace.prepareImport(user, {accountId: flex.id, csv, format: 'native', ordinarySharesConfirmed: true})
+    expect((await workspace.commitImport(user,replacement.draftId,replacement.revision,replacement.reviewVersion)).outcome).toBe('committed')
+    const corrected = await workspace.calculate(user, input)
+    expect(corrected.result.disposals).toHaveLength(0)
+  })
+
   it('applies migrations once and verifies existing logins without rotating passwords', async()=> {
     expect(run('scripts/migrate.ts')).toBe('')
     expect(run('scripts/provision-runtime-logins.ts')).toContain('Four separate runtime logins verified')
@@ -101,7 +132,7 @@ describe('PostgreSQL 18 deployment qualification',()=> {
     const native=readFileSync('tests/fixtures/brokers/trading212-gbp.csv','utf8')
     const draft=await workspace.prepareImport(s.user,{accountId:s.account.id,csv:native,format:'native',ordinarySharesConfirmed:true})
     await workspace.commitImport(s.user,draft.draftId,draft.revision,draft.reviewVersion)
-    const run=await workspace.calculate(s.user,{portfolioId:s.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',personalScopeConfirmed:true, scopeDeclaration: "personal-market-trades-v2",confirmedAccountIds:[s.account.id]})
+    const run=await workspace.calculate(s.user,{portfolioId:s.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',personalScopeConfirmed:true, scopeDeclaration: CURRENT_SCOPE_DECLARATION,confirmedAccountIds:[s.account.id]})
     expect(run.result.summary?.netGainGBP).toBe('5.25')
     await qualifyBillingLifecycle(billingDb,workspace,s.user,run.runId)
   })
@@ -123,7 +154,7 @@ describe('PostgreSQL 18 deployment qualification',()=> {
     ].join('\n')
     const draft=await workspace.prepareImport(s.user,{accountId:s.account.id,csv:data,format:'canonical-v1'})
     await workspace.commitImport(s.user,draft.draftId,draft.revision,draft.reviewVersion)
-    const input={portfolioId:s.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',personalScopeConfirmed:true, scopeDeclaration: "personal-market-trades-v2",confirmedAccountIds:[s.account.id]}
+    const input={portfolioId:s.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',personalScopeConfirmed:true, scopeDeclaration: CURRENT_SCOPE_DECLARATION,confirmedAccountIds:[s.account.id]}
     expect((await workspace.calculate(s.user,input)).result.summary).toBeNull()
     const operator=new Kysely<Record<string,never>>({dialect:new PostgresDialect({pool:new Pool({connectionString:env.MIGRATION_DATABASE_URL})})})
     try {
@@ -296,7 +327,7 @@ it.each(brokerCases)('qualifies $file import/report/retry using PostgreSQL 18 ru
   const draft=await review()
   expect(draft.review.status).toBe('ready')
   expect((await workspace.commitImport(s.user,draft.draftId,draft.revision,draft.reviewVersion)).outcome).toBe('committed')
-  const result=await workspace.calculate(s.user,{portfolioId:s.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2", confirmedAccountIds:[s.account.id,account.id]})
+  const result=await workspace.calculate(s.user,{portfolioId:s.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',personalScopeConfirmed: true, scopeDeclaration: CURRENT_SCOPE_DECLARATION, confirmedAccountIds:[s.account.id,account.id]})
   expect(result.result.summary?.netGainGBP).toBe(c.gain)
   expect((await workspace.reportSnapshot(s.user,result.runId)).result).toEqual(result.result)
   const duplicate=await review()
@@ -353,7 +384,7 @@ it('exports one verified owner, guards a billing hold and erases only the resolv
   const holder = await setup('erasure-review'), unaffected = await setup('erasure-neighbour')
   const draft = await workspace.prepareImport(holder.user,{accountId:holder.account.id,csv,format:'canonical-v1'})
   await workspace.commitImport(holder.user,draft.draftId,draft.revision)
-  await workspace.calculate(holder.user,{portfolioId:holder.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',confirmedAccountIds:[holder.account.id],personalScopeConfirmed:true, scopeDeclaration: "personal-market-trades-v2"})
+  await workspace.calculate(holder.user,{portfolioId:holder.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',confirmedAccountIds:[holder.account.id],personalScopeConfirmed:true, scopeDeclaration: CURRENT_SCOPE_DECLARATION})
   await owner.query(`INSERT INTO auth.verification(id,identifier,value,"expiresAt") VALUES('erasure-token','reset-password:test','erasure-review',now()+interval '1 hour')`)
   const directory = mkdtempSync(join(tmpdir(),'cgt-case-'))
   const output = join(directory,'private-export.json')

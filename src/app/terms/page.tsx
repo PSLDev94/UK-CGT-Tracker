@@ -72,10 +72,19 @@ export default function Terms() {
           Reports and support
         </h2>
         <p>
-          Reports show the calculation’s completeness and unresolved issues.
-          They are not completed HMRC forms or professional tax advice. Verify
-          the figures and your wider tax position before filing. Contact support
-          about problems, billing questions or deletion requests.
+          The reports explain gains and losses on the records you supplied.
+          Reconcile all taxable accounts, trade dates, allowable fees and later
+          repurchases with your statements. A qualified UK tax adviser can
+          review an uncertain valuation, relief or filing obligation. The
+          subscription covers PDF access. It does not include personal tax
+          advice, preparation of your return or submission to HMRC.
+        </p>
+        <p>
+          If a figure appears wrong, contact <Link className="text-blue-600 underline" href="/contact">support</Link> with the
+          calculation reference and the affected date. Keep sensitive financial
+          records out of your first message. You keep your statutory consumer
+          rights, including the right to a service supplied with reasonable
+          care and skill.
         </p>
         <p>
           <Link className="text-blue-600 underline" href="/privacy">

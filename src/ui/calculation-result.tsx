@@ -4,6 +4,7 @@ import { money, Notice } from "./primitives";
 import type { Calculation } from "../domain/cgt/types";
 import { noDisposalsLabel, reportIssueMessage, scopeStatement, unresolvedPoolIssues } from "../domain/reports/eligibility";
 import { displayDate, netOutcome, unitPrice } from "./format";
+import { annualRoundingNote, roundingDifferences } from "../domain/reports/rounding";
 import { SaleAmounts } from "./sale-amounts";
 import { DisposalDetail } from "./disposal-detail";
 import { disposalSourceKeys, type DisposalLocation } from "./disposal-location";
@@ -174,7 +175,8 @@ export function CalculationResult({
       {result.summary && (
         <div>
           <h3 className="text-lg font-semibold mb-3">Annual sale breakdown</h3>
-          <SaleAmounts breakdown={result.saleBreakdown} net={result.summary.proceedsGBP} matched={result.summary.allowableCostsGBP} />
+          <SaleAmounts breakdown={result.saleBreakdown} net={result.summary.proceedsGBP} matched={result.summary.allowableCostsGBP} gain={result.summary.netGainGBP} summary={result.summary} />
+          {roundingDifferences(result).length > 0 && <p className="caption mt-2">{annualRoundingNote(result)}</p>}
         </div>
       )}
       <p className="caption">

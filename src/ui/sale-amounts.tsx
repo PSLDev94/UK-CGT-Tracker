@@ -1,17 +1,22 @@
 import {
   saleBreakdownUnavailable,
-  type SaleBreakdown,
+  type SaleBreakdown, type AnnualAmounts,
 } from "../domain/cgt/types";
+import { componentRoundingNotes } from "../domain/reports/rounding";
 import { money } from "./format";
 
 export function SaleAmounts({
   breakdown,
   net,
   matched,
+  gain,
+  summary,
 }: {
   breakdown?: SaleBreakdown;
   net: string;
   matched: string | null;
+  gain: string | null;
+  summary?: AnnualAmounts;
 }) {
   const amounts: [string, string | null | undefined][] = [
     ["Gross disposal proceeds", breakdown?.grossProceedsGBP],
@@ -32,6 +37,9 @@ export function SaleAmounts({
           </div>
         ))}
       </dl>
+      {componentRoundingNotes(net, matched, gain, breakdown, summary).map(note =>
+        <p key={note} className="caption mt-2">{note}</p>
+      )}
       {!breakdown && <p className="caption mt-2">{saleBreakdownUnavailable}</p>}
       {breakdown && breakdown.proceedsRoundingAdjustmentGBP !== "0.00" && (
         <p className="caption mt-2">

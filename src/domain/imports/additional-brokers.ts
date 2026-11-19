@@ -1,6 +1,6 @@
 import { Money, calendarDate, decimal } from "../values";
 import type { NativeAdapter } from "./native";
-import { SupportingFieldError, type SupportingDetails } from "./supporting-details";
+import { StatementMismatchError, SupportingFieldError, type SupportingDetails } from "./supporting-details";
 
 export const HL_HEADERS =
   "Trade date,Settle date,Reference,Description,Unit cost (p),Quantity,Value (£)".split(
@@ -39,6 +39,19 @@ const date = (value: string) =>
         ? `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6)}`
         : value,
   );
+// Flex lets the customer choose US or UK ordering for the same slash-shaped field.
+function flexTradeDate(value: string): string {
+  const slash = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value);
+  if (!slash) return date(value);
+  const [, first, second, year] = slash;
+  const firstIsMonth = Number(first) >= 1 && Number(first) <= 12;
+  const secondIsMonth = Number(second) >= 1 && Number(second) <= 12;
+  if (firstIsMonth && secondIsMonth && first !== second)
+    throw new StatementMismatchError(
+      `TradeDate ${value} could use day/month or month/day. Re-export the original Flex Query with Date Format yyyyMMdd or yyyy-MM-dd to confirm the execution date.`,
+    );
+  return calendarDate(secondIsMonth ? `${year}-${second}-${first}` : `${year}-${first}-${second}`);
+}
 function details(d: SupportingDetails | undefined, instruction: string): SupportingDetails {
   if (!d?.netAmountConfirmed || d.reference.trim().length < 8)
     throw new Error(instruction);
@@ -244,6 +257,7 @@ export const ibkr: NativeAdapter = {
       throw new Error(
         "IBKR execution needs an account and BUY/SELL direction.",
       );
+    const tradeDate = flexTradeDate(r.TradeDate!);
     const side = r["Buy/Sell"]!,
       qty = signed(r.Quantity!, "Quantity"),
       price = decimal(r.TradePrice!, "Trade price"),
@@ -295,7 +309,7 @@ export const ibkr: NativeAdapter = {
     }
     return ordinary(
       `${r.ClientAccountID}:${r.TradeID}`,
-      r.TradeDate!,
+      tradeDate,
       side,
       r.ISIN!,
       qty.abs().toFixed(),

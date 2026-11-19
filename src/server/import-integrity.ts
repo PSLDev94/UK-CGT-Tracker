@@ -1,5 +1,6 @@
 import { query, type Connection } from "./database";
 import { sourceKey } from "../domain/imports/ibkr-identity";
+import { trading212DividendIssue } from "./trading212-receipt-evidence";
 
 interface StoredIbkr {
   account_id: string;
@@ -19,6 +20,17 @@ export async function activeImportIssue(
   portfolioId: string,
   through?: string,
 ): Promise<string | null> {
+  const [brokerIssue] = await query<{ import_id: string; issue: string; label: string }>(tx,
+    `SELECT v.import_id,v.issue,a.label FROM cgt.broker_evidence_issues v
+     JOIN cgt.broker_accounts a ON a.id=v.account_id WHERE a.portfolio_id=$1
+       AND ($2::date IS NULL OR v.earliest_date <= $2::date)
+     ORDER BY v.earliest_date,v.import_id LIMIT 1`, [portfolioId, through ?? null]);
+  if (brokerIssue) {
+    const evidence = brokerIssue.issue === "ambiguous_flex_date"
+      ? "An IBKR Flex trade date can be read in two ways. Re-export the original executions with year-first dates."
+      : "A Trading 212 charge appears on the wrong side of a trade. Check the fee, trade direction and net amount against the contract note.";
+    return `${evidence} Reverse receipt ${brokerIssue.import_id} for ${brokerIssue.label} and import the verified records before calculating.`;
+  }
   const [foreign] = await query<{ label: string; import_id: string }>(tx,
     `SELECT a.label,t.import_id FROM cgt.transactions t JOIN cgt.broker_accounts a ON a.id=t.account_id
      WHERE a.portfolio_id=$1 AND t.active AND t.provenance->>'originalCurrency'<>'GBP'
@@ -44,6 +56,9 @@ export async function activeImportIssue(
      WHERE a.portfolio_id=$1 LIMIT 1`, [portfolioId]);
   if (unverified)
     return `Review the older ${unverified.issue} on receipt ${unverified.id} for ${unverified.label}. Upload the identical original file to verify its rows. If the file contains ambiguous entries, reverse it and re-import with the original execution evidence.`;
+
+  const dividend = await trading212DividendIssue(tx, portfolioId, through);
+  if (dividend) return dividend;
 
   const [overlap] = await query<{ first_id: string; second_id: string; first_label: string; second_label:string }>(tx,
     `WITH receipts AS MATERIALIZED (

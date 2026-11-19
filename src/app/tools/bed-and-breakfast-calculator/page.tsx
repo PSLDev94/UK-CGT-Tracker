@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type Decimal from "decimal.js";
 import { Money } from "@/domain/values";
+import { componentRoundingNotes } from "@/domain/reports/rounding";
 import Link from "next/link";
 import { Calculator, AlertCircle, CheckCircle } from "lucide-react";
 import { CalculatorUploadLink } from "@/components/calculator-upload-link";
@@ -70,9 +71,9 @@ export default function BedAndBreakfastCalculatorPage() {
 
     const isMatch = daysBetween > 0 && daysBetween <= 30;
     const matchedQty = isMatch ? Money.min(sQty, bQty) : new Money(0);
-    const proceeds = matchedQty.mul(sPrice).toDP(2);
-    const cost = matchedQty.mul(bPrice).toDP(2);
-    const gainLoss = proceeds.minus(cost);
+    const proceeds = matchedQty.mul(sPrice);
+    const cost = matchedQty.mul(bPrice);
+    const gainLoss = proceeds.minus(cost).toDP(2);
 
     setResult({
       isMatch,
@@ -448,6 +449,9 @@ export default function BedAndBreakfastCalculatorPage() {
                       {money(result.gainLoss.toString())}
                     </p>
                   </div>
+                  {componentRoundingNotes(result.proceeds.toFixed(2), result.cost.toFixed(2), result.gainLoss.toFixed(2)).map(note => (
+                    <p key={note} className="sm:col-span-2 text-sm text-gray-700">{note}</p>
+                  ))}
                   {result.remainingSaleQty.gt(0) && (
                     <p className="sm:col-span-2 text-sm text-gray-700">
                       For the remaining {result.remainingSaleQty.toFixed()}{" "}

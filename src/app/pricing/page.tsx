@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Metadata } from "next";
 import { ReportPricing } from "@/components/report-pricing";
 import { PublicFooter } from "@/components/public-footer";
@@ -30,7 +31,9 @@ export default async function PricingPage() {
           <ReportPricing />
           <p className="mt-6 text-sm text-gray-600">
             The subscription renews annually until cancelled. Checkout uses
-            Stripe test payments in this preview.
+            Stripe test payments in this preview. PDF access covers reports on
+            the records you supply. Arrange independent tax advice separately if you need it.
+            {" "}<Link className="text-blue-700 underline" href="/terms">Read the service terms</Link>.
           </p>
         </div>
       </main>

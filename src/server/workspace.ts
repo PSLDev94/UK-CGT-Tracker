@@ -1269,7 +1269,7 @@ export class Workspace {
         );
       if (input.personalScopeConfirmed !== true || input.scopeDeclaration !== scopeDeclaration)
         throw new AppError(400, "SCOPE_CONFIRMATION_REQUIRED",
-          "Confirm personal ownership, UK residence and ordinary market transactions. For a private sale, gift, transfer or other special tax basis, contact support for specialist review.");
+          "Confirm personal ownership, UK residence and ordinary market trades using their actual costs. If a relief, rebasing election or special valuation affects the shares, obtain a specialist review before calculating.");
       const integrity = await activeImportIssue(tx, p.id, input.historyThrough);
       if (integrity) throw new AppError(409, "IMPORT_REVIEW_REQUIRED", integrity);
       const { trades, openingPools } = await reviewedCalculationInputs(tx, p.id, taxYear, input.historyThrough);

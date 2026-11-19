@@ -221,7 +221,9 @@ export function BillingPanel({
         </p>
         <p>
           Imports, calculations and CSV evidence are free. The subscription
-          renews annually until cancelled.
+          renews annually until cancelled. Manage renewal in Billing.
+          PDF access does not include a tax adviser’s review.{" "}
+          <Link className="text-blue-700 underline" href="/terms">Service terms and support</Link>.
         </p>
         <p className="text-sm text-gray-600">
           Staging uses Stripe test payments. No real money is charged.

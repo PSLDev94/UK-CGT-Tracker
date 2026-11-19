@@ -1,3 +1,4 @@
+import { CURRENT_SCOPE_DECLARATION } from "../src/domain/cgt/types";
 import { expect } from "vitest";
 import { query, type Database } from "../src/server/database";
 import type { Identity } from "../src/server/identity";
@@ -40,7 +41,7 @@ export async function qualifyReviewedOpeningPool({
       portfolioId,
       taxYear: "2024-25",
       historyThrough: "2025-05-05",
-      personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2",
+      personalScopeConfirmed: true, scopeDeclaration: CURRENT_SCOPE_DECLARATION,
       confirmedAccountIds: [accountId],
     });
   async function save(...rows: string[]) {
@@ -165,7 +166,7 @@ export async function qualifyReviewedOpeningPool({
       portfolioId,
       taxYear: "2025-26",
       historyThrough: "2026-05-05",
-      personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2",
+      personalScopeConfirmed: true, scopeDeclaration: CURRENT_SCOPE_DECLARATION,
       confirmedAccountIds: [accountId],
     });
   const nextBasis = {

@@ -3,7 +3,7 @@ import { calendarDate, decimal, plusDays, TAX_YEARS, type TaxYear } from '../val
 import type { Calculation, CalculationIssue, Disposal, Match, OpeningPool, PoolMovement, Trade } from './types'
 import { missingAcquisitionGuidance } from './types'
 
-export const ENGINE_VERSION = '2.0.0-alpha.5'
+export const ENGINE_VERSION = '2.0.0-alpha.6'
 
 function checkedAmount(value: string, label: string) {
   decimal(value, label)
@@ -143,9 +143,13 @@ export function calculateGains(
   let annualCosts = ExactAmount.zero
   let annualGains = ExactAmount.zero
   let annualLosses = ExactAmount.zero
-  let reportedGrossSales = ExactAmount.zero
-  let reportedSellingCosts = ExactAmount.zero
-  let reportedProceedsAdjustment = ExactAmount.zero
+  let annualGrossSales = ExactAmount.zero
+  let annualSellingCosts = ExactAmount.zero
+  // Losses and gains must remain separate on either side of the 2024 rate change.
+  const ratePeriods = options.taxYear === '2024-25' ? [
+    { from: year.start, through: '2024-10-29', gains: ExactAmount.zero, losses: ExactAmount.zero },
+    { from: '2024-10-30', through: year.end, gains: ExactAmount.zero, losses: ExactAmount.zero },
+  ] : []
   for (const [securityId, dayMap] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
     const initial = opening.get(securityId)
     const initialQuantity = ExactAmount.from(initial?.quantity ?? '0')
@@ -225,11 +229,17 @@ export function calculateGains(
         })
       }
       const gap = futureShortfall
-      if (!basisUnavailable && gap && day.matches.some(m => m.rule === 'THIRTY_DAY' && m.acquisitionDate! >= gap.date)) {
+      // A missing purchase could replace even a seemingly fully evidenced pool match.
+      // Once a disposal is fully matched to actual purchases, only gaps through
+      // the last matched purchase can affect its identification.
+      if (!basisUnavailable && gap && (
+        (day.sell.remaining.isPositive() && gap.date <= plusDays(day.date, 30))
+        || day.matches.some(m => m.rule === 'THIRTY_DAY' && m.acquisitionDate! >= gap.date)
+      )) {
         basisUnavailable = true
         issues.push({
           code: 'UNEVIDENCED_HOLDING', securityId, date: gap.date, quantity: gap.quantity.toString(),
-          message: 'The 30-day match uses a repurchase after the recorded holding went below zero. Add the missing history or ask support for a specialist review.',
+          message: 'A sale in the 30-day matching period exceeds the recorded holding. Upload the missing trades or ask for a specialist review before using this disposal cost.',
         })
       }
       const pooled = ExactAmount.min(quantity, day.sell.remaining)
@@ -249,21 +259,25 @@ export function calculateGains(
       annualCosts = annualCosts.plus(day.cost)
       if (exactGain.isNegative()) annualLosses = annualLosses.plus(exactGain.negated())
       else annualGains = annualGains.plus(exactGain)
+      const period = ratePeriods.find(p => day.date >= p.from && day.date <= p.through)
+      if (period) {
+        if (exactGain.isNegative()) period.losses = period.losses.plus(exactGain.negated())
+        else period.gains = period.gains.plus(exactGain)
+      }
       const gross = day.grossSales.toPence()
       const sellingCosts = day.sellingCosts.toPence()
       const proceedsAdjustment = day.sell.value.toPence().minus(gross.minus(sellingCosts))
-      reportedGrossSales = reportedGrossSales.plus(gross)
-      reportedSellingCosts = reportedSellingCosts.plus(sellingCosts)
-      reportedProceedsAdjustment = reportedProceedsAdjustment.plus(proceedsAdjustment)
+      annualGrossSales = annualGrossSales.plus(day.grossSales)
+      annualSellingCosts = annualSellingCosts.plus(day.sellingCosts)
       disposals.push({
         securityId, date: day.date, sourceIds: [...day.sell.ids], quantity: day.sell.quantity.toString(),
         proceedsGBP: day.sell.value.toFixed(2), allowableCostGBP: missing ? null : day.cost.toFixed(2),
         saleBreakdown: {
           grossProceedsGBP: gross.toFixed(2), sellingCostsGBP: sellingCosts.toFixed(2),
-          totalAllowableCostsGBP: missing ? null : day.cost.toPence().plus(sellingCosts).toFixed(2),
+          totalAllowableCostsGBP: missing ? null : day.cost.plus(day.sellingCosts).toFixed(2),
           proceedsRoundingAdjustmentGBP: proceedsAdjustment.toFixed(2),
         },
-        gainGBP: missing ? null : day.sell.value.toPence().minus(day.cost.toPence()).toFixed(2),
+        gainGBP: missing ? null : exactGain.toFixed(2),
         unmatchedQuantity: missing ? day.sell.quantity.toString() : '0', matches: missing ? [] : day.matches,
       })
     }
@@ -280,18 +294,22 @@ export function calculateGains(
     poolAsOf: cutoff, status: annualBlocked ? 'blocked' : historyThrough < requiredHistoryThrough ? 'provisional' : 'complete',
     disposals, pools, poolMovements, issues,
     saleBreakdown: {
-      grossProceedsGBP: reportedGrossSales.toFixed(2), sellingCostsGBP: reportedSellingCosts.toFixed(2),
-      totalAllowableCostsGBP: annualBlocked ? null : reportedAcquisitionCosts.plus(reportedSellingCosts).toFixed(2),
-      proceedsRoundingAdjustmentGBP: reportedProceedsAdjustment.toFixed(2),
+      grossProceedsGBP: annualGrossSales.toFixed(2), sellingCostsGBP: annualSellingCosts.toFixed(2),
+      totalAllowableCostsGBP: annualBlocked ? null : annualCosts.plus(annualSellingCosts).toFixed(2),
+      proceedsRoundingAdjustmentGBP: annualProceeds.toPence().minus(annualGrossSales.toPence().minus(annualSellingCosts.toPence())).toFixed(2),
     },
-    ...(!annualBlocked && { annualBeforeDisposalRounding: {
+    ...(ratePeriods.length && !annualBlocked && historyThrough >= requiredHistoryThrough ? {ratePeriods: ratePeriods.map(p => ({
+      from: p.from, through: p.through, gainsGBP: p.gains.toFixed(2), lossesGBP: p.losses.toFixed(2),
+      netGainGBP: p.gains.minus(p.losses).toFixed(2),
+    }))} : {}),
+    summary: annualBlocked ? null : {
       proceedsGBP: annualProceeds.toFixed(2), allowableCostsGBP: annualCosts.toFixed(2),
       gainsGBP: annualGains.toFixed(2), lossesGBP: annualLosses.toFixed(2), netGainGBP: annualGains.minus(annualLosses).toFixed(2),
-    } }),
-    summary: annualBlocked ? null : {
+    },
+    ...(!annualBlocked && { displayedDisposalTotals: {
       proceedsGBP: sum(disposals.map(d => d.proceedsGBP)).toFixed(2),
       allowableCostsGBP: reportedAcquisitionCosts.toFixed(2),
       gainsGBP: gains.toFixed(2), lossesGBP: losses.toFixed(2), netGainGBP: gains.minus(losses).toFixed(2),
-    },
+    } }),
   }
 }

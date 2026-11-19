@@ -228,7 +228,7 @@ export function ImportDetailsForm({
               name="fees"
               error={fieldErrors.fees || feeIssue}
               label="Dealing fees and transaction taxes"
-              hint="Total in the trade currency. Enter 0 only if the statement confirms no fees."
+              hint="Enter the trade-specific charges you actually paid, in the trade currency. Exclude account or portfolio management fees. Enter 0 only if the statement confirms no fees."
               defaultValue={initial?.fees ?? ""}
               inputMode="decimal"
             />

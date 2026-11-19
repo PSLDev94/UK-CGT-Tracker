@@ -13,6 +13,7 @@ import {
 } from "./additional-brokers";
 import { StatementMismatchError, type SupportingDetails } from "./supporting-details";
 import type { BrokerId } from "./brokers";
+import { supportedCurrencies } from "./exported-terms";
 
 // Exact, versioned layouts observed in public sample exports. Unknown columns
 // are deliberately not optional: a new fee column must never disappear.
@@ -33,6 +34,11 @@ export const TRADING212_2026_HEADERS =
   "Action,Time (UTC),ISIN,Ticker,Name,Notes,ID,No. of shares,Price / share,Currency (Price / share),Exchange rate,Result,Currency (Result),Total,Currency (Total),Withholding tax,Currency (Withholding tax),Stamp duty reserve tax,Currency (Stamp duty reserve tax),French transaction tax,Currency (French transaction tax),Transaction fee,Finra fee,Currency conversion from amount,Currency (Currency conversion from amount),Currency conversion to amount,Currency (Currency conversion to amount),Currency conversion fee,Currency (Currency conversion fee),Currency (Transaction fee),Currency (Finra fee),Merchant name,Merchant category".split(
     ",",
   );
+// Published historical profiles can be identified even when their fields are
+// insufficient to calculate or verify a complete share transaction history.
+const oldTrading212Headers = "Action,Time,ISIN,Ticker,Name,No. of shares,Price / share,Currency (Price / share),Exchange rate,Result (GBP),Total (GBP),Withholding tax,Currency (Withholding tax),Charge amount (GBP),Transaction fee (GBP),Finra fee,Currency (Finra fee),Notes,ID".split(",");
+const reducedTrading212Headers = "Action,Time (UTC),ISIN,Ticker,Name,No. of shares,Price / share,Currency (Price / share),Exchange rate,Result,Currency (Result),Total,Currency (Total),ID".split(",");
+const ibkrConfirmationHeaders = "ClientAccountID,CurrencyPrimary,Symbol,Conid,Date/Time,Exchange,Buy/Sell,Quantity,Price,OrigTradeID,TraderID,OrderID,OrderReference,IsAPIOrder".split(",");
 
 type Row = Record<string, string>;
 export interface NativeAdapter {
@@ -108,6 +114,29 @@ function validateCashFields(row: Row, allowed: string[], optionalZero: string[] 
   const unexpected = Object.keys(row).find(key => row[key] && !allowed.includes(key) &&
     !(optionalZero.includes(key) && /^0(?:[.]0+)?$/.test(row[key]!)));
   if (unexpected) throw new Error(`A cash activity contains an unexpected ${unexpected} value. Check the original statement and execution details before excluding it.`);
+}
+
+export function checkExecutionShapedDividend(row: Row) {
+  if (!row.ID || !row["No. of shares"] || !row["Price / share"]) return;
+  const review = "This dividend carries an execution identifier, quantity and price. Check the dividend voucher, withheld tax and credited cash against the original statement before excluding it.";
+  const priceCurrency = row["Currency (Price / share)"]!;
+  const taxCurrency = row["Currency (Withholding tax)"]!;
+  const sterlingPrice = priceCurrency === "GBP" || priceCurrency === "GBX";
+  if (row["Currency (Total)"] !== "GBP" ||
+      (!sterlingPrice && !supportedCurrencies.has(priceCurrency)) ||
+      ![priceCurrency, "GBP", "GBX"].includes(taxCurrency)) throw new Error(review);
+  const rate = decimal(sterlingPrice ? row["Exchange rate"] || "1" : row["Exchange rate"] || "", "Dividend exchange rate");
+  if (rate.isZero() || (sterlingPrice && !rate.eq(1))) throw new Error(review);
+  const quantity = decimal(row["No. of shares"], "Dividend eligible quantity");
+  const price = decimal(row["Price / share"], "Dividend per share");
+  const withheld = decimal(row["Withholding tax"] || "0", "Dividend withholding tax");
+  const net = money(row.Total || "", "Net dividend");
+  const grossGBP = quantity.times(price).div(priceCurrency === "GBX" ? 100 : rate);
+  const taxGBP = withheld.div(taxCurrency === "GBX" ? 100 : taxCurrency === "GBP" ? 1 : rate);
+  // A nominal tax which does not change the cash by a penny cannot distinguish
+  // a dividend entitlement from a zero-fee execution carrying the same fields.
+  if (!net.gt(0) || !taxGBP.gt(0) || grossGBP.toDP(2).eq(net) ||
+      !grossGBP.minus(taxGBP).toDP(2).eq(net)) throw new Error(review);
 }
 const freetrade: NativeAdapter = {
   version: "freetrade-activity-29-gbp-v1",
@@ -275,8 +304,7 @@ const trading212: NativeAdapter = {
       const dividend = r.Action === "Dividend (Dividend)";
       validateCashFields(r, dividend ? t212DividendFields : t212CashFields,
         ["Transaction fee", "Currency conversion fee", "Stamp duty reserve tax", "French transaction tax", "Finra fee"]);
-      if (dividend && r.ID && r["No. of shares"] && r["Price / share"] && !r["Withholding tax"])
-        throw new Error("This dividend carries an execution identifier, quantity and price without supporting distribution fields. Verify the activity against the dividend statement before excluding it.");
+      if (dividend) checkExecutionShapedDividend(r);
       return { Type: exclusions[r.Action!]! };
     }
     if (!this.isTrade(r))
@@ -359,6 +387,14 @@ const trading212Current: NativeAdapter = {
   isTrade: trading212.isTrade,
   normalize(r, supplied) {
     if (!this.isTrade(r)) return trading212.normalize(r, supplied);
+    const inconsistentFees = r.Action!.endsWith("buy")
+      ? ["Finra fee"] : ["Stamp duty reserve tax", "French transaction tax"];
+    for (const fee of inconsistentFees) {
+      if (r[fee] && !decimal(r[fee]!, fee).isZero())
+        throw new StatementMismatchError(
+          `${fee} does not match the purchase or sale direction. Check the charges and any correction on the original Trading 212 trade confirmation.`,
+        );
+    }
     for (const field of [
       "Currency conversion from amount",
       "Currency (Currency conversion from amount)",
@@ -470,7 +506,17 @@ export const NATIVE_GUIDANCE: Record<BrokerId, string> = {
     "Use the Invest account History CSV with all activity categories. Documented 21- and 33-column layouts support GBP/GBX prices and verified foreign trades with GBP totals. The newer layout also reconciles separately denominated stamp duty, French transaction tax and FINRA fees. Pie holdings and CFD exports cannot establish share acquisition history.",
   hl: "HL Transaction Summary files in UTF-8 and the dated Windows-1252 layout need verified security identifiers and dealing-cost details from matching contract notes. Unit cost may be in pence. Supply these details in the preview; every trade must reconcile before saving.",
   ii: "This assisted 11-column profile was tested with a public parser layout and synthetic trades. Interactive Investor exports can identify securities by SEDOL and may omit the wallet currency. Confirm the security ISIN, wallet currency, execution amounts and fees in the supporting-details form beside each unresolved record.",
-  ibkr: "IBKR Activity Statements, Flex Queries and Transaction History are different formats. A Flex Query must include execution IDs, ISINs, asset categories, currency, gross proceeds, commission and trade-date FX. Use the 16-column execution Flex layout. For foreign trades, verify the statement account base is GBP. For a different base, use independently documented trade-date GBP rates in the template and enter ClientAccountID:TradeID as the transaction ID.",
+  ibkr: "Use the 16-column stock execution Flex Query and set the TradeDate format to yyyyMMdd or yyyy-MM-dd. Check the ISIN, execution ID, proceeds and charges. For foreign trades, verify the statement account base is GBP. For a different base, use independently documented trade-date GBP rates in the template and enter ClientAccountID:TradeID as the transaction ID. Activity Statements and Transaction History use different layouts.",
   ajbell:
     "The six-column GBP Transaction history profile follows published partner guidance and has been tested with synthetic trades. Use Date, Description, Transaction, Quantity, Price and Amount (GBP). Confirm GBP prices in pounds, ISINs, execution references and dealing costs against contract notes in the preview. The older Type/Amount candidate also requires these details. Descriptions alone cannot identify a security safely.",
 };
+
+export function unverifiedLayoutGuidance(broker: BrokerId, headers: string[]) {
+  if (broker === "trading212" && sameHeaders(headers, oldTrading212Headers))
+    return "This older Invest history uses GBP-labelled amounts. Check that each row aligns with its header and each trade has its own execution reference. Re-export all activity using the current History CSV or reconcile every row with the original confirmations before preparing the template.";
+  if (broker === "trading212" && sameHeaders(headers, reducedTrading212Headers))
+    return "This reduced Invest history omits separate dealing costs. Obtain the complete history and confirmations showing the costs and currency. Keep any stock split or other corporate action in the evidence for specialist review.";
+  if (broker === "ibkr" && sameHeaders(headers, ibkrConfirmationHeaders))
+    return "This Flex output gives order IDs. Several executions can share one order ID. Create the 16-column stock execution Flex Query with TradeID, ISIN, commission, taxes, net cash and TradeDate in yyyyMMdd format; keep each fill.";
+  return NATIVE_GUIDANCE[broker];
+}

@@ -72,17 +72,15 @@ export default function HargreavesLansdownCGTPage() {
       <p>
         This is the single most important thing to know about HL data.
         Hargreaves Lansdown often quotes <strong>unit costs in pence</strong>{" "}
-        rather than pounds for UK shares. This is because the London Stock
-        Exchange prices UK shares in pence (e.g., Barclays at 178.50p, not
-        £1.785).
+        rather than pounds for UK shares. For example, a price of 178.50p means £1.785
+        per share. Some securities are quoted in pounds or another currency.
       </p>
 
       <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-lg my-6 not-prose">
         <p className="text-sm text-amber-900">
-          <strong>Watch out:</strong> If the &ldquo;Price&rdquo; column shows
-          &ldquo;178.50&rdquo; for a UK share, this is almost certainly{" "}
-          <strong>178.50 pence</strong> (£1.785), not £178.50. Getting this
-          wrong will make your CGT calculation wildly inaccurate.
+          <strong>Check the price unit on the contract note.</strong> An
+          unlabelled price of 178.50 could mean £178.50 or 178.50p (£1.785).
+          Confirm the currency and reconcile the trade before saving.
         </p>
       </div>
 
@@ -97,7 +95,7 @@ export default function HargreavesLansdownCGTPage() {
       <h2>How the S104 Pool Works with HL Purchases</h2>
       <p>
         This example uses three Barclays (BARC) purchases from 2022 to 2025,
-        each with the £11.95 dealing charge in force at the time.
+        each with an illustrative £11.95 dealing charge. The example omits stamp duty and other charges. Use the amounts actually paid on each contract note.
       </p>
 
       <div
@@ -180,7 +178,7 @@ export default function HargreavesLansdownCGTPage() {
         <a href="https://www.hl.co.uk/accounts/fee-changes">See HL’s fee changes</a>.
       </p>
       <p>
-        Additionally, UK share purchases incur{" "}
+        Many UK share purchases also incur{" "}
         <strong>Stamp Duty Reserve Tax (SDRT)</strong> at 0.5%, which is also an
         allowable cost. HL usually collects this automatically and it appears as
         a separate line on your contract note.

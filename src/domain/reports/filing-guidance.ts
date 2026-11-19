@@ -1,7 +1,21 @@
+import type { Calculation } from "../cgt/types";
 import type { TaxYear } from "../values";
 
 export const sa108Collection =
   "https://www.gov.uk/government/publications/self-assessment-capital-gains-summary-sa108";
+export const adjustment2024Url = "https://www.gov.uk/guidance/work-out-your-capital-gains-tax-adjustment-for-the-2024-to-2025-tax-year";
+export const adjustment2024Note = "For 2024–25, separate disposals before 30 October 2024 from those on or after that date. The main share gain rates changed mid-year. Check whether your tax return needs an adjustment in SA108 box 51.";
+
+export const filingReview = "Reconcile all taxable accounts, trade dates, exchange rates and fees with your statements and contract notes. Check corporate actions and later repurchases across brokers. Ask a qualified UK tax adviser if the cost, ownership or tax treatment is unclear.";
+
+export function confirmedRatePeriods(result: Calculation, coverageConfirmed: boolean) {
+  return result.taxYear === "2024-25" && result.status === "complete" && coverageConfirmed && result.summary
+    ? result.ratePeriods ?? []
+    : [];
+}
+
+export const ratePeriodsNote = "Figures are before allowances and reliefs. For each period and the full year, we calculate gains, losses and net using unrounded amounts. Adding or subtracting the displayed figures can give a difference of one penny.";
+
 const hmrc = "https://assets.publishing.service.gov.uk/media/";
 const archive = "https://webarchive.nationalarchives.gov.uk/ukgwa/";
 

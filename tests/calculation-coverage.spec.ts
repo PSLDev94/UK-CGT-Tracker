@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { calculateGains } from "../src/domain/cgt/calculate";
-import type { Trade } from "../src/domain/cgt/types";
+import { CURRENT_SCOPE_DECLARATION, type Trade } from "../src/domain/cgt/types";
 import { reviewCsv, tradesFromReview } from "../src/domain/imports/review";
 import type { TaxYear } from "../src/domain/values";
 import { reviewPage } from "../src/server/workspace-api";
@@ -47,13 +47,15 @@ test("the selected year and ordinary-market declaration must both apply before c
   await submit.click();
   await expect(declaration).toHaveAttribute("aria-invalid", "true");
   await expect(page.getByText(/connected-party deals/)).toBeVisible();
+  await expect(page.getByText(/remittance basis or a rebased market value/)).toBeVisible();
+  await expect(declaration).toHaveAccessibleName(/special valuation, tax relief or election/);
   await expect(page.getByRole("link", { name: "Ask about your records" })).toHaveAttribute("href", "/dashboard/contact");
   expect(datedSubmissions).toHaveLength(0);
   await declaration.check();
   const request = page.waitForRequest(req => req.url().endsWith("/api/v2/workspace") && req.postDataJSON()?.action === "calculate");
   await submit.click();
   expect((await request).postDataJSON()).toMatchObject({
-    historyThrough: "2024-04-06", personalScopeConfirmed: true, scopeDeclaration: "personal-market-trades-v2",
+    historyThrough: "2024-04-06", personalScopeConfirmed: true, scopeDeclaration: CURRENT_SCOPE_DECLARATION,
   });
 });
 

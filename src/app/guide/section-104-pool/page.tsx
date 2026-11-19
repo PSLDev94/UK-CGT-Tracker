@@ -11,6 +11,8 @@ export const metadata: Metadata = {
   },
 };
 
+const sellAllAnswer = "Selling your entire holding empties the tax pool only if all the shares sold are matched to it. A same-day purchase or eligible repurchase within 30 days can match part or all of the sale, leaving shares and cost in the pool.";
+
 export default function Section104PoolPage() {
   const faqLd = {
     "@context": "https://schema.org",
@@ -21,7 +23,7 @@ export default function Section104PoolPage() {
         name: "What happens if I sell all my shares in a Section 104 pool?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "If you sell every share in a Section 104 pool, the pool is emptied — both the share count and total cost go to zero. Any future purchases of the same security start a brand-new pool from scratch. The gain or loss on the disposal is calculated as normal: sale proceeds minus the total remaining pool cost.",
+          text: sellAllAnswer,
         },
       },
       {
@@ -29,7 +31,7 @@ export default function Section104PoolPage() {
         name: "Do dividends affect my Section 104 pool?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "No. Dividends are taxed separately as income and do not affect the cost basis in your Section 104 pool. Only acquisition costs (the price you paid for shares plus any dealing fees) increase the pool cost. Stamp Duty Reserve Tax (SDRT) paid on purchases is also added to the pool cost.",
+          text: "An ordinary cash dividend does not change the tax pool. If you use it to buy shares, the separate purchase follows the usual share-matching rules. Check a stock dividend or capital distribution separately.",
         },
       },
       {
@@ -77,8 +79,7 @@ export default function Section104PoolPage() {
       <h2>How the Section 104 Pool Works</h2>
       <p>
         The Section 104 pool (named after Section 104 of the Taxation of
-        Chargeable Gains Act 1992) is essentially a running average. For each
-        security you hold, HMRC requires you to maintain a single pool that
+        Chargeable Gains Act 1992) is essentially a running average. For shares of the same class in the same company, held in the same personal capacity across your taxable accounts, the pool
         tracks two numbers:
       </p>
       <ul>
@@ -93,8 +94,9 @@ export default function Section104PoolPage() {
         </li>
       </ul>
       <p>
-        Every time you buy more of the same share, the pool grows. Every time
-        you sell, the pool shrinks proportionally. The{" "}
+        An acquisition adds shares and cost to the pool to the extent it remains
+        after higher-priority matches. A disposal matched to the pool removes
+        the corresponding proportion of its cost. The{" "}
         <strong>average cost per share</strong> is simply the total cost divided
         by the total shares. This average cost is then used to calculate your
         capital gain or loss when you sell.
@@ -316,20 +318,18 @@ export default function Section104PoolPage() {
 
       <h3>What if I sell all my shares?</h3>
       <p>
-        If you sell every share in a Section 104 pool, the pool is completely
-        emptied — both the share count and total cost go to zero. Any future
-        purchases of the same security start a brand-new pool from scratch. The
-        gain or loss on the final disposal is calculated as: sale proceeds minus
-        the total remaining pool cost.
+        {sellAllAnswer} For example, if you sell all 100 shares then buy back 40
+        of the same class ten days later, 40 can match that purchase and only
+        60 come from the pool. This assumes no other matching trades.{" "}
+        <a href="https://www.gov.uk/hmrc-internal-manuals/capital-gains-manual/cg51560">See HMRC’s share identification examples</a>.
       </p>
 
       <h3>Do dividends affect my pool?</h3>
       <p>
-        No. Dividends are taxed separately as income (under dividend tax rules,
-        not CGT) and do not affect the cost basis in your Section 104 pool. Only
-        acquisition costs increase the pool. However, if you reinvest dividends
-        by purchasing additional shares, those new purchases <em>are</em> added
-        to the pool at whatever price you bought them.
+        An ordinary cash dividend does not change the pool. If you use the
+        payment to buy shares, record that purchase separately. Same-day and
+        30-day matching still apply. Get stock dividends and capital
+        distributions reviewed because they can affect the tax calculation.
       </p>
 
       <h3>Does stamp duty count?</h3>

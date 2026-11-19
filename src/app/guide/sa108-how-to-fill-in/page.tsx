@@ -56,8 +56,11 @@ export default function SA108GuidePage() {
       <p>
         On the 2025–26 form, ordinary listed shares use the listed shares
         section. Boxes 23 to 27 cover disposal counts, sale proceeds, permitted
-        costs, positive gains and losses respectively. Report gains and losses
-        separately. Retain the matching computations behind the figures.
+        costs, positive gains and losses respectively. For box 23, count
+        sales of the same class in the same company on the same day as one
+        disposal. For box 24, use gross disposal proceeds. Include allowable
+        selling costs once in box 25. Report gains and losses separately and
+        retain the matching computations.
       </p>
       <h3>Choose the Correct Asset Section</h3>
       <p>
@@ -68,8 +71,8 @@ export default function SA108GuidePage() {
       </p>
       <h3>Losses and Adjustments</h3>
       <p>
-        Earlier-year losses used this year belong in box 45; losses available
-        for later years belong in box 47. Review eligibility and the ordering of
+        Earlier-year losses used this year belong in box 45. Unused losses to
+        carry forward belong in box 47. Review eligibility and the ordering of
         losses before calculating the taxable amount.
       </p>
       <h3>Supporting Calculations</h3>
@@ -86,10 +89,9 @@ export default function SA108GuidePage() {
       </p>
       <h2>The 31 January Deadline</h2>
       <p>
-        The Self Assessment filing deadline is <strong>31 January</strong>{" "}
-        following the end of the tax year. For the 2025-26 tax year (ending 5
-        April 2026), the filing and payment deadline is{" "}
-        <strong>31 January 2027</strong>.
+        For 2025–26, the usual online Self Assessment filing and balancing
+        payment deadline is <strong>31 January 2027</strong>. Check the deadline
+        on your notice if HMRC issued it late.
       </p>
       <p>
         If you file online, HMRC will calculate the tax due for you based on the

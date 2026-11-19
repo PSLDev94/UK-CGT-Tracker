@@ -1137,15 +1137,23 @@ function WorkspaceBody({
                         )}
                       </fieldset>
                       <p className="caption">
-                        Confirm each account up to the date above. Changing that date clears the checkboxes.
+                        Include other taxable accounts you own, even if they only contain a later repurchase. If an account is missing, add its records before confirming. Changing the history date clears the checkboxes.
                       </p>
                       <label className="checkbox-label">
                         <input key={`${taxYear}-${historyThrough}-${data.portfolio.revision}`} type="checkbox" name="personalScopeConfirmed" value={CURRENT_SCOPE_DECLARATION}
                           disabled={busy} aria-invalid={!!errors.personalScopeConfirmed}
                           aria-describedby={errors.personalScopeConfirmed ? "scope-error scope-help" : "scope-help"} />
-                        <span>I owned these shares personally in the same capacity and was UK resident throughout the matching history, including later repurchases. The trades used here were ordinary market purchases or sales at arm’s length.</span>
+                        <span>I owned these shares personally in the same capacity and was UK resident throughout the matching history, including later repurchases. The trades were ordinary market purchases or sales at arm’s length. I checked the acquisition costs and fees against my records. None of these gains or losses needs a special valuation, tax relief or election.</span>
                       </label>
-                      <p id="scope-help" className="caption">Private or connected-party deals (including sales to family), gifts, transfers, employee awards and other special tax bases need specialist review. The same applies to joint or trust holdings, short sales and changes of residence. <Link className="underline" href="/dashboard/contact">Ask about your records</Link>.</p>
+                      <div id="scope-help" className="caption space-y-2">
+                        <p>Keep the box clear if you are unsure. Private or connected-party deals (including sales to family), gifts, transfers, joint or trust holdings, share schemes, EIS/SEIS relief, short sales and changes of residence need specialist review.</p>
+                        {taxYear >= "2025-26" ? (
+                          <p>For foreign shares, a past remittance-basis claim can mean using a 5 April 2017 market value instead of the original price. Check whether rebasing or a foreign income and gains (FIG) claim affects your gains or losses before confirming.</p>
+                        ) : (
+                          <p>For foreign shares, check whether the remittance basis or a rebased market value affects this year. Your broker’s original purchase price can differ from the cost needed for tax.</p>
+                        )}
+                        <p>Use costs directly attributable to the trade. Leave out general account, subscription and portfolio management fees. Ask a qualified UK tax adviser about tax treatment. <Link className="underline" href="/dashboard/contact">Ask about your records</Link>.</p>
+                      </div>
                       {errors.personalScopeConfirmed && <p id="scope-error" role="alert">{errors.personalScopeConfirmed}</p>}
                       {settingsEdited && currentCalculation && (
                         <Notice tone="warning">

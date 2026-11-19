@@ -1,6 +1,7 @@
+import { adjustment2024Note, confirmedRatePeriods, filingReview, ratePeriodsNote } from "./filing-guidance";
 import { noDisposalsLabel, reportIssueMessage, scopeStatement, unresolvedPoolIssues } from "./eligibility";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { roundingDifferences } from "./rounding";
+import { annualRoundingNote, componentRoundingNotes, roundingComparisonLabel, roundingDifferences } from "./rounding";
 import { Money, netOutcome } from "../values";
 import { reportStructure } from "./pdf-structure";
 import { saleBreakdownUnavailable, type SaleBreakdown } from "../cgt/types";
@@ -294,6 +295,8 @@ export async function reportPdf(
     net: string,
     matched: string | null,
     outcomes: [string, string][],
+    gain: string | null,
+    summary?: NonNullable<typeof r.summary>,
   ) {
     const value = (amount: string | null) =>
       amount === null ? "Unresolved" : pounds(amount);
@@ -331,6 +334,7 @@ export async function reportPdf(
       );
       line(saleBreakdownUnavailable, false, 9, muted);
     }
+    for (const note of componentRoundingNotes(net, matched, gain, basis, summary)) line(note, false, 9, muted);
   }
 
   line(`${r.taxYear}  ${title}`, true, 19, ink, "H1");
@@ -360,6 +364,7 @@ export async function reportPdf(
         ["Gains", pounds(r.summary.gainsGBP)],
         ["Losses", pounds(r.summary.lossesGBP)],
       ],
+      r.summary.netGainGBP, r.summary,
     );
   } else {
     for (const message of new Set(r.issues.map(reportIssueMessage))) line(message);
@@ -410,7 +415,7 @@ export async function reportPdf(
       if (instrument) line(instrument, false, 10, muted);
       saleAmounts(d.saleBreakdown, d.proceedsGBP, d.allowableCostGBP, [
         ["Gain / loss", d.gainGBP === null ? "Unresolved" : pounds(d.gainGBP)],
-      ]);
+      ], d.gainGBP);
       for (const m of d.matches)
         line(
           `${rules[m.rule]} · ${shares(m.quantity)} · cost ${narrativeCost(m.costGBP)}${m.acquisitionDate ? " · acquired " + date(m.acquisitionDate) : ""}${m.acquisitionIds?.length ? " · " + sourceIds(m.acquisitionIds, rules[m.rule] + " acquisition") : ""}`,
@@ -466,17 +471,24 @@ export async function reportPdf(
         `${p.securityId} · ${shares(p.quantity)} · total cost ${narrativeCost(p.costGBP)}`,
       );
   }
+  const periods = confirmedRatePeriods(r, snapshot.coverage_confirmed);
+  if (periods.length) {
+    heading("2024-25 rate periods", 105);
+    for (const p of periods)
+      line(`${date(p.from)} to ${date(p.through)} · gains ${pounds(p.gainsGBP)} · losses ${pounds(p.lossesGBP)} · net ${pounds(p.netGainGBP)}`, false, 10);
+    line(ratePeriodsNote, false, 9, muted);
+  }
   const differences = roundingDifferences(r);
   if (differences.length) {
     heading("Annual rounding reconciliation");
     line(
-      "The reported total sums disposals rounded to pence. The first amount rounds only after adding the full-precision amounts for the year.",
+      annualRoundingNote(r),
       false,
       9,
     );
     for (const d of differences) {
       line(
-        `${d.label}: annual ${pounds(d.annual)} · rounding difference ${pounds(d.adjustment)} · reported ${pounds(d.reported)}`,
+        `${d.label}: ${roundingComparisonLabel(r).toLowerCase()} ${pounds(d.comparison)} · rounding difference ${pounds(d.adjustment)} · reported ${pounds(d.reported)}`,
         false,
         9,
       );
@@ -494,16 +506,17 @@ export async function reportPdf(
       );
   }
   // Keep this fixed filing note together when a disposal table ends near the footer.
-  heading("Before using these figures", 125);
+  heading("Before using these figures", r.taxYear === "2024-25" ? 192 : 145);
   line(
-    "These are ordinary-share gains and losses for the accounts included. Check account coverage, acquisitions and corporate actions before filing. This calculation does not determine personal tax owed or complete an HMRC return.",
+    filingReview,
   );
   line(
-    "Allowances, losses brought forward, other assets, income bands and reliefs are excluded. Same-day disposals may be grouped. Disposal totals are rounded to pence. The CSV retains full precision for matching and pool costs.",
+    "This calculation does not determine personal tax owed or complete an HMRC return. Allowances, prior losses, other assets and reliefs are excluded. Same-day disposals may be grouped and totals are rounded to pence. The CSV retains matching and pool costs.",
     false,
     9,
     muted,
   );
+  if (r.taxYear === "2024-25") line(adjustment2024Note, false, 9, muted);
   heading("Calculation record");
   line(
     `Saved ${date(snapshot.created_at)} · engine ${r.engineVersion}`,

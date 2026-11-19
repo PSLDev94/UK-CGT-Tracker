@@ -71,4 +71,24 @@ describe("HMRC published share-matching examples", () => {
     expect(r.summary?.netGainGBP).toBe("4000.00");
     expect(r.pools[0]).toMatchObject({ quantity: "11000", costGBP: "14000" });
   });
+
+  it("HS284 2026 example 3 reconciles both partial disposals and all four dealing charges", () => {
+    // HMRC's worked calculation uses whole pounds. Step 4 dates the second sale
+    // February 2026. Use that timeline and keep the live pool at full precision.
+    // https://assets.publishing.service.gov.uk/media/69c14ad87e02b81c0d1c7669/HS284-Example-3-2026.pdf
+    const r = calculateGains([
+      { ...t("first-buy", "2017-04-07", "BUY", "1000", "4000"), feesGBP: "150" },
+      { ...t("second-buy", "2020-09-07", "BUY", "500", "2050"), feesGBP: "80" },
+      { ...t("first-sale", "2025-05-07", "SELL", "700", "3360"), feesGBP: "100" },
+      { ...t("second-sale", "2026-02-09", "SELL", "400", "2080"), feesGBP: "105" },
+    ], { taxYear: "2025-26", historyThrough: "2026-05-05" });
+    expect(r.status).toBe("complete");
+    expect(r.disposals.map(sale => [sale.allowableCostGBP, sale.gainGBP])).toEqual([
+      ["2930.67", "329.33"], ["1674.67", "300.33"],
+    ]);
+    expect(r.pools).toMatchObject([{ quantity: "400" }]);
+    expect(r.saleBreakdown).toMatchObject({ grossProceedsGBP: "5440.00", sellingCostsGBP: "205.00" });
+    expect(r.summary?.netGainGBP).toBe("629.67");
+    expect(r.displayedDisposalTotals?.netGainGBP).toBe("629.66");
+  });
 });

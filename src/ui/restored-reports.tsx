@@ -9,13 +9,13 @@ import { hasActiveTrades, type Overview } from "./workspace-types";
 import type { BillingStatus } from "@/server/billing";
 import { Notice, Button, SelectField, money } from "./primitives";
 import { evidenceIssue, noDisposalsLabel, purchaseIssue, reportIssueMessage } from "@/domain/reports/eligibility";
-import { roundingDifferences } from "@/domain/reports/rounding";
+import { annualRoundingNote, roundingComparisonLabel, roundingDifferences } from "@/domain/reports/rounding";
 import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
 import { billingUrl, reportDestination, type PdfFormat } from "../domain/reports/destination";
 import { TAX_YEARS } from "../domain/values";
 import { displayDate, netOutcome } from "./format";
 import type { ReportKind } from "../domain/reports/report";
-import { sa108Collection, sa108Edition } from "@/domain/reports/filing-guidance";
+import { adjustment2024Note, adjustment2024Url, confirmedRatePeriods, ratePeriodsNote, sa108Collection, sa108Edition } from "@/domain/reports/filing-guidance";
 import { SaleAmounts } from "./sale-amounts";
 import { ReportRecovery } from "./report-recovery";
 import { DashboardShell } from "./dashboard-shell";
@@ -54,6 +54,7 @@ function FilingGuidance({ year }: { year: string }) {
   }
   return (
     <div>
+      {year === "2024-25" && <p className="mb-2">{adjustment2024Note} <a className={linkClass} href={adjustment2024Url}>HMRC’s adjustment guidance</a>.</p>}
       <p>HMRC filing documents for {label} (PDFs open in a new tab)</p>
       <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
         <li><a className={linkClass} href={edition.form} target="_blank" rel="noopener noreferrer">{label} SA108 form</a></li>
@@ -268,6 +269,7 @@ function ReportContents({
   const differences = result ? roundingDifferences(result) : [];
   const confirmed =
     calculation?.coverage_confirmed && result?.status === "complete";
+  const periods = result && calculation ? confirmedRatePeriods(result, calculation.coverage_confirmed) : [];
   const accounts = calculation?.coverage_accounts;
   return (
     <div className="max-w-5xl space-y-4 sm:space-y-6">
@@ -522,6 +524,7 @@ function ReportContents({
                     breakdown={result.saleBreakdown}
                     net={result.summary.proceedsGBP}
                     matched={result.summary.allowableCostsGBP}
+                    gain={result.summary.netGainGBP} summary={result.summary}
                   />
                   <dl className="flex flex-wrap gap-x-7 gap-y-2 text-sm">
                     {[
@@ -538,19 +541,32 @@ function ReportContents({
                   </dl>
                 </div>
               )}
+              {periods.length > 0 && (
+                <section className="space-y-2" aria-label="2024–25 rate periods">
+                  <h3 className="font-semibold">2024–25 rate periods</h3>
+                  <dl className="space-y-2 text-sm">
+                    {periods.map(p => (
+                      <div key={p.from}>
+                        <dt className="font-semibold">{displayDate(p.from)} to {displayDate(p.through)}</dt>
+                        <dd className="tabular-nums">Gains {money(p.gainsGBP)} · Losses {money(p.lossesGBP)} · Net {money(p.netGainGBP)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <p className="caption">{ratePeriodsNote}</p>
+                </section>
+              )}
               {differences.length > 0 && (
                 <details className="text-sm">
                   <summary className="cursor-pointer font-semibold">
                     How rounding affects this year
                   </summary>
                   <p className="mt-2">
-                    The reported total adds disposals rounded to pence. Rounding
-                    once for the year gives these differences.
+                    {annualRoundingNote(result)}
                   </p>
                   <ul className="mt-2 space-y-1">
                     {differences.map((d) => (
                       <li key={d.label}>
-                        {d.label}: {money(d.annual)} rounded for the year,{" "}
+                        {d.label}: {money(d.comparison)} {roundingComparisonLabel(result).toLowerCase()},{" "}
                         {money(d.adjustment)} rounding difference,{" "}
                         {money(d.reported)} reported.
                       </li>

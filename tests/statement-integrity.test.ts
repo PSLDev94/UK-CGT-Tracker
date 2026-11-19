@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import Papa from "papaparse";
 import { CANONICAL_HEADERS, reviewCsv } from "../src/domain/imports/review";
+import { CURRENT_SCOPE_DECLARATION } from "../src/domain/cgt/types";
 import { authenticate } from "../src/server/identity";
 import { OwnedDatabase } from "../src/server/database";
 import { activeImportIssue } from "../src/server/import-integrity";
@@ -118,6 +119,43 @@ it("preserves documented dividends with entitled shares, withholding, and paymen
   }
 });
 
+it.each(["trading212-gbp", "trading212-2026-gbp"])(
+  "%s holds an execution-shaped dividend when the withholding field is zero or unreadable",
+  (file) => {
+    const rows = fixtureRows(brokerCases.find(c => c.file === file)!);
+    const purchase = rows[0]!;
+    // Remove the optional charge fields so only the contradictory trade evidence remains.
+    const fields = Object.fromEntries(Object.entries(purchase).filter(([key]) =>
+      !["Stamp duty reserve tax", "French transaction tax", "Finra fee", "Transaction fee", "Currency conversion fee"].some(charge =>
+        key === charge || key === `Currency (${charge})`)));
+    for (const withholding of ["", "0", "0.00", "not a charge"]) {
+      const dividend = {...Object.fromEntries(Object.keys(purchase).map(k=>[k,""])), ...fields,
+        "Action": "Dividend (Dividend)", "Withholding tax": withholding};
+      const result = reviewCsv(Papa.unparse([rows[1]!, dividend]), { ...cfg, broker: "trading212" });
+      expect(result.counts).toMatchObject({accepted:1, needsReview:1, excluded:0});
+    }
+  },
+);
+
+it("reconciles an execution-shaped dividend to withheld tax and credited GBP", () => {
+  const [buy] = fixtureRows(t212);
+  const dividend = { ...buy!, Action:"Dividend (Dividend)", "No. of shares":"100",
+    "Price / share":"0.05", "Currency (Price / share)":"USD", "Exchange rate":"1.25",
+    "Withholding tax":"0.75", "Currency (Withholding tax)":"USD", "Total":"3.40" };
+  const read = (fields: Record<string, string>) =>
+    reviewCsv(Papa.unparse([buy!, {...dividend,...fields}]), {...cfg, broker:"trading212"});
+  expect(read({}).counts).toMatchObject({accepted:1, excluded:1, needsReview:0});
+  expect(read({"Currency (Withholding tax)":"GBP", "Withholding tax":"0.60"}).counts.excluded).toBe(1);
+  const conflictingFields: Record<string,string>[] = [
+    {"Currency (Withholding tax)":""}, {"Currency (Withholding tax)":"EUR"},
+    {"Exchange rate":"Not available"}, {"Withholding tax":"n/a"}, {"Total":"4.00"},
+    {"Withholding tax":"0.000001", "Total":"4.00"},
+  ];
+  for (const change of conflictingFields) {
+    expect(read(change).counts).toMatchObject({accepted:1, excluded:0, needsReview:1});
+  }
+});
+
 it("holds two same-order template fills and accepts an evidenced aggregate or distinct fill IDs", () => {
   const buy = issueTrade("buy"),
     sell = issueTrade("order", "SELL", "4");
@@ -221,6 +259,21 @@ describe("persisted original-statement identity and review", () => {
       owner.run(user, (tx) => activeImportIssue(tx, portfolio.id));
     return { user, portfolio, account, preview, active };
   }
+  it("withholds an older cash-balanced Trading 212 execution with a fee on the wrong side", async () => {
+    const s = await setup("old-fee-direction");
+    const a = await s.account("Invest");
+    const broker = brokerCases.find(c => c.file === "trading212-2026-gbp")!;
+    const d = await s.preview(a.id, fixture(broker), "native");
+    await ws.commitImport(s.user, d.draftId, d.revision);
+    expect(await s.active()).toBeNull();
+    // Older readers accepted the same £2 charge under a sale-side purchase tax.
+    await admin(`UPDATE cgt.transactions SET provenance=jsonb_set(jsonb_set(provenance,
+      '{native,fields,Transaction fee}', '""'),'{native,fields,Stamp duty reserve tax}','"2"')
+      WHERE import_id=$1 AND side='SELL'`, [d.draftId]);
+    expect(await s.active()).toMatch(/Trading 212 charge appears on the wrong side/);
+    await ws.reverseImport(s.user,d.draftId,"Original fees require a corrected contract note");
+    expect(await s.active()).toBeNull();
+  });
   it("holds a partial overlap and exact copy across labels, scopes independent review to one file, and recognises legacy overlap", async () => {
     const s = await setup("statement-overlap");
     const a = await s.account("First GIA"),
@@ -317,6 +370,76 @@ describe("persisted original-statement identity and review", () => {
         { status: "excluded", cashFields: { Action: "Interest on cash" } },
       ],
     });
+  });
+
+  it.each([
+    ["trading212-gbp", "trading212-invest-21-gbp-v1"],
+    ["trading212-gbp", "trading212-invest-21-gbp-v2"],
+    ["trading212-2026-gbp", "trading212-invest-33-v1"],
+    ["trading212-2026-gbp", "trading212-invest-33-v2"],
+  ])("checks the actual excluded dividend evidence for %s in %s", async (file, parser) => {
+    const s = await setup("retained-dividend-" + parser);
+    const a = await s.account("Invest");
+    const [buy, sell] = fixtureRows(brokerCases.find(c => c.file === file)!);
+    const time = file === "trading212-gbp" ? "Time" : "Time (UTC)";
+    const distribution: Record<string, string> = {
+      ...Object.fromEntries(Object.keys(buy!).map(k => [k, ""])),
+      Action: "Dividend (Dividend)", ID: "DIST-007", [time]: "2024-06-05 23:30:00",
+      "No. of shares": "100", "Price / share": "0.05", "Currency (Price / share)": "GBP",
+      "Withholding tax": "0.75", "Currency (Withholding tax)": "GBP", Total: "4.25", "Currency (Total)": "GBP",
+    };
+    const good = Papa.unparse([buy!, sell!, distribution]);
+    const receipt = await s.preview(a.id, good, "native");
+    expect(receipt.review.counts).toMatchObject({accepted: 2, excluded: 1});
+    await ws.commitImport(s.user, receipt.draftId, receipt.revision);
+    await admin("UPDATE cgt.imports SET parser_version=$2 WHERE id=$1", [receipt.draftId, parser]);
+    const verifiedOldFile = parser.endsWith("-v1");
+    if (verifiedOldFile) {
+      await admin("UPDATE cgt.imports SET record_receipts=record_receipts #- '{2,cashFields}' WHERE id=$1", [receipt.draftId]);
+      expect(await s.active()).toContain("identical original file");
+      const replay = await s.preview(a.id, good, "native");
+      expect(replay.review.revalidatesReceiptId).toBe(receipt.draftId);
+      await ws.commitImport(s.user, replay.draftId, replay.revision);
+    }
+    expect(await s.active()).toBeNull();
+
+    const inputs = {
+      portfolioId: s.portfolio.id, taxYear: "2024-25", historyThrough: "2025-05-05",
+      confirmedAccountIds: [a.id], personalScopeConfirmed: true, scopeDeclaration: CURRENT_SCOPE_DECLARATION,
+    };
+    const published = await ws.calculate(s.user, inputs);
+    expect((await ws.reportSnapshot(s.user, published.runId, "evidence")).result.status).toBe("complete");
+    const bad = Papa.unparse([buy!, sell!, {...distribution, Total: "5.00"}]);
+    const badDigest = reviewCsv(bad, {...cfg, broker: "trading212"}).fileDigest;
+    await admin("UPDATE cgt.imports SET file_digest=$2 WHERE id=$1", [receipt.draftId, badDigest]);
+    // Simulate the row previously accepted by the permissive dividend rule.
+    // These are the actual two historical storage layouts.
+    if (verifiedOldFile) {
+      await admin(`UPDATE cgt.receipt_revalidations SET verified_records=jsonb_set(verified_records,
+        '{2,cashFields,Total}','"5.00"') WHERE import_id=$1`, [receipt.draftId]);
+    } else {
+      await admin(`UPDATE cgt.imports SET record_receipts=jsonb_set(record_receipts,
+        '{2,cashFields,Total}','"5.00"') WHERE id=$1`, [receipt.draftId]);
+    }
+    const atDate = (through: string) => owner.run(s.user, tx => activeImportIssue(tx, s.portfolio.id, through));
+    expect(await atDate("2024-06-05")).toBeNull();
+    const issue = await atDate("2024-06-06");
+    expect(issue).toContain(receipt.draftId);
+    expect(issue).toMatch(/row 4.*original statement.*Reverse this receipt/i);
+    await expect(ws.calculate(s.user, inputs)).rejects.toMatchObject({code: "IMPORT_REVIEW_REQUIRED"});
+    for (const kind of ["csv", "summary", "evidence"] as const)
+      await expect(ws.reportSnapshot(s.user, published.runId, kind)).rejects.toMatchObject({code: "REPORT_UNAVAILABLE", message: issue});
+    const rejected = await s.preview(a.id, bad, "native");
+    expect(rejected.review.status).toBe("needs_review");
+    expect(rejected.review.revalidatesReceiptId).toBeUndefined();
+    expect((await ws.commitImport(s.user, rejected.draftId, rejected.revision)).outcome).toBe("needs_review");
+    expect(await s.active()).toBe(issue);
+    await ws.reverseImport(s.user, receipt.draftId, "Replacing verified original trade and dividend evidence");
+    expect(await s.active()).toBeNull();
+    const replacement = await s.preview(a.id, good, "native");
+    expect(replacement.review.counts).toMatchObject({accepted: 2, excluded: 1});
+    await ws.commitImport(s.user, replacement.draftId, replacement.revision);
+    expect(await s.active()).toBeNull();
   });
 
   it("holds old ambiguous same-file duplicates and leaves a genuine cumulative receipt eligible", async () => {

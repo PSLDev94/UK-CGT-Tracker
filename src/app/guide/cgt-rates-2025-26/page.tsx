@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Metadata } from "next";
+import { adjustment2024Url } from "@/domain/reports/filing-guidance";
 import { GuideLayout } from "@/components/guide-layout";
 
 export const metadata: Metadata = {
@@ -44,14 +45,14 @@ export default function CGTRatesPage() {
       <h2 id="current-cgt-rates-for-2025-26">CGT Rates for 2025-26</h2>
       <p>
         For the tax year 6 April 2025 to 5 April 2026, the CGT rates on shares,
-        securities, and other investments (excluding residential property) are:
+        where the main rates apply are:
       </p>
       <ul>
         <li>
-          <strong>Basic rate taxpayers:</strong> 18%
+          <strong>Gains within any unused basic-rate band:</strong> 18%
         </li>
         <li>
-          <strong>Higher and additional rate taxpayers:</strong> 24%
+          <strong>Gains above the available basic-rate band:</strong> 24%
         </li>
       </ul>
       <p>
@@ -138,15 +139,16 @@ export default function CGTRatesPage() {
       <p>
         The 2024-25 tax year is uniquely complicated because the Autumn Budget
         on 30 October 2024 increased CGT rates <em>during</em> the tax year.
-        Disposals before 30 October 2024 are taxed at the old rates (10%/20%),
+        Ordinary share disposals before 30 October 2024 use the old main rates (10%/20%),
         while disposals on or after 30 October 2024 are taxed at the new rates
         (18%/24%).
       </p>
       <p>
-        If you made disposals in both periods within the 2024-25 tax year, you
-        need to calculate the gains separately for each period and apply the
-        appropriate rate. This is one area where using automated software like
-        CGT Tracker can save significant time and prevent errors.
+        Keep gains on each side of 30 October separate using the dates in your
+        disposal evidence. Even if every sale was after the change, the 2024–25
+        Self Assessment calculation can need a tax adjustment in SA108 box 51.
+        Check your filing software and your eligibility for{" "}
+        <a href={adjustment2024Url}>HMRC’s 2024–25 adjustment calculator</a>.
       </p>
 
       <h2>How Your Income Determines Your CGT Rate</h2>
@@ -213,11 +215,8 @@ export default function CGTRatesPage() {
         mixed-rate taxpayer saves him £316.20.
       </p>
 
-      <h2>How to Reduce Your CGT Bill Legitimately</h2>
-      <p>
-        There are several HMRC-approved strategies to reduce your capital gains
-        tax:
-      </p>
+      <h2>Allowances, losses and reliefs</h2>
+      <p>Check which allowances and reliefs you qualify for before using a rate estimate.</p>
 
       <h3>1. Use Your Annual Exempt Amount</h3>
       <p>
@@ -228,9 +227,8 @@ export default function CGTRatesPage() {
 
       <h3>2. Bed and ISA</h3>
       <p>
-        Sell shares in your taxable account and repurchase within your ISA. The
-        sale crystallises any gain (potentially within your exempt amount), and
-        future growth within the ISA is entirely tax-free. Read more about this
+        A sale in a taxable account counts as a disposal even if you then buy
+        shares in an ISA. Gains on the ISA holding are exempt from UK CGT. Read more about this
         and other strategies in our{" "}
         <Link href="/guide/bed-and-breakfast-rule">
           bed and breakfast rule guide
@@ -250,16 +248,17 @@ export default function CGTRatesPage() {
 
       <h3>4. Time Your Disposals</h3>
       <p>
-        If you are close to the end of the tax year, consider whether it is more
-        advantageous to sell before or after 5 April. Splitting gains across two
-        tax years gives you two annual exempt amounts.
+        A sale on 5 April and a sale on 6 April fall into different tax years.
+        A qualifying repurchase in April or May can still change the cost of
+        shares sold in the previous tax year.
       </p>
 
       <h3>5. Pension Contributions</h3>
       <p>
-        Making pension contributions reduces your taxable income, which can push
-        more of your capital gains into the basic rate band (18% instead of
-        24%).
+        How a contribution affects your tax calculation depends on how the pension
+        receives relief. For example, qualifying relief-at-source contributions
+        can extend your basic-rate band. Check your tax computation before
+        using the allowance checker, which assumes the standard band.
       </p>
 
       <div className="bg-green-50 border-l-4 border-green-600 p-4 rounded-r-lg my-8 not-prose">

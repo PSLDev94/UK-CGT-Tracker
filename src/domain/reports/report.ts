@@ -1,10 +1,11 @@
+import { adjustment2024Note, confirmedRatePeriods, filingReview, ratePeriodsNote } from "./filing-guidance";
 import { noDisposalsLabel, reportIssueMessage, scopeStatement, unresolvedPoolIssues } from "./eligibility";
 export { reportIssueMessage } from "./eligibility";
 import {
   saleBreakdownUnavailable,
   type Calculation,
 } from "../cgt/types";
-import { roundingDifferences } from "./rounding";
+import { componentRoundingNotes, roundingComparisonLabel, roundingDifferences } from "./rounding";
 import { csvCell } from "../imports/review";
 
 export interface ReportSource {
@@ -78,6 +79,8 @@ export function reportCsv(snapshot: ReportSnapshot): string {
     ["Required history through", r.requiredHistoryThrough],
     ["Account coverage confirmed", String(snapshot.coverage_confirmed)],
     ["Ownership and UK residence", scopeStatement(r)],
+    ["Before filing", filingReview],
+    ...(r.taxYear === "2024-25" ? [["2024-25 tax adjustment", adjustment2024Note]] : []),
     [
       "Scope",
       "Ordinary share gains and losses only. Not a tax return or personal tax liability.",
@@ -176,6 +179,18 @@ export function reportCsv(snapshot: ReportSnapshot): string {
       ["Summary (GBP)", "Amount"],
       ...Object.entries(r.summary).map(([k, v]) => [k, numberCell(v)]),
     );
+  const periods = confirmedRatePeriods(r, snapshot.coverage_confirmed);
+  if (periods.length) {
+    rows.push([], ["2024-25 rate periods (GBP)", ratePeriodsNote],
+      ["From", "Through", "Gains", "Losses", "Net gain or loss"],
+      ...periods.map(p => [p.from, p.through, numberCell(p.gainsGBP), numberCell(p.lossesGBP), numberCell(p.netGainGBP)]));
+  }
+  const componentNotes = r.disposals.flatMap(d =>
+    componentRoundingNotes(d.proceedsGBP, d.allowableCostGBP, d.gainGBP, d.saleBreakdown)
+      .map(note => [d.date, d.securityId, note]));
+  if (r.summary) componentNotes.push(...componentRoundingNotes(r.summary.proceedsGBP, r.summary.allowableCostsGBP,
+    r.summary.netGainGBP, r.saleBreakdown, r.summary).map(note => ["Annual", "", note]));
+  if (componentNotes.length) rows.push([], ["Date or annual total", "ISIN", "Displayed rounding"], ...componentNotes);
   if (snapshot.accounts) {
     rows.push([], ["Account coverage", "Broker", "History confirmed"]);
     for (const account of snapshot.accounts)
@@ -267,15 +282,15 @@ export function reportCsv(snapshot: ReportSnapshot): string {
       ["Annual rounding reconciliation (GBP)"],
       [
         "Measure",
-        "Rounded once for the year",
-        "Per-disposal rounding difference",
+        roundingComparisonLabel(r),
+        "Difference to reported total",
         "Reported total",
       ],
     );
     for (const d of differences)
       rows.push([
         d.label,
-        numberCell(d.annual),
+        numberCell(d.comparison),
         numberCell(d.adjustment),
         numberCell(d.reported),
       ]);

@@ -14,9 +14,13 @@ export interface ReportIssue {
 
 const reportDate = new Intl.DateTimeFormat("en-GB", { dateStyle: "long", timeZone: "UTC" });
 
+const marketScope = "The investor confirmed personal ownership in the same capacity, UK residence throughout the matching history including later repurchases, and ordinary market purchases or sales at arm’s length.";
+
 export const scopeStatement = (result: Calculation) =>
   result.scopeDeclaration === CURRENT_SCOPE_DECLARATION
-    ? "The investor confirmed personal ownership in the same capacity, UK residence throughout the matching history including later repurchases, and ordinary market purchases or sales at arm’s length."
+    ? marketScope + " They checked acquisition costs and fees against their records and confirmed these gains or losses require no special valuation, tax relief or election."
+    : result.scopeDeclaration === "personal-market-trades-v2"
+    ? marketScope + " This earlier declaration did not confirm costs, special valuations, reliefs or elections."
     : result.scopeDeclaration === "personal-uk-resident-v1"
     ? "The investor confirmed personal ownership and UK residence. This earlier declaration did not cover the tax basis of each transaction."
     : "This calculation has no recorded ownership and UK residence declaration.";

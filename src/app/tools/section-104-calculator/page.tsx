@@ -139,8 +139,7 @@ export default function Section104CalculatorPage() {
       ? totalPoolCost
       : totalPoolCost.mul(quantity).div(totalPoolShares);
 
-    // The pool keeps full precision. The saved report reconciles net proceeds
-    // and matched cost at the penny, including any sub-penny fee adjustment.
+    // Compute the outcome before formatting its components for display.
     const net = gross.minus(fees).toDP(2);
     const grossPence = gross.toDP(2);
     const feePence = fees.toDP(2);
@@ -151,10 +150,10 @@ export default function Section104CalculatorPage() {
       breakdown: {
         grossProceedsGBP: grossPence.toFixed(2),
         sellingCostsGBP: feePence.toFixed(2),
-        totalAllowableCostsGBP: matchedPence.plus(feePence).toFixed(2),
+        totalAllowableCostsGBP: matched.plus(fees).toFixed(2),
         proceedsRoundingAdjustmentGBP: net.minus(grossPence.minus(feePence)).toFixed(2),
       },
-      gainLoss: net.minus(matchedPence),
+      gainLoss: gross.minus(fees).minus(matched).toDP(2),
       remainingShares: totalPoolShares.minus(quantity),
       remainingCost: totalPoolCost.minus(matched),
     };
@@ -478,6 +477,7 @@ export default function Section104CalculatorPage() {
                   breakdown={disposalResult.breakdown}
                   net={disposalResult.net}
                   matched={disposalResult.matched}
+                  gain={disposalResult.gainLoss.toFixed(2)}
                 />
               </div>
               <div className="grid sm:grid-cols-2 gap-4">

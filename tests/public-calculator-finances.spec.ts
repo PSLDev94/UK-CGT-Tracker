@@ -167,6 +167,37 @@ test("sub-penny pool unit prices stay visible in the ledger and summary", async 
   await expect(page.getByText("+£1.00", { exact: true })).toBeVisible();
 });
 
+test("the checker uses each year's allowance and distinguishes the October 2024 rate change", async ({ page }) => {
+  await page.goto("/tools/cgt-allowance-checker");
+  const chooseYear = page.getByLabel("Tax year", {exact:true});
+  const tax = page.getByText("Estimated Tax Owed", {exact:true}).locator("..");
+  for (const [year, gain, estimate] of [
+    ["2021-22","13300","£100.00"], ["2022-23","13300","£100.00"],
+    ["2023-24","7000","£100.00"], ["2025-26","4000","£180.00"],
+    ["2026-27","4000","£180.00"],
+  ]) {
+    await chooseYear.selectOption(year!);
+    await expect(page.locator("#gains")).toHaveValue("");
+    await page.locator("#gains").fill(gain!);
+    await page.locator("#taxable-income").fill("0");
+    await expect(tax).toContainText(estimate!);
+    if (year === "2022-23") await expect(page.locator(".guide-article")).toContainText("£49,200");
+  }
+  await chooseYear.selectOption("2024-25");
+  await page.locator("#gains").fill("5000");
+  const period = page.getByLabel("When did you dispose");
+  await expect(tax).toContainText("insufficient");
+  await period.selectOption("early");
+  await page.locator("#taxable-income").fill("36700");
+  await expect(tax).toContainText("£300.00");
+  await period.selectOption("late");
+  await expect(tax).toContainText("£420.00");
+  await period.selectOption("mixed");
+  await expect(tax).toContainText("insufficient");
+  await expect(page.locator("#taxable-income")).toHaveCount(0);
+  await expect(page.getByRole("link",{name:"HMRC’s 2024–25 adjustment"})).toBeVisible();
+});
+
 test("the rates guide and checker agree when taxable income already includes allowances", async ({ page }) => {
   await page.goto("/guide/cgt-rates-2025-26");
   await expect(page.getByText(/already gives you taxable income, use that figure directly/)).toBeVisible();
@@ -188,6 +219,12 @@ test("the 30-day illustration reconciles rounded sale and acquisition amounts", 
   await page.getByLabel("Repurchase price per share").fill("1.004");
   await page.getByRole("button", { name: "Check B&B Rule" }).click();
   await expect(page.getByText("Proceeds on matched shares").locator("..")).toContainText("£1.01");
-  await expect(page.getByText("+£0.01", { exact: true })).toBeVisible();
+  await expect(page.getByText("Break-even on matched shares before fees").locator("..")).toContainText("£0.00");
+  await expect(page.getByText(/gives £0.01 from the displayed figures.*rounded once give £0.00/)).toBeVisible();
   await expect(page.getByText("B&B Rule Triggered — 1 day between transactions")).toBeVisible();
+  await page.getByLabel("Sale price per share").fill("1.006");
+  await page.getByLabel("Repurchase price per share").fill("1.012");
+  await page.getByRole("button", { name: "Check B&B Rule" }).click();
+  await expect(page.getByText("Loss on matched shares before fees").locator("..")).toContainText("−£0.01");
+  await expect(page.getByText(/gives £0.00 from the displayed figures.*rounded once give -£0.01/)).toBeVisible();
 });

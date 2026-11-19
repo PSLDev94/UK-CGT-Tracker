@@ -29,19 +29,19 @@ Files for inspection: `src/domain/cgt/calculate.ts`, `src/domain/cgt/types.ts`, 
 
 Pre-1982 basis adjustments, employee share schemes, funds/ETFs with distributions or reporting-income adjustments, reorganisations/splits/rights issues, short positions, options and other derivatives, crypto, gifts/transfers requiring market valuation and specialist residency/capacity cases have not been certified. Unknown source activity blocks the file; removing an inconvenient row is not an approved repair. AJ Bell's documented assisted history and older candidate headers still require broker-issued export validation; configured IBKR Flex support does not cover arbitrary sectioned Activity Statements.
 
-## Fractional pool rounding decision for review
+## Rounding and fractional pools
 
-The staging evidence PDF, CSV and Reports screen include an annual reconciliation when summing the individual rounded disposals differs from rounding once for the year. The pool ledger retains its calculation precision. This example is reproducible in `tests/reports.test.ts` in the test “reconstructs partial and closed pools and explains every penny of disposal rounding”.
+Engine `2.0.0-alpha.6` carries exact quantities, sterling amounts and proportional costs through each match. It computes the gain from those amounts, adds exact gains and losses separately for the year, and rounds each published field once for display. The reports reconcile the displayed disposal lines with the annual figures when these differ. The 2024–25 report also retains separate totals on either side of the main-rate change. No income-tax band or personal relief is applied to these figures. See the [year-by-year review](TAX_RULES_BY_YEAR.md).
 
-Buy three shares for £10 in one purchase. After the 30-day window, sell one share on each of three separate days for £5 each, with no fees and no other trades. The reported cost for each disposal is £3.33. The pool closes with zero shares and zero cost.
+Buy three shares for £10. After the 30-day window, sell one share on each of three different days for £5, with no fees. Each disposal displays £3.33 of matched cost and £1.67 of gain. All shares have been sold.
 
-| Measure | Rounded once for the year | Effect of rounding each disposal | Published total |
-|---|---:|---:|---:|
-| Proceeds | £15.00 | £0.00 | £15.00 |
-| Allowable costs | £10.00 | −£0.01 | £9.99 |
-| Net gain | £5.00 | +£0.01 | £5.01 |
+| Measure | Sum of displayed disposal lines | Published annual total |
+|---|---:|---:|
+| Proceeds | £15.00 | £15.00 |
+| Allowable costs | £9.99 | £10.00 |
+| Net gain | £5.01 | £5.00 |
 
-The reviewer should record which figure the investor should use for UK reporting, the authority for that treatment and any required change to the annual or per-disposal presentation. Review the same decision for losses, partial disposals and transactions spanning a tax-year boundary. HMRC's worked example illustrates how to carry the remaining pooled cost forward after a partial disposal. [HMRC HS284, example 3](https://assets.publishing.service.gov.uk/media/69c14ad87e02b81c0d1c7669/HS284-Example-3-2026.pdf)
+The example is covered by the report tests. Reconcile the full-precision computation before applying the instructions on the relevant return. HMRC’s computation guidance discusses rounding, and its worked share example illustrates proportional pooling. [HMRC computation guidance](https://www.gov.uk/hmrc-internal-manuals/capital-gains-manual/cg14200) · [HMRC HS284, example 3](https://assets.publishing.service.gov.uk/media/69c14ad87e02b81c0d1c7669/HS284-Example-3-2026.pdf)
 
 ## Selling costs and the accountant’s report
 
@@ -62,7 +62,7 @@ Record reviewer name/qualification, exact commit, source statements reviewed, in
 
 ## Corrected calculation and recovery procedure
 
-Engine 2.0.0-alpha.5 preserves rational quantities and costs until a reporting boundary. Two twelve-decimal currency operands are multiplied exactly, and sterling trade values retain up to 24 decimal places. A pre-upgrade receipt with retained original amount and exchange rate can recover its precise conversion when it agrees with its saved twelve-place value. A known foreign-currency receipt with missing or contradictory FX operands requires review against the original statement before it can supply a result. Historical snapshots and receipt records remain intact. Prices, fees, closing positions, individual rounded disposal groups and the annual reconciliation are covered separately. A reported zero requires the stated history cutoff. A saved report records the investor’s declaration of UK residence, personal ownership in one capacity and arm’s-length ordinary market transactions. Private sales to family, gifts, transfers and other special-basis events go to specialist review. The previous residence-only declaration requires reconfirmation. The cutoff must reach the first day of the selected tax year. Reports from an earlier engine must be recalculated. The original receipts and historical runs remain available to an authorised reviewer.
+The current engine preserves rational quantities and costs until a reporting boundary. Two twelve-decimal currency operands are multiplied exactly, and sterling trade values retain up to 24 decimal places. A pre-upgrade receipt with retained original amount and exchange rate can recover its precise conversion when it agrees with its saved twelve-place value. A known foreign-currency receipt with missing or contradictory FX operands requires review against the original statement before it can supply a result. Historical snapshots and receipt records remain intact. Prices, fees, closing positions, individual rounded disposal groups and the annual reconciliation are covered separately. A reported zero requires the stated history cutoff. A saved report records the investor’s declaration of UK residence, personal ownership in one capacity and arm’s-length ordinary market transactions. Private sales to family, gifts, transfers and other special-basis events go to specialist review. Earlier declarations require reconfirmation because they did not establish that actual purchase costs apply. The current declaration covers special valuations and reliefs as well as ownership and residence. The cutoff must reach the first day of the selected tax year. Reports from an earlier engine must be recalculated. The original receipts and historical runs remain available to an authorised reviewer.
 
 A historical disposal before 6 April 2008 can leave a pool cost unresolved even when the holding quantity is evidenced. If that security has no disposal in the assessed period and no recorded ownership shortfall, the report can include independently evidenced gains on other securities and identify the unresolved pool separately. A sale of the affected security in the assessed period continues to block the annual total. The taxpayer must still confirm the history of each included account. [HMRC pooled holdings](https://www.gov.uk/hmrc-internal-manuals/capital-gains-manual/cg51575) · [HMRC connected-party treatment](https://www.gov.uk/hmrc-internal-manuals/capital-gains-manual/cg14560)
 
@@ -70,7 +70,7 @@ For an unexplained sale, check the date, share class, transfers and acquisition 
 
 [Professionally reviewed opening position procedure](REVIEWED_OPENING_POSITIONS.md)
 
-The operator can run the following aggregate audit against a restored database or an approved administrative read connection after migrations through 0015. Supply OPERATOR_DATABASE_URL from the secret manager. It compares the saved annual status and net amount with a recalculation at the original cutoff when the portfolio revision still matches. Revised portfolios and unsafe imports have separate counts. It uses a read-only transaction, reports counts by year and never publishes a result or supplies a customer's scope declaration.
+The operator can run the following aggregate audit against a restored database or an approved administrative read connection after migrations through 0016. Supply OPERATOR_DATABASE_URL from the secret manager. It compares the saved annual status and net amount with a recalculation at the original cutoff when the portfolio revision still matches. Revised portfolios and unsafe imports have separate counts. It uses a read-only transaction, reports counts by year and never publishes a result or supplies a customer's scope declaration.
 
 ```sh
 node_modules/.bin/tsx scripts/audit-published-reports.ts

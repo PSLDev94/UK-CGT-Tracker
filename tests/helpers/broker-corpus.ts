@@ -31,7 +31,7 @@ export const brokerCases = [
   {
     broker: "freetrade",
     file: "freetrade-gbp",
-    gain: "74.37",
+    gain: "74.38",
     amount: "Total Amount",
     activity: "Type",
     label: "Title",
@@ -71,7 +71,7 @@ export const brokerCases = [
   {
     broker: "ibkr",
     file: "ibkr-flex-gbp",
-    gain: "71.62",
+    gain: "71.63",
     amount: "NetCash",
     activity: "AssetClass",
     label: "TradeDate",

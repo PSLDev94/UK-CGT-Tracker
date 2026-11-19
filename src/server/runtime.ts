@@ -95,6 +95,7 @@ async function initialise() {
           query(appDb, "SELECT ibkr_client_account_id FROM cgt.broker_accounts LIMIT 0"),
           query(appDb, "SELECT portfolio_revision FROM cgt.reviewed_opening_pools LIMIT 0"),
           query(appDb, "SELECT cgt.ledger_gbp(1,'1','1') FROM cgt.unverified_import_receipts LIMIT 0"),
+          query(appDb, "SELECT earliest_date FROM cgt.broker_evidence_issues LIMIT 0"),
           query(authDb, "SELECT 1"),
         ]),
       workspaceHandler: createWorkspaceHandler(

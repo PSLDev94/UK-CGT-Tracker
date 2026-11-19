@@ -17,11 +17,13 @@ The review is a staging release, not a claim that all production launch gates ha
 | Interactive Brokers | Configured 16-column Flex executions with ISIN, signed proceeds, commission, taxes and net cash | One account per file. Stock executions only. Foreign conversion needs a verified GBP-base statement or a template with independently supported per-trade GBP rates. Regular sectioned Activity Statements remain unsupported |
 | AJ Bell | Documented GBP transaction-history assisted layout plus six-column candidate | Requires contract-note execution ID, ISIN, currency, units, net-cash confirmation and fees. Representative broker-issued exports still need validation; no universal native-support claim |
 
-All examples are synthetic. Four new buy/sell fixtures derive independently checked £70.88 (HL/ii/AJ Bell) and £71.62 (IBKR) gains. Existing T212/Freetrade fixtures retain £5.25/£74.37 expected results. Unknown activity still blocks the entire file. No imported row is silently discarded to make a file pass.
+The synthetic buy/sell fixtures produce £70.88 for HL, ii and AJ Bell, £71.63 for IBKR, £5.25 for Trading 212 and £74.38 for Freetrade. Separately, the [broker evidence register](BROKER_SUPPORT.md) lists original public files, the rows that reconciled, and the documents needed to resolve the others. A file with unresolved activity stays in review.
 
 Supporting details are stored with the draft, reviewed again at commit and retained in transaction provenance. Portfolio revisions and a separate draft review version prevent stale confirmations and concurrent supporting-detail overwrites.
 
 ## Report review
+
+The [year-by-year specialist assessment](TAX_RULES_BY_YEAR.md) covers the six supported years, HMRC worked examples, the 30 October 2024 rate change and cases that need an individual review. The current engine calculates each annual total from unrounded transactions. The paid reports and free CSV explain any difference from adding displayed pennies. The earlier calculation and its declaration remain in the audit history. To download current figures, the investor must reconfirm their basis and recalculate.
 
 - Reports use immutable saved results, with calculation ID, input fingerprint, engine version, history cutoff and account coverage.
 - CSV includes disposals, matching details, pools and unresolved issues; no subscription is required.
@@ -60,3 +62,10 @@ Sources: [UK online-selling guidance](https://www.gov.uk/online-and-distance-sel
 ## Customer information before live checkout
 
 Confirm the business's publishable contact details, the production retention/transfer arrangements and the applicable cancellation rights for the subscription and downloadable reports. The owner has supplied PSL Digital and support@cgttracker.com and asked to omit a contact address from staging. Provide the applicable business address, pre-contract information and a durable confirmation before accepting live orders. Confirm the legal treatment of immediate access and refunds; the staging service makes no decision on a customer's statutory rights. [GOV.UK distance selling](https://www.gov.uk/online-and-distance-selling-for-businesses) · [GOV.UK online selling](https://www.gov.uk/online-and-distance-selling-for-businesses/online-selling) · [ICO privacy information](https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/individual-rights/individual-rights/right-to-be-informed/)
+
+
+### Subscription and report review, 19 November 2026
+
+Before enabling live checkout, review the annual service and immediately accessible PDFs together. Show the legal trader identity and geographical contact address, total recurring price, billing period, renewal, cancellation route and the applicable cooling-off information before the order. Send a confirmation the customer can keep. Where relying on an early start or an instant digital download, determine which express request, consent and acknowledgement applies and retain its date and wording. Cancelling future renewal in Stripe is distinct from exercising a statutory cancellation right. The sandbox has no live consumer order and cannot verify that the production communications or refund process deliver those rights. [Consumer Contracts Regulations, Schedule 2](https://www.legislation.gov.uk/uksi/2013/3134/schedule/2) · [GOV.UK online selling](https://www.gov.uk/online-and-distance-selling-for-businesses/online-selling)
+
+Customers can check their figures, notify support of discrepancies and obtain personal tax advice. Confirmation of source records does not transfer the trader’s obligations for the supplied digital content and services to the customer. Use clear scope descriptions and keep access to applicable consumer remedies. Check commencement and current guidance on subscription contracts against the actual date live orders will open. [Consumer Rights Act, sections 47 and 57](https://www.legislation.gov.uk/ukpga/2015/15/part/1) · [CMA fair contracts](https://www.gov.uk/guidance/writing-a-fair-contract-for-customers) · [Government subscription guidance](https://www.gov.uk/government/publications/subscription-contracts)

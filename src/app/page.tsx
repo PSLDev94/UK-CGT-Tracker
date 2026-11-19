@@ -563,13 +563,12 @@ export default async function LandingPage() {
                   How accurate are the calculations?
                 </h3>
                 <p className="text-gray-600 leading-relaxed">
-                  Our engine implements all three HMRC matching rules (same-day,
-                  30-day bed & breakfast, and Section 104 pool) in the strict
-                  sequential order required by HMRC. We use highly precise
-                  decimal arithmetic to avoid float rounding errors. That said,
-                  this tool provides computation for your guidance — we always
-                  recommend verifying figures with a qualified tax advisor if
-                  you possess complex assets.
+                  For supported ordinary shares, the engine matches same-day purchases,
+                  then eligible purchases in the following 30 days, then the Section 104
+                  pool. The report shows which trades supplied each cost. Check all
+                  your taxable accounts against the original statements. If a tax
+                  relief or special valuation applies, ask a qualified tax adviser to
+                  review it before using the figures.
                 </p>
               </div>
               <div className="bg-white rounded-2xl border border-gray-200 p-6 sm:p-8 shadow-sm">

@@ -7,7 +7,7 @@ import Papa from "papaparse";
 import { calendarDate, decimal, Money } from "../values";
 import type { Trade } from "../cgt/types";
 import { BROKERS, type BrokerId } from "./brokers";
-import { nativeAdapter, NATIVE_GUIDANCE } from "./native";
+import { nativeAdapter, unverifiedLayoutGuidance } from "./native";
 import {
   validateDetails,
   SupportingFieldError,
@@ -16,7 +16,7 @@ import {
   type ImportDetails,
   type SupportingDetails,
 } from "./supporting-details";
-import { exportedTerms, type ExportedTerms } from "./exported-terms";
+import { exportedTerms, supportedCurrencies, type ExportedTerms } from "./exported-terms";
 import { HL_HEADERS } from "./additional-brokers";
 
 export const CANONICAL_HEADERS = [
@@ -142,7 +142,6 @@ export interface ImportReview {
 
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
-const currencies = new Set(Intl.supportedValuesOf("currency"));
 
 function hlPreambleRow(row: string[], dated: boolean) {
   const name = row[0]?.trim();
@@ -314,7 +313,7 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
   if (!canonical && !adapter) {
     issues.push({
       code: "UNSUPPORTED_FORMAT",
-      message: `This export or column layout has not been verified. No records have been imported. ${NATIVE_GUIDANCE[options.broker]}`,
+      message: `This export or column layout has not been verified. No records have been imported. ${unverifiedLayoutGuidance(options.broker, headers)}`,
     });
     data.forEach((_, index) =>
       records.push({
@@ -326,8 +325,14 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
     return finish(headers, true);
   }
 
-  if (adapter) parserVersion = ["freetrade", "trading212"].includes(options.broker)
-    ? adapter.version.replace(/-v1$/, "-v2") : adapter.version;
+  if (adapter) {
+    // The audit version identifies the checks performed. Keep the native format
+    // used in execution fingerprints stable across equivalent broker rows.
+    if (options.broker === "trading212") parserVersion = adapter.version.replace(/-v1$/, "-v3");
+    else if (["freetrade", "ibkr"].includes(options.broker))
+      parserVersion = adapter.version.replace(/-v1$/, "-v2");
+    else parserVersion = adapter.version;
+  }
   if (
     options.broker === "ibkr" &&
     adapter &&
@@ -400,7 +405,7 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
         );
       if (detailMetadata.canSupplyDetails && sourceUnits && terms) {
         const problem = !validISIN(terms.isin ?? "") ? "The exported ISIN is missing or invalid."
-          : !currencies.has(terms.currency ?? "") ? "The instrument currency must be a supported ISO currency."
+          : !supportedCurrencies.has(terms.currency ?? "") ? "The instrument currency must be a supported ISO currency."
           : terms.sourceIssue;
         if (problem) {
           detailMetadata.canSupplyDetails = false;
@@ -489,7 +494,7 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
       if (amount.isZero()) throw new Error("Zero consideration may represent a gift, transfer or negligible-value claim. Verify the tax basis with a specialist before importing this event.");
       const fees = decimal(row.Fees, "Fees");
       // No currency guessing and no implicit pence-to-pounds or FX inversion.
-      if (!currencies.has(row.Currency))
+      if (!supportedCurrencies.has(row.Currency))
         throw new Error(
           "Use an ISO currency in major units; convert pence to pounds explicitly.",
         );
