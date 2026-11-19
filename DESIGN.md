@@ -55,6 +55,10 @@ Original centred landing-page hero, dashboard illustration, feature grids and fo
 
 Retain original shadows, gradients and borders. New screens use matching small card shadows.
 
+## Staging design study
+
+The three review views under `/design-preview` share the public sample portfolio. The homepage introduces one sale, Calculations opens its matching and source records, and the A4 statement presents the year followed by the evidence. The original pie mark, Inter web typography and blue actions tie the views together. At phone widths, group the asset, signed result and rule before the optional cost breakdown. These layouts are awaiting review for broader use.
+
 ## Shapes
 
 Original rounded-md/lg/xl controls and panels. Shared workflow controls use the mirrored runtime radii.

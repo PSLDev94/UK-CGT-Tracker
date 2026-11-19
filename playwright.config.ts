@@ -14,7 +14,7 @@ export default defineConfig({
   ],
   webServer: {
     command: "npm run start",
-    env: { PORT: "3200", HOSTNAME: "127.0.0.1" },
+    env: { PORT: "3200", HOSTNAME: "127.0.0.1", RAILWAY_ENVIRONMENT_NAME: "staging" },
     url: "http://127.0.0.1:3200/api/health",
     reuseExistingServer: false,
     timeout: 30000,

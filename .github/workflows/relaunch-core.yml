@@ -67,6 +67,9 @@ jobs:
           node -e 'if (!require("node:fs").readFileSync("/tmp/cgt-home.html", "utf8").includes("Calculate gains on your")) process.exit(1)'
           test "$(curl --silent --output /tmp/cgt-setup.json --write-out '%{http_code}' http://127.0.0.1:3300/api/v2/auth/get-session)" = "503"
           test "$(curl --silent --output /tmp/cgt-ready.json --write-out '%{http_code}' http://127.0.0.1:3300/api/ready)" = "503"
+          for path in design-preview design-preview/calculations design-preview/report.pdf; do
+            test "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:3300/$path")" = "404"
+          done
 
   postgres:
     name: PostgreSQL 18 migrations, roles and concurrency
