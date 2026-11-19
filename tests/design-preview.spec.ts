@@ -2,6 +2,28 @@ import { expect, test } from "@playwright/test";
 import { PDFDocument } from "pdf-lib";
 import { reportPageText } from "./helpers/pdf-text";
 
+test("the review navigation reflows at 320 pixels with double-size text", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 650 });
+  for (const path of [
+    "/design-preview",
+    "/design-preview/calculations#tesla",
+  ]) {
+    await page.goto(path);
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    const bounds = await page.evaluate(() => ({
+      page: document.documentElement.scrollWidth,
+      viewport: document.documentElement.clientWidth,
+      pdf: document
+        .querySelector('nav[aria-label="Design preview"] a:last-child')!
+        .getBoundingClientRect().right,
+    }));
+    expect(bounds.page).toBe(bounds.viewport);
+    expect(bounds.pdf).toBeLessThanOrEqual(bounds.viewport);
+  }
+});
+
 test("the illustrative sale opens its source records and reconciles to the printable statement", async ({
   page,
   request,
