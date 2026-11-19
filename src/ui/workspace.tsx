@@ -6,6 +6,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { WorkspaceEntry } from "./workspace-entry";
 import { safeReturnPath } from "./return-path";
 import { latestCalculation } from "./latest-calculation";
+import { decodeBrokerCsv } from "../domain/imports/decode-csv";
 import { PortfolioOverview } from "./portfolio-overview";
 import {
   DashboardSidebar,
@@ -43,7 +44,7 @@ import { displayDate } from "./format";
 import { CalculationResult } from "./calculation-result";
 import { readDisposalLocation } from "./disposal-location";
 import { useModal, useNavigationGuard, LeaveDialog } from "./navigation-guard";
-import type { HistoryImport, Overview, Preview } from "./workspace-types";
+import { draftLabel, type HistoryImport, type Overview, type Preview } from "./workspace-types";
 
 type History = {
   imports: HistoryImport[];
@@ -111,8 +112,11 @@ function WorkspaceBody({
   const params = useSearchParams();
   const router = useRouter();
   const requestedDraft = view === "imports" ? params.get("draft") : null;
-  const accountId = params.get("account") ??
-    (data?.accounts.length === 1 ? data.accounts[0].id : "");
+  const requestedBroker = BROKERS.find((broker) => broker.id === params.get("broker"));
+  const uploadAccounts = (data?.accounts ?? []).filter((a) => !requestedBroker || a.broker === requestedBroker.id);
+  const requestedAccountId = params.get("account");
+  const accountId = uploadAccounts.find((a) => a.id === requestedAccountId)?.id ??
+    (uploadAccounts.length === 1 ? uploadAccounts[0].id : "");
   const selectedAccount = data?.accounts.find((account) => account.id === accountId);
   const format = params.get("format") === "canonical-v1" ? "canonical-v1" : "native";
   function chooseUploadOption(key: "account" | "format", value: string) {
@@ -356,12 +360,10 @@ function WorkspaceBody({
     await perform(async () => {
       let csv: string;
       try {
-        csv = new TextDecoder("utf-8", { fatal: true }).decode(
-          await file!.arrayBuffer(),
-        );
-      } catch {
+        csv = decodeBrokerCsv(await file!.arrayBuffer(), selectedAccount?.broker, format);
+      } catch (error) {
         throw new ApiError(
-          "This file is not UTF-8. Export or save it as UTF-8 CSV, then try again.",
+          error instanceof Error ? error.message : "This CSV could not be read. Choose the original broker export.",
           400,
           "INVALID_ENCODING",
         );
@@ -403,6 +405,8 @@ function WorkspaceBody({
       next.historyThrough =
         "Use a valid date in YYYY-MM-DD format.";
     }
+    if (values.get("personalScopeConfirmed") !== "on")
+      next.personalScopeConfirmed = "Confirm the ownership and residence statement, or contact support if it does not fit your history.";
     setErrors(next);
     if (Object.keys(next).length) {
       focusFirstError(form, next);
@@ -417,6 +421,7 @@ function WorkspaceBody({
           taxYear,
           historyThrough,
           confirmedAccountIds: values.getAll("confirmedAccountIds"),
+          personalScopeConfirmed: values.get("personalScopeConfirmed") === "on",
         });
       } catch (caught) {
         if (caught instanceof ApiError && caught.code === "PORTFOLIO_CHANGED") {
@@ -458,10 +463,7 @@ function WorkspaceBody({
       timeStyle: "short",
       timeZone: "Europe/London",
     }).format(new Date(date));
-  const draftLabel = (draft: Overview["drafts"][number]) =>
-    draft.display_summary?.fileName ?? (draft.created_at
-      ? `Upload from ${new Date(draft.created_at).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "medium", timeStyle: "medium" })} (London)`
-      : `Preview ${draft.id.slice(0, 8)}`);
+
 
   if (authRequired) {
     return <WorkspaceEntry next={window.location.pathname + window.location.search} message={message} />;
@@ -616,7 +618,7 @@ function WorkspaceBody({
                           id="broker"
                           name="broker"
                           label="Broker"
-                          defaultValue=""
+                          defaultValue={requestedBroker?.id ?? ""}
                           error={errors.broker}
                         >
                           <option value="">Choose broker</option>
@@ -728,14 +730,14 @@ function WorkspaceBody({
                   ) : (
                     <Notice>Opening saved preview…</Notice>
                   ))}
-                {!data.accounts.length ? (
+                {!uploadAccounts.length ? (
                   <section className="panel">
                     <h2>Add an account first.</h2>
                     <p>
                       Each uploaded file needs a broker and account so its
                       records remain identifiable.
                     </p>
-                    <Link className="button primary" href={withRecoveryYear("/dashboard/accounts")}>
+                    <Link className="button primary" href={withRecoveryYear(requestedBroker ? "/dashboard/accounts?broker=" + requestedBroker.id : "/dashboard/accounts")}>
                       Add broker account
                     </Link>
                   </section>
@@ -759,7 +761,7 @@ function WorkspaceBody({
                             onChange={(e) => chooseUploadOption("account", e.target.value)}
                           >
                             <option value="">Choose account</option>
-                            {data.accounts.map((a) => (
+                            {uploadAccounts.map((a) => (
                               <option key={a.id} value={a.id}>
                                 {a.label}
                               </option>
@@ -1124,6 +1126,14 @@ function WorkspaceBody({
                       <p className="caption">
                         Confirm each account up to the date above. Changing that date clears the checkboxes.
                       </p>
+                      <label className="checkbox-label">
+                        <input key={`${taxYear}-${historyThrough}-${data.portfolio.revision}`} type="checkbox" name="personalScopeConfirmed"
+                          disabled={busy} aria-invalid={!!errors.personalScopeConfirmed}
+                          aria-describedby={errors.personalScopeConfirmed ? "scope-error scope-help" : "scope-help"} />
+                        <span>I owned these shares personally in the same capacity and was UK resident throughout the trading history used for this calculation, including later repurchases.</span>
+                      </label>
+                      <p id="scope-help" className="caption">Joint or trust holdings, short sales and changes of residence need a specialist review. <Link className="underline" href="/dashboard/contact">Ask about your records</Link>.</p>
+                      {errors.personalScopeConfirmed && <p id="scope-error" role="alert">{errors.personalScopeConfirmed}</p>}
                       {settingsEdited && currentCalculation && (
                         <Notice tone="warning">
                           Settings changed. Recalculate to update the saved result and reports for {taxYear}.

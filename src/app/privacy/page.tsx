@@ -54,12 +54,12 @@ export default function Privacy() {
           calculations but keeps the audit history.
         </p>
         <h2 className="text-xl font-semibold text-gray-900">
-          Service providers and cookies
+          Service providers, backups and cookies
         </h2>
         <p>
           The preview uses Railway for hosting and PostgreSQL storage, Resend
           for verification, recovery and support email, and Stripe for sandbox
-          billing. The production domain is managed through Cloudflare.
+          billing. Cloudflare stores encrypted staging backups in a private EU bucket. An archive expires after 14 days. If we restore a backup, we reapply completed deletion requests before reopening access.
           Essential cookies keep your session secure and return you to the selected report after checkout.
           We count completed steps such as file reviews, repairs and report downloads in our service logs.
           These usage events contain the step and, for file reviews and repairs, a broker category.
@@ -80,8 +80,13 @@ export default function Privacy() {
           You can change your name and password in Settings, reverse incorrect
           imports, and download calculation evidence from Reports. Contact
           support for a copy of your other account information, corrections, or
-          an account-deletion request. Deletion is reviewed separately from
+          an account-deletion request. You can also ask for a portable copy or for us to restrict processing where those rights apply. We verify ownership before providing a copy or deleting personal records. We explain any information that must be retained for billing or legal reasons. Deletion is reviewed separately from
           subscription cancellation and is not immediate.
+        </p>
+        <h2 className="text-xl font-semibold text-gray-900">Your right to object</h2>
+        <p>
+          You can object to processing based on legitimate interests. Email support@cgttracker.com
+          to explain which use of your information concerns you. We will respond to your request.
         </p>
         <p>
           You can raise a concern with the{" "}

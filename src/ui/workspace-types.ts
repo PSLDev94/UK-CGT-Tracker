@@ -30,6 +30,7 @@ export interface Overview {
   accounts: BrokerAccount[];
   imports: SavedImport[];
   hasActiveTrades?: boolean;
+  instrumentNames?: Record<string, string>;
   savedReceipt?: SavedReceipt | null;
   importCount?: number;
   drafts: { id: string; account_id: string; expires_at: string; created_at?: string; display_summary?: DraftSummary | null }[];
@@ -44,6 +45,11 @@ export interface Overview {
     coverage_confirmed: boolean;
     coverage_accounts?: string[];
   }[];
+}
+export function draftLabel(draft: Overview["drafts"][number]) {
+  return draft.display_summary?.fileName ?? (draft.created_at
+    ? `Upload from ${new Date(draft.created_at).toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "medium", timeStyle: "medium" })} (London)`
+    : `Preview ${draft.id.slice(0, 8)}`);
 }
 export function hasActiveTrades(overview: Overview) {
   return overview.hasActiveTrades ?? overview.imports.some((item) => item.status === "committed" && item.accepted_count > 0);

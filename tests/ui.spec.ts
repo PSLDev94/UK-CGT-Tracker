@@ -497,6 +497,7 @@ test("account → review → conflict → commit → calculate → reverse", asy
   await page.getByLabel("Tax year", { exact: true }).selectOption("2024-25");
   await page.getByLabel("History complete through").fill("2025-05-05");
   await page.getByRole("checkbox", { name: "My Invest", exact: true }).check();
+  await page.locator('input[name="personalScopeConfirmed"]').check();
   await page
     .getByRole("button", { name: "Calculate gains", exact: true })
     .click();
@@ -598,6 +599,11 @@ test("reopened previews keep their filenames and distinguish earlier uploads", a
     ...original, id: "20000000-0000-4000-8000-000000000003",
     display_summary: null, created_at: "2026-11-18T12:34:56Z",
   }];
+  await page.goto("/dashboard");
+  await expect(page.getByRole("heading", { name: "3 saved previews" })).toBeVisible();
+  await expect(page.getByRole("link", { name: file.name, exact: true })).toHaveAttribute("href", "/dashboard/upload?draft=" + original.id);
+  await expect(page.getByRole("link", { name: "Second export.csv" })).toHaveAttribute("href", "/dashboard/upload?draft=" + state.drafts[1]!.id);
+  await expect(page.getByRole("link", { name: "Resume review" })).toHaveCount(0);
   await page.route("**/api/v2/workspace", async (route) => {
     const body = route.request().postDataJSON();
     if (body.action === "review-import") {
@@ -1246,10 +1252,18 @@ test("assisted corrections stay with the failed trade and survive cancelling a d
   const reference = page.getByLabel("Supporting statement or contract-note reference", { exact: true });
   const confirm = page.getByRole("checkbox", { name: /I checked the currency/ });
   const save = page.getByRole("button", { name: "Check and save supporting details" });
-  await isin.fill("gb0008706128");
+  await isin.fill("gb0008706129");
   await fees.fill("5");
   await reference.fill("Statement for sale S900000002");
   await confirm.check();
+  await save.click();
+  await expect(isin).toBeFocused();
+  await expect(isin).toHaveAttribute("aria-invalid", "true");
+  await expect(isin).toHaveAccessibleDescription(/final check digit/);
+  await expect(fees).toHaveValue("5");
+  await expect(reference).toHaveValue("Statement for sale S900000002");
+  expect(calls).not.toContain("supply-import-details");
+  await isin.fill("gb0008706128");
   const initialInputHeight = (await isin.boundingBox())!.height;
   await save.click();
   await expect(page.getByRole("heading", { name: "Resolve record 3" })).toBeVisible();
@@ -1440,6 +1454,7 @@ test("phone shows the focused next step after saving and calculating", async ({ 
   await expect(page.getByLabel("Tax year", {exact:true})).toHaveValue("2024-25");
   await page.getByLabel("History complete through").fill("2025-05-05");
   await page.getByRole("checkbox", {name:"My Invest",exact:true}).check();
+  await page.locator('input[name="personalScopeConfirmed"]').check();
   await page.getByRole("button", {name:"Calculate gains",exact:true}).click();
   const result = page.getByRole("heading", {name:"2024-25 share gains"});
   await expect(result).toBeFocused();
@@ -1539,7 +1554,7 @@ test("draft reports explain missing purchases beside the free export and keep th
   await page.goto("/dashboard/reports?year=2024-25");
   const summary = page.getByRole("region", { name: "Calculation summary" });
   await expect(summary).toContainText("Total awaiting complete history");
-  await expect(summary).toContainText("A net total is withheld");
+  await expect(summary).toContainText("Resolve the issues before relying on an annual total");
   await expect(
     summary.getByRole("link", { name: "Upload earlier acquisitions" }),
   ).toHaveAttribute("href", "/dashboard/upload?year=2024-25");
@@ -1549,7 +1564,26 @@ test("draft reports explain missing purchases beside the free export and keep th
   expect((await csvButton.boundingBox())!.y).toBeLessThan(844);
   await expect(
     page.getByRole("link", { name: "Get evidence PDF · £49/year" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  await expect(summary.getByText(/Only a draft is available/)).toBeVisible();
+});
+
+test("an interrupted report read offers a retry for the same year", async ({ page }) => {
+  await mockWorkspace(page, { account: true });
+  let interrupt = true;
+  await page.route("**/api/v2/workspace", async route => {
+    const body = route.request().postDataJSON();
+    if (body.surface === "reports" && interrupt) return route.abort();
+    return route.fallback();
+  });
+  await page.goto("/dashboard/reports?year=2024-25");
+  const error = page.getByRole("main").getByRole("alert");
+  await expect(error).toContainText("Your saved reports couldn’t load");
+  await expect(error).not.toContainText(/upload|change may have reached/i);
+  interrupt = false;
+  await error.getByRole("button", { name: "Reload report" }).click();
+  await expect(error).toHaveCount(0);
+  await expect(page).toHaveURL(/year=2024-25/);
 });
 
 test("pricing serves both sample reports without signing in", async ({

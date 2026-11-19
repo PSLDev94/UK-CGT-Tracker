@@ -14,7 +14,7 @@ The review is a staging release, not a claim that all production launch gates ha
 | Freetrade | 29-column Activity including documented renamed amount columns; GBP account; GBP and verified foreign trades | FX fees/base/effective rates/net cash must reconcile; transfers/free shares and corporate actions block the file |
 | Hargreaves Lansdown | Transaction Summary including known preamble; pence prices and signed GBP cash | Requires ISIN and verified dealing fees from contract notes |
 | Interactive Investor | 11-column transactions with debit/credit and execution reference | Requires ISIN, wallet currency, price units and verified fees |
-| Interactive Brokers | Configured 16-column Flex executions with ISIN, signed proceeds, commission, taxes and net cash | One account per file; stock executions only; foreign conversion must be verified against a GBP-base statement. Regular sectioned Activity Statements remain unsupported |
+| Interactive Brokers | Configured 16-column Flex executions with ISIN, signed proceeds, commission, taxes and net cash | One account per file. Stock executions only. Foreign conversion needs a verified GBP-base statement or a template with independently supported per-trade GBP rates. Regular sectioned Activity Statements remain unsupported |
 | AJ Bell | Documented GBP transaction-history assisted layout plus six-column candidate | Requires contract-note execution ID, ISIN, currency, units, net-cash confirmation and fees. Representative broker-issued exports still need validation; no universal native-support claim |
 
 All examples are synthetic. Four new buy/sell fixtures derive independently checked £70.88 (HL/ii/AJ Bell) and £71.62 (IBKR) gains. Existing T212/Freetrade fixtures retain £5.25/£74.37 expected results. Unknown activity still blocks the entire file. No imported row is silently discarded to make a file pass.
@@ -56,3 +56,7 @@ PSL Digital; support@cgttracker.com; not VAT-registered; retain £49/year, no VA
 - Production DNS, live Stripe enablement and launch approval.
 
 Sources: [UK online-selling guidance](https://www.gov.uk/online-and-distance-selling-for-businesses/online-selling), [consumer pre-contract information](https://www.legislation.gov.uk/uksi/2013/3134/schedule/2), [IBKR Flex trade semantics](https://www.ibkrguides.com/reportingreference/reportguide/tradesfq.htm). The implementation evidence and remaining gates must be reviewed together.
+
+## Customer information before live checkout
+
+Confirm the business's publishable contact details, the production retention/transfer arrangements and the applicable cancellation rights for the subscription and downloadable reports. The owner has supplied PSL Digital and support@cgttracker.com and asked to omit a contact address from staging. Provide the applicable business address, pre-contract information and a durable confirmation before accepting live orders. Confirm the legal treatment of immediate access and refunds; the staging service makes no decision on a customer's statutory rights. [GOV.UK distance selling](https://www.gov.uk/online-and-distance-selling-for-businesses) · [GOV.UK online selling](https://www.gov.uk/online-and-distance-selling-for-businesses/online-selling) · [ICO privacy information](https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/individual-rights/individual-rights/right-to-be-informed/)

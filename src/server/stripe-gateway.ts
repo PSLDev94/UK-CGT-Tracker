@@ -115,13 +115,14 @@ export class StripeGateway implements BillingGateway {
         this.mode(invoice.livemode);
         paid =
           invoice.status === "paid" &&
+          invoice.amount_paid > 0 &&
           invoice.amount_remaining === 0 &&
           objectId(invoice.customer) === customerId &&
           objectId(invoice.parent?.subscription_details?.subscription) ===
             subscription.id;
         // A paid invoice alone can hide a refunded/disputed charge. Inspect the
         // current payment objects too; webhook delivery is not the only defence.
-        if (paid && invoice.amount_paid > 0) {
+        if (paid) {
           let found = false;
           for await (const payment of this.client.invoicePayments.list({
             invoice: invoice.id,

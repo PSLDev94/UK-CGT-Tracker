@@ -142,9 +142,11 @@ test("the allowance is available before income and distinguishes a loss, full al
   await expect(card("Estimated Tax Owed")).toContainText(
     "Enter your taxable income",
   );
-  await page.getByText("Higher rate (24%)", { exact: true }).click();
+  await income.fill("37700");
   await expect(card("Estimated Tax Owed")).toContainText("£240.00");
-  await expect(income).toHaveCount(0);
+  await gains.fill("10000");
+  await income.fill("32430");
+  await expect(card("Estimated Tax Owed")).toContainText("£1,363.80");
   await losses.fill("invalid");
   await expect(losses).toHaveAccessibleDescription(
     /Enter non-negative amounts/,
@@ -152,4 +154,18 @@ test("the allowance is available before income and distinguishes a loss, full al
   await expect(result.getByText("Taxable Gain", { exact: true })).toHaveCount(
     0,
   );
+});
+
+test("the 30-day illustration reconciles rounded sale and acquisition amounts", async ({ page }) => {
+  await page.goto("/tools/bed-and-breakfast-calculator");
+  await page.getByLabel("Date of sale").fill("2025-07-01");
+  await page.getByLabel("Shares sold").fill("1");
+  await page.getByLabel("Sale price per share").fill("1.005");
+  await page.getByLabel("Date of repurchase").fill("2025-07-02");
+  await page.getByLabel("Shares repurchased").fill("1");
+  await page.getByLabel("Repurchase price per share").fill("1.004");
+  await page.getByRole("button", { name: "Check B&B Rule" }).click();
+  await expect(page.getByText("Proceeds on matched shares").locator("..")).toContainText("£1.01");
+  await expect(page.getByText("+£0.01", { exact: true })).toBeVisible();
+  await expect(page.getByText("B&B Rule Triggered — 1 day between transactions")).toBeVisible();
 });

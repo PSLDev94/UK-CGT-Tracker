@@ -16,7 +16,7 @@ export function DashboardShell({
 }: {
   children:
     | React.ReactNode
-    | ((user: Session["user"], sessionId?: string) => React.ReactNode);
+    | ((user: Session["user"], sessionId: string | undefined, updateName: (name: string) => void) => React.ReactNode);
   beforeSignOut?: (signOut: () => void) => void;
   selectedYear?: string;
 }) {
@@ -95,7 +95,7 @@ export function DashboardShell({
             <Button onClick={load}>Try again</Button>
           </section>
         ) : typeof children === "function" ? (
-          children(session.user, session.session?.id)
+          children(session.user, session.session?.id, (name) => setSession((current) => current && ({ ...current, user: { ...current.user, name } })))
         ) : (
           children
         )}

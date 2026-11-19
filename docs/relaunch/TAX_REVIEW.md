@@ -59,3 +59,17 @@ Record reviewer name/qualification, exact commit, source statements reviewed, in
 ## Additional independent arithmetic checks
 
 `tests/cgt-model.test.ts` compares 500 seeded generated histories against an independently written exact BigInt rational model that allocates individual quarter-share tokens. It covers competing purchases/disposals, same-day reservation, 30-day identification, pooled allocations, pre-year and post-year activity, fees, output rounding and export-order invariance. The broker corpus separately checks generated fractional acquisitions against integer-pence arithmetic and routes combined matching cases through each native reader. These are differential arithmetic tests within the existing scope, not independent professional tax sign-off.
+
+## Corrected calculation and recovery procedure
+
+Engine 2.0.0-alpha.4 preserves rational quantities and costs until a reporting boundary. Prices, fees, closing positions, individual rounded disposal groups and the annual reconciliation are covered separately. A reported zero requires the stated history cutoff. A saved report records the investor's declaration of UK residence and sole personal ownership for the relevant history. Reports from an earlier engine must be recalculated. The original receipts and historical runs remain available to an authorised reviewer.
+
+For an unexplained sale, check the date, share class, transfers and acquisition evidence across every taxable account. Import the actual earlier purchases, then confirm the corrected history. For an affected pre-6-April-2008 disposal with continuing holdings, a residence or ownership change, or a genuine short sale, refer the case to a qualified reviewer. Supply original contracts, transfers, corporate actions and any reconciled opening quantity and cost. The self-service import accepts original trades. Do not invent a purchase to simulate opening basis. For a reviewed ordinary-share opening position, an authorised operator can record the reconciled basis and case/source references using the reviewed-opening procedure. The workspace then applies it to eligible later years. Changes to reviewed receipts or possible matching across its cutoff require renewed review. Other specialist cases remain with the reviewer.
+
+[Professionally reviewed opening position procedure](REVIEWED_OPENING_POSITIONS.md)
+
+The operator can run the following aggregate audit against a restored database or an approved administrative read connection after migrations 0012 and 0013. Supply OPERATOR_DATABASE_URL from the secret manager. It compares the saved annual status and net amount with a recalculation at the original cutoff when the portfolio revision still matches. Revised portfolios and unsafe imports have separate counts. It uses a read-only transaction, reports counts by year and never publishes a result or supplies a customer's scope declaration.
+
+```sh
+node_modules/.bin/tsx scripts/audit-published-reports.ts
+```

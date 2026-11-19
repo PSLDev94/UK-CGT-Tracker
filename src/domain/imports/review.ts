@@ -1,3 +1,6 @@
+import { validISIN } from "./isin";
+export { validISIN } from "./isin";
+import { ibkrExecution, sourceKey as executionKey } from "./ibkr-identity";
 import { createHash } from "node:crypto";
 import Papa from "papaparse";
 import { calendarDate, decimal } from "../values";
@@ -7,6 +10,7 @@ import { nativeAdapter, NATIVE_GUIDANCE } from "./native";
 import {
   validateDetails,
   SupportingFieldError,
+  StatementMismatchError,
   fingerprintDetails,
   type ImportDetails,
   type SupportingDetails,
@@ -26,7 +30,7 @@ export const CANONICAL_HEADERS = [
   "GBP per unit",
   "Asset type",
 ] as const;
-export const PARSER_VERSION = "canonical-v1.0.1";
+export const PARSER_VERSION = "canonical-v1.1.0";
 export const MAX_CSV_BYTES = 10 * 1024 * 1024;
 export const MAX_RECORDS = 100_000;
 
@@ -39,6 +43,10 @@ export interface ImportOptions {
   latestTradeDate?: string;
   /** User attestation, persisted with the draft and rechecked at commit. */
   ordinarySharesConfirmed?: boolean;
+  ibkrClientAccountId?: string | null;
+  ibkrUnverifiedHistory?: boolean;
+  ibkrOtherAccounts?: ReadonlyMap<string, string>;
+  ibkrUnboundKeys?: ReadonlyMap<string, ReadonlySet<string>>;
   supportingDetails?: ImportDetails;
   /** Stable source key -> normalised-content digest, loaded server-side. */
   existing?: ReadonlyMap<string, string | SavedExecution>;
@@ -47,6 +55,9 @@ export interface ImportOptions {
 export interface SavedExecution {
   digest: string;
   supportingDetails?: SupportingDetails;
+  trade?: Omit<Trade, "id">;
+  native?: boolean;
+  original?: { originalCurrency: string; consideration: string; fees: string; gbpPerUnit: string };
 }
 
 export interface ImportIssue {
@@ -90,6 +101,7 @@ export interface ImportRecord {
 
 export interface ImportReview {
   fileDigest: string;
+  ibkrClientAccountId?: string;
   parserVersion: string;
   status: "ready" | "needs_review" | "unsupported";
   headers: string[];
@@ -108,23 +120,21 @@ const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 const currencies = new Set(Intl.supportedValuesOf("currency"));
 
-/** ISIN syntax plus ISO 6166/Luhn check digit. Does not establish asset type. */
-export function validISIN(value: string): boolean {
-  if (!/^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(value)) return false;
-  const digits = [...value]
-    .map((c) => (/[A-Z]/.test(c) ? String(c.charCodeAt(0) - 55) : c))
-    .join("");
-  let total = 0;
-  for (
-    let index = digits.length - 1, offset = 0;
-    index >= 0;
-    index--, offset++
-  ) {
-    let digit = Number(digits[index]) * (offset % 2 === 1 ? 2 : 1);
-    if (digit > 9) digit -= 9;
-    total += digit;
+function hlPreambleRow(row: string[], dated: boolean) {
+  const name = row[0]?.trim();
+  const blankAfter = (index: number) => row.slice(index).every(value => !value.trim());
+  if (dated && blankAfter(0)) return true;
+  if (name === "Transaction Summary") return blankAfter(1);
+  if (name === "Client Name:" || name === "Client Number:") return blankAfter(2);
+  if (name !== "Valuation as at" || !blankAfter(2)) return false;
+  const date = /^(\d{2})-(\d{2})-(\d{4}) (?:[01]\d|2[0-3]):[0-5]\d$/.exec(row[1]?.trim() ?? "");
+  if (!date) return false;
+  try {
+    calendarDate(`${date[3]}-${date[2]}-${date[1]}`);
+    return true;
+  } catch {
+    return false;
   }
-  return total % 10 === 0;
 }
 
 /**
@@ -134,6 +144,7 @@ export function validISIN(value: string): boolean {
  */
 export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
   let parserVersion = PARSER_VERSION;
+  let clientAccount = options.ibkrClientAccountId;
   const records: ImportRecord[] = [];
   const issues: ImportIssue[] = [];
   const fileDigest = hash(csv);
@@ -151,6 +162,7 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
     }
     return {
       fileDigest,
+      ...(options.broker === "ibkr" && clientAccount && { ibkrClientAccountId: clientAccount }),
       parserVersion,
       headers,
       records,
@@ -193,10 +205,16 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
     });
     return finish([]);
   }
-  const parsed = Papa.parse<string[]>(csv.replace(/^\uFEFF/, ""), {
+  // Older recognised HL drafts counted nonempty CSV records. Dated valuation
+  // summaries are a new format: preserve their blank pre-header record so
+  // contract notes and transaction receipts point to the source record.
+  const csvData = csv.replace(/^\uFEFF/, "");
+  const datedHL = options.broker === "hl" && options.format === "native" &&
+    /^Transaction Summary,/.test(csvData) && /^Valuation as at,/m.test(csvData);
+  const parsed = Papa.parse<string[]>(csvData, {
     header: false,
     delimiter: ",",
-    skipEmptyLines: "greedy",
+    skipEmptyLines: datedHL ? false : "greedy",
     dynamicTyping: false,
   });
   // HL has a fixed statement preamble. Accept only its known metadata lines;
@@ -212,18 +230,14 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
     );
     if (
       candidate > 0 &&
-      parsed.data
-        .slice(0, candidate)
-        .every((row) =>
-          ["Transaction Summary", "Client Name:", "Client Number:"].includes(
-            row[0]?.trim() ?? "",
-          ),
-        )
+      parsed.data.slice(0, candidate).every(row => hlPreambleRow(row, datedHL))
     )
       headerIndex = candidate;
   }
   const headers = (parsed.data[headerIndex] ?? []).map((value) => value.trim());
   const data = parsed.data.slice(headerIndex + 1);
+  // A final line ending does not represent another activity.
+  if (datedHL && data.at(-1)?.length === 1 && data.at(-1)?.[0] === "") data.pop();
   if (
     options.broker === "hl" &&
     headers.length === 8 &&
@@ -243,7 +257,7 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
   if (
     Object.keys(options.supportingDetails ?? {}).some(
       (key) =>
-        Number(key) < headerIndex + 2 || Number(key) > parsed.data.length,
+        Number(key) < headerIndex + 2 || Number(key) > headerIndex + 1 + data.length,
     )
   ) {
     issues.push({
@@ -280,7 +294,7 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
     });
     data.forEach((_, index) =>
       records.push({
-        record: index + 2,
+        record: index + headerIndex + 2,
         status: "needs_review",
         reason: "Unverified CSV format; values have not been inferred.",
       }),
@@ -384,6 +398,16 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
           "CASH_INTEREST",
         ].includes(row.Type)
       ) {
+        if (!adapter) {
+          const nonzero = (field: "Quantity" | "Fees") => row[field] && !decimal(row[field], field).isZero();
+          if (row.Type === "CASH_DIVIDEND" && ((row.ISIN && !validISIN(row.ISIN)) ||
+            (row["Asset type"] && row["Asset type"] !== "ORDINARY_SHARE")))
+            throw new Error("Check the dividend's instrument and ISIN before treating it as cash income.");
+          if (nonzero("Quantity") || nonzero("Fees") ||
+            (row.Type !== "CASH_DIVIDEND" && (row.ISIN || row["Asset type"]))) {
+            throw new Error("A cash-only record contains share or dealing-cost details. Check the activity on your statement before excluding it.");
+          }
+        }
         records.push({
           record,
           status: "excluded",
@@ -424,16 +448,20 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
         throw new Error(
           "A trade date is in the future. Check that this is the execution date, not a settlement date.",
         );
-      if (!validISIN(row.ISIN))
+      if (!validISIN(row.ISIN)) {
+        if (supportingDetails && !terms?.isin)
+          throw new SupportingFieldError("isin", "Check all 12 characters of the ISIN, including the final check digit, against your contract note.");
         throw new Error(
           "A valid ISIN is required. A display ticker alone is not a security identifier.",
         );
+      }
       const quantity = decimal(row.Quantity, "Quantity");
       if (!quantity.gt(0))
         throw new Error(
           "Quantity must be positive; use Type to indicate the direction.",
         );
       const amount = decimal(row.Consideration, "Consideration");
+      if (amount.isZero()) throw new Error("Zero consideration may represent a gift, transfer or negligible-value claim. Verify the tax basis with a specialist before importing this event.");
       const fees = decimal(row.Fees, "Fees");
       // No currency guessing and no implicit pence-to-pounds or FX inversion.
       if (!currencies.has(row.Currency))
@@ -464,13 +492,23 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
           "A converted value is too small to preserve at 12 decimal places. Review the currency and exchange rate.",
         );
       }
-      const sourceKey = hash(
-        JSON.stringify([
-          options.broker,
-          options.accountId,
-          row["Transaction ID"],
-        ]),
-      );
+      let transactionId = row["Transaction ID"];
+      let ibkrTradeId: string | undefined;
+      if (options.broker === "ibkr") {
+        if (options.ibkrUnverifiedHistory)
+          throw new Error("This account has older IBKR template trades without a verified ClientAccountID. Review and reverse those imports, then re-import them with ClientAccountID:TradeID from the Flex statement.");
+        const { external, execution } = ibkrExecution(transactionId, clientAccount);
+        if (options.ibkrOtherAccounts?.has(external))
+          throw new Error("This IBKR ClientAccountID is already associated with another broker account in your portfolio. Choose that account to review this export.");
+        for (const [other, keys] of options.ibkrUnboundKeys ?? []) {
+          if (keys.has(executionKey("ibkr", other, execution)) || keys.has(executionKey("ibkr", other, external + ":" + execution)))
+            throw new Error("This execution may already exist on a differently labelled IBKR account. Review the original receipt and resolve the account identity before saving.");
+        }
+        clientAccount = external;
+        ibkrTradeId = execution;
+        transactionId = external + ":" + execution;
+      }
+      const sourceKey = executionKey(options.broker, options.accountId, transactionId);
       const trade: Trade = {
         id: sourceKey,
         securityId: row.ISIN,
@@ -519,9 +557,23 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
         gbpPerUnit: decimal(d.gbpPerUnit, "GBP per unit").toFixed(),
       });
       const digest = note ? digestWith(materialDetails(note)) : hash(JSON.stringify({ trade, provenance }));
-      const saved = seen.get(sourceKey);
+      // Older IBKR template records were hashed without the broker account ID.
+      const current = seen.get(sourceKey);
+      const saved = current ?? (ibkrTradeId
+        ? seen.get(executionKey("ibkr", options.accountId, ibkrTradeId)) : undefined);
       const savedDigest = typeof saved === "string" ? saved : saved?.digest;
       let matches = savedDigest === digest;
+      if (!matches && ibkrTradeId && typeof saved === "object" && saved.trade && saved.original && (saved.native !== !!adapter || (!adapter && !current))) {
+        const previous = saved.trade;
+        matches = previous.date === date && previous.side === trade.side && previous.securityId === trade.securityId &&
+          decimal(previous.quantity, "Quantity").eq(quantity) &&
+          decimal(previous.considerationGBP, "Consideration").eq(convertedAmount) &&
+          decimal(previous.feesGBP, "Fees").eq(convertedFees) &&
+          saved.original.originalCurrency === provenance.originalCurrency &&
+          decimal(saved.original.consideration, "Consideration").eq(amount) &&
+          decimal(saved.original.fees, "Fees").eq(fees) &&
+          decimal(saved.original.gbpPerUnit, "GBP per unit").eq(rate);
+      }
       const previous = typeof saved === "object" && saved.supportingDetails;
       // Older saves hashed the complete note. Recreate their exact hash using
       // its saved spelling, only after the two financial declarations agree.
@@ -559,7 +611,7 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
           status: "accepted",
           sourceKey,
           digest,
-          executionReference: (adapter && source[adapter.idColumn]) || row["Transaction ID"],
+          executionReference: ibkrTradeId || (adapter && source[adapter.idColumn]) || row["Transaction ID"],
           trade,
           provenance,
           reason: adapter
@@ -570,6 +622,7 @@ export function reviewCsv(csv: string, options: ImportOptions): ImportReview {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Invalid record.";
+      if (error instanceof StatementMismatchError) detailMetadata.canSupplyDetails = false;
       issues.push({ code: "INVALID_ROW", record, message });
       records.push({
         record,

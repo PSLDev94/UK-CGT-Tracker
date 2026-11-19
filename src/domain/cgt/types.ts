@@ -16,6 +16,11 @@ export interface OpeningPool {
   readonly costGBP: string
 }
 
+export interface ReviewedOpeningPool extends OpeningPool {
+  readonly caseReference: string
+  readonly sourceReference: string
+}
+
 export interface Match {
   rule: 'SAME_DAY' | 'THIRTY_DAY' | 'SECTION_104'
   quantity: string
@@ -48,10 +53,10 @@ export interface Disposal {
   matches: Match[]
 }
 
-export const missingAcquisitionGuidance = 'Upload the earlier purchases for these shares so their cost can be matched.'
+export const missingAcquisitionGuidance = 'Upload the earlier purchases for these shares so their cost can be matched. Short sales require specialist review.'
 
 export interface CalculationIssue {
-  code: 'MISSING_ACQUISITION_HISTORY'
+  code: 'MISSING_ACQUISITION_HISTORY' | 'HISTORICAL_SHARE_MATCHING' | 'UNEVIDENCED_HOLDING'
   securityId: string
   date: string
   quantity: string
@@ -78,6 +83,9 @@ export interface AnnualAmounts {
 }
 
 export interface Calculation {
+  reviewedOpeningPools?: ReviewedOpeningPool[]
+  scopeDeclaration?: "personal-uk-resident-v1"
+  hasLaterSales?: boolean
   engineVersion: string
   status: 'complete' | 'provisional' | 'blocked'
   taxYear: string

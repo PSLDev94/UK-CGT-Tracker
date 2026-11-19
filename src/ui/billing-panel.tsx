@@ -139,6 +139,7 @@ export function BillingPanel({
             "REPORT_NEEDS_REFRESH",
             "REPORT_UNAVAILABLE",
             "NO_DISPOSALS",
+            "REPORT_INCOMPLETE",
             "PENDING_IMPORTS",
           ].includes(e.code)
         ) {
@@ -236,6 +237,9 @@ export function BillingPanel({
         {destination && status?.reportIssue && (
           <Notice tone="warning">
             {status.reportIssue.message}{" "}
+            {status.reportIssue.code === "REPORT_INCOMPLETE" && (
+              <Link className="underline" href={`/dashboard/calculations?year=${destination.year}`}>Review the calculation for {destination.year}</Link>
+            )}
             {status.reportIssue.code === "NO_DISPOSALS" && (
               <Link className="underline" href={`/dashboard/reports?year=${destination.year}#report-csv`}>
                 Review the year and free CSV evidence

@@ -8,6 +8,7 @@ export interface ExportedTerms {
   accountCurrency?: string;
   priceUnit?: "minor" | "major";
   gbpPerUnit?: string;
+  fxRateToBase?: string;
   feesGBP?: string;
   feesInCurrency?: string;
   sourceIssue?: string;
@@ -46,11 +47,11 @@ export function exportedTerms(
   };
   try {
     if (broker === "ibkr") {
-      terms.gbpPerUnit = decimal(
+      terms.fxRateToBase = decimal(
         row.FXRateToBase!,
         "FX rate to base",
       ).toFixed();
-      if (terms.gbpPerUnit === "0")
+      if (terms.fxRateToBase === "0")
         throw new Error("The Flex FXRateToBase must be positive.");
       if (row.IBCommissionCurrency === instrument) {
         const cost = (field: string) => {

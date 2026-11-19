@@ -47,6 +47,8 @@ interface BillingRow {
   checkout_started_at: Date | string;
   checkout_session_id: string | null;
   risk_hold: boolean;
+  current_period_end: Date | string | null;
+  cancel_at_period_end: boolean;
 }
 export interface BillingStatus {
   status: string;
@@ -275,10 +277,17 @@ export class Billing {
       [identity.ownerId],
     );
     if (!rows.length) return this.noSubscription();
-    return this.locked(
-      identity.ownerId,
-      async (tx, row) => (await this.reconcile(tx, row)).status,
-    );
+    return this.locked(identity.ownerId, async (tx, row) => {
+      if (row.risk_hold) {
+        return {
+          status: "needs_review", entitled: false, needsReview: true,
+          periodEnd: row.current_period_end ? new Date(row.current_period_end).toISOString() : null,
+          cancelAtPeriodEnd: row.cancel_at_period_end,
+          canManage: !!row.stripe_customer_id, testMode: !this.config.livemode,
+        };
+      }
+      return (await this.reconcile(tx, row)).status;
+    });
   }
   async checkout(identity: Identity): Promise<{ url: string }> {
     await this.ensureCustomer(identity);
@@ -377,16 +386,18 @@ export class Billing {
       );
       if (existing.length) return { received: true, outcome: "duplicate" };
       if (event.riskReason) {
-        // Refunds/disputes/fraud require explicit review; late ordinary events
-        // cannot erase this hold or grant access again.
+        // The verified provider event is sufficient to suspend access. A separate
+        // availability failure must not roll back the hold or require a retry
+        // before the report screen sees it.
         await query(
           tx,
-          "UPDATE cgt.billing_accounts SET risk_hold=true,risk_reason=$2 WHERE owner_id=$1",
+          `UPDATE cgt.billing_accounts SET risk_hold=true,risk_reason=$2,
+          subscription_status='needs_review',entitled=false WHERE owner_id=$1`,
           [row.owner_id, event.riskReason],
         );
-        row.risk_hold = true;
+      } else {
+        await this.reconcile(tx, row);
       }
-      await this.reconcile(tx, row);
       await query(
         tx,
         "INSERT INTO cgt.stripe_events(stripe_account_id,livemode,event_id,event_type) VALUES($1,$2,$3,$4)",

@@ -1,8 +1,8 @@
+import { noDisposalsLabel, reportIssueMessage, scopeStatement } from "./eligibility";
+export { reportIssueMessage } from "./eligibility";
 import {
-  missingAcquisitionGuidance,
   saleBreakdownUnavailable,
   type Calculation,
-  type CalculationIssue,
 } from "../cgt/types";
 import { roundingDifferences } from "./rounding";
 import { csvCell } from "../imports/review";
@@ -27,12 +27,6 @@ export interface ReportSnapshot {
   result: Calculation;
 }
 export type ReportKind = "csv" | "summary" | "evidence";
-// Stored calculations can contain older wording for a missing acquisition.
-export const reportIssueMessage = (issue: CalculationIssue) =>
-  issue.code === "MISSING_ACQUISITION_HISTORY"
-    ? missingAcquisitionGuidance
-    : issue.message;
-
 type ReportCell = string | { decimal: string };
 const numberCell = (value: string | null): ReportCell =>
   value === null ? "UNRESOLVED" : { decimal: value };
@@ -59,13 +53,15 @@ export function reportCsv(snapshot: ReportSnapshot): string {
   const rows: ReportCell[][] = [
     ["CGT Tracker calculation evidence", reportStatus(snapshot)],
     ["Tax year", r.taxYear],
-    ...(!r.disposals.length ? [["Disposals", "No disposals in this tax year"]] : []),
+    ...(!r.disposals.length ? [["Disposals", noDisposalsLabel(r, snapshot.coverage_confirmed)]] : []),
+    ...(r.hasLaterSales ? [["History", "The portfolio includes sales later in this tax year. Extend the cutoff and recalculate."]] : []),
     ["Calculation reference", snapshot.id],
     ["Input fingerprint", snapshot.input_digest],
     ["Engine", r.engineVersion],
     ["History through", r.historyThrough],
     ["Required history through", r.requiredHistoryThrough],
     ["Account coverage confirmed", String(snapshot.coverage_confirmed)],
+    ["Ownership and UK residence", scopeStatement(r)],
     [
       "Scope",
       "Ordinary share gains and losses only. Not a tax return or personal tax liability.",
@@ -137,6 +133,15 @@ export function reportCsv(snapshot: ReportSnapshot): string {
       numberCell(i.quantity),
     ]),
   ];
+  if (r.reviewedOpeningPools?.length)
+    rows.push(
+      [],
+      ["Reviewed opening position", "ISIN", "Quantity", "Verified cost GBP", "Review case reference", "Supporting evidence reference"],
+      ...r.reviewedOpeningPools.map(pool => [
+        pool.asOf, pool.securityId, numberCell(pool.quantity), numberCell(pool.costGBP),
+        pool.caseReference, pool.sourceReference,
+      ]),
+    );
   if (!r.saleBreakdown) rows.push([], ["Selling cost evidence", saleBreakdownUnavailable]);
   if (r.summary)
     rows.push(

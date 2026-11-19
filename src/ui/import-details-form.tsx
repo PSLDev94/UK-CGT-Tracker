@@ -3,6 +3,7 @@ import { useRef, useState, type FormEvent } from "react";
 import type { ImportRecord } from "../domain/imports/review";
 import { sourceIdentity } from "../domain/imports/source-identity";
 import type { SupportingDetails } from "../domain/imports/supporting-details";
+import { validISIN } from "../domain/imports/isin";
 import { Money } from "../domain/values";
 import { feesInTradeCurrency } from "../domain/imports/exported-terms";
 import { Button, Field, Notice, SelectField } from "./primitives";
@@ -34,6 +35,7 @@ export function ImportDetailsForm({
     terms.feesGBP !== undefined || terms.feesInCurrency !== undefined;
   const savedIssue = initial && row.status === "needs_review" ? row.reason : "";
   const feeIssue = !exportedFees && row.issueField === "fees" ? savedIssue : "";
+  const isinIssue = !terms.isin && row.issueField === "isin" ? savedIssue : "";
   const [resetKey, setResetKey] = useState(0);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -49,10 +51,11 @@ export function ImportDetailsForm({
       transactionId: text("transactionId"),
       reference: text("reference"),
       netAmountConfirmed: values.get("netAmountConfirmed") === "on",
+      ...(broker === "ibkr" && { statementBaseCurrency: text("statementBaseCurrency").toUpperCase() }),
     };
     const errors: Record<string, string> = {};
-    if (!/^[A-Z]{2}[A-Z0-9]{9}\d$/.test(details.isin))
-      errors.isin = "Enter the 12-character ISIN from the statement.";
+    if (!validISIN(details.isin))
+      errors.isin = "Check all 12 characters of the ISIN, including the final check digit, against your contract note.";
     if (!/^[A-Z]{3}$/.test(details.currency))
       errors.currency = "Enter the three-letter currency code.";
     if (
@@ -60,6 +63,8 @@ export function ImportDetailsForm({
       Number(details.gbpPerUnit) <= 0
     )
       errors.gbpPerUnit = "Enter the positive trade-date rate.";
+    if (broker === "ibkr" && details.statementBaseCurrency !== "GBP")
+      errors.statementBaseCurrency = "Read the account base currency from your statement. This Flex layout requires GBP.";
     if (!details.priceUnit)
       errors.priceUnit = "Confirm how the export quotes this price.";
     if (!/^\d+(?:\.\d+)?$/.test(details.fees))
@@ -137,7 +142,7 @@ export function ImportDetailsForm({
         }}
         className="form-stack"
       >
-        {(error || (savedIssue && !feeIssue)) && (
+        {(error || (savedIssue && !feeIssue && !isinIssue && row.issueField !== "statementBaseCurrency")) && (
           <div ref={alert} tabIndex={-1}>
             <Notice tone="error">{error || savedIssue}</Notice>
           </div>
@@ -149,7 +154,7 @@ export function ImportDetailsForm({
             <Field
               id={`isin-${row.record}`}
               name="isin"
-              error={fieldErrors.isin}
+              error={fieldErrors.isin || isinIssue}
               label="Verified ISIN"
               defaultValue={initial?.isin ?? ""}
               autoCapitalize="characters"
@@ -176,6 +181,12 @@ export function ImportDetailsForm({
               error={fieldErrors.currency}
               maxLength={3}
             />
+          )}
+          {broker === "ibkr" && (
+            <Field id={`base-currency-${row.record}`} name="statementBaseCurrency" label="Statement base currency"
+              hint="Use the account base currency on the statement, separate from the currency of the shares."
+              defaultValue={initial?.statementBaseCurrency ?? ""} maxLength={3} autoCapitalize="characters"
+              error={fieldErrors.statementBaseCurrency || (row.issueField === "statementBaseCurrency" ? savedIssue : undefined)} />
           )}
           {terms.gbpPerUnit || currency === "GBP" ? (
             <input
@@ -262,6 +273,9 @@ export function ImportDetailsForm({
                 row.source?.TradePrice}{" "}
               {terms.currency}
             </dd>
+            {terms.fxRateToBase && (
+              <><dt>FX rate to account base</dt><dd>{terms.fxRateToBase}</dd></>
+            )}
             {terms.gbpPerUnit && (
               <>
                 <dt>Conversion</dt>

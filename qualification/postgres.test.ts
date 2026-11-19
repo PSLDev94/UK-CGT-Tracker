@@ -1,6 +1,8 @@
 import { randomBytes } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
-import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync, readdirSync, mkdtempSync, statSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { Client, Pool } from 'pg'
 import { Kysely, PostgresDialect } from 'kysely'
@@ -9,6 +11,9 @@ import { assertRuntimeRole, OwnedDatabase, query } from '../src/server/database'
 import { Workspace } from '../src/server/workspace'
 import { createAuth, type AuthMail } from '../src/server/auth'
 import { Billing, type BillingGateway } from '../src/server/billing'
+import { qualifyBillingLifecycle } from './billing-lifecycle'
+import { qualifyReviewedOpeningPool } from './reviewed-opening-pool'
+import { recordReviewedOpeningPool } from '../src/server/reviewed-opening-pools'
 
 const csv = readFileSync('tests/fixtures/canonical-trades.csv', 'utf8')
 let owner: Client
@@ -89,6 +94,47 @@ describe('PostgreSQL 18 deployment qualification',()=> {
     expect(results.filter(r=>r.outcome==='reconciled')).toHaveLength(1)
     expect(results.filter(r=>r.outcome==='duplicate')).toHaveLength(9)
     expect((await owner.query("SELECT count(*)::int AS count FROM cgt.stripe_events WHERE event_id='evt_parallel'")).rows[0].count).toBe(1)
+  })
+
+  it('checks mapped signed billing events through to both paid report downloads', async()=> {
+    const s=await setup('lifecycle-billing')
+    const native=readFileSync('tests/fixtures/brokers/trading212-gbp.csv','utf8')
+    const draft=await workspace.prepareImport(s.user,{accountId:s.account.id,csv:native,format:'native',ordinarySharesConfirmed:true})
+    await workspace.commitImport(s.user,draft.draftId,draft.revision,draft.reviewVersion)
+    const run=await workspace.calculate(s.user,{portfolioId:s.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',personalScopeConfirmed:true,confirmedAccountIds:[s.account.id]})
+    expect(run.result.summary?.netGainGBP).toBe('5.25')
+    await qualifyBillingLifecycle(billingDb,workspace,s.user,run.runId)
+  })
+
+  it('keeps reviewed opening positions restricted, traceable and current', async()=> {
+    const s=await setup('reviewed-opening')
+    const operator=new Kysely<Record<string,never>>({dialect:new PostgresDialect({pool:new Pool({connectionString:env.MIGRATION_DATABASE_URL})})})
+    try {
+      await qualifyReviewedOpeningPool({operator,app,workspace,user:s.user,portfolioId:s.portfolio.id,accountId:s.account.id})
+    } finally { await operator.destroy() }
+  })
+
+  it('uses certified ownership to resolve a missing opening holding before a 30-day repurchase', async()=> {
+    const s=await setup('opening-ownership')
+    const data=[
+      csv.split('\n')[0],
+      'sold,2024-08-01,SELL,US0378331005,1,200,0,GBP,1,ORDINARY_SHARE',
+      'bought,2024-08-15,BUY,US0378331005,1,180,0,GBP,1,ORDINARY_SHARE',
+    ].join('\n')
+    const draft=await workspace.prepareImport(s.user,{accountId:s.account.id,csv:data,format:'canonical-v1'})
+    await workspace.commitImport(s.user,draft.draftId,draft.revision,draft.reviewVersion)
+    const input={portfolioId:s.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',personalScopeConfirmed:true,confirmedAccountIds:[s.account.id]}
+    expect((await workspace.calculate(s.user,input)).result.summary).toBeNull()
+    const operator=new Kysely<Record<string,never>>({dialect:new PostgresDialect({pool:new Pool({connectionString:env.MIGRATION_DATABASE_URL})})})
+    try {
+      await recordReviewedOpeningPool(operator,{ownerId:s.user.ownerId,portfolioId:s.portfolio.id,
+        expectedRevision:(await workspace.overview(s.user)).portfolio.revision,securityId:'US0378331005',asOf:'2024-04-05',
+        quantity:'1',costGBP:'100',caseReference:'OPEN-1',sourceReference:'BASIS-1'},true)
+    } finally { await operator.destroy() }
+    const result=(await workspace.calculate(s.user,input)).result
+    expect(result.status).toBe('complete')
+    expect(result.summary?.netGainGBP).toBe('20.00')
+    expect(result.disposals[0]?.matches[0]?.rule).toBe('THIRTY_DAY')
   })
 
   it('persists native confirmation and reconciles overlapping files under real role isolation', async()=> {
@@ -217,7 +263,7 @@ it.each(brokerCases)('qualifies $file import/report/retry using PostgreSQL 18 ru
   const draft=await review()
   expect(draft.review.status).toBe('ready')
   expect((await workspace.commitImport(s.user,draft.draftId,draft.revision,draft.reviewVersion)).outcome).toBe('committed')
-  const result=await workspace.calculate(s.user,{portfolioId:s.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',confirmedAccountIds:[s.account.id,account.id]})
+  const result=await workspace.calculate(s.user,{portfolioId:s.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',personalScopeConfirmed: true, confirmedAccountIds:[s.account.id,account.id]})
   expect(result.result.summary?.netGainGBP).toBe(c.gain)
   expect((await workspace.reportSnapshot(s.user,result.runId)).result).toEqual(result.result)
   const duplicate=await review()
@@ -268,4 +314,35 @@ it.each(brokerCases)('qualifies $file import/report/retry using PostgreSQL 18 ru
   }
   await workspace.reverseImport(s.user,draft.draftId,'Synthetic broker qualification complete')
   await expect(workspace.reportSnapshot(s.user,result.runId)).rejects.toMatchObject({status:404})
+})
+
+it('exports one verified owner, guards a billing hold and erases only the resolved account', async () => {
+  const holder = await setup('erasure-review'), unaffected = await setup('erasure-neighbour')
+  const draft = await workspace.prepareImport(holder.user,{accountId:holder.account.id,csv,format:'canonical-v1'})
+  await workspace.commitImport(holder.user,draft.draftId,draft.revision)
+  await workspace.calculate(holder.user,{portfolioId:holder.portfolio.id,taxYear:'2024-25',historyThrough:'2025-05-05',confirmedAccountIds:[holder.account.id],personalScopeConfirmed:true})
+  await owner.query(`INSERT INTO auth.verification(id,identifier,value,"expiresAt") VALUES('erasure-token','reset-password:test','erasure-review',now()+interval '1 hour')`)
+  const directory = mkdtempSync(join(tmpdir(),'cgt-case-'))
+  const output = join(directory,'private-export.json')
+  const operator = (script: string, ...args: string[]) => execFileSync(process.execPath, [script,'--owner',holder.user.ownerId,'--case-id','CASE-TEST',...args], {env:{...env,OPERATOR_DATABASE_URL:env.MIGRATION_DATABASE_URL},stdio:'pipe'}).toString()
+  const erase = (...args: string[]) => JSON.parse(operator('scripts/erase-reviewed-account.mjs',...args))
+  try {
+    operator('scripts/export-reviewed-account.mjs','--output',output)
+    const contents = JSON.parse(readFileSync(output,'utf8'))
+    expect(contents.profile.id).toBe(holder.user.ownerId)
+    expect(contents.transactions.length).toBeGreaterThan(0)
+    expect(contents.calculation_runs).toHaveLength(1)
+    expect(statSync(output).mode & 0o777).toBe(0o600)
+    expect(readFileSync(output,'utf8')).not.toContain(unaffected.user.ownerId)
+    expect(contents).not.toHaveProperty('session')
+    expect(erase().outcome).toBe('dry_run')
+    await owner.query(`INSERT INTO cgt.billing_accounts(owner_id,stripe_account_id,livemode,subscription_status,risk_hold,risk_reason) VALUES($1,'acct_fixture',false,'canceled',true,'review')`,[holder.user.ownerId])
+    expect(()=>erase('--apply','--billing-reviewed')).toThrow()
+    await owner.query('UPDATE cgt.billing_accounts SET risk_hold=false,risk_reason=NULL WHERE owner_id=$1',[holder.user.ownerId])
+    expect(()=>erase('--apply')).toThrow()
+    expect(erase('--apply','--billing-reviewed').outcome).toBe('erased')
+    expect(erase().outcome).toBe('already_absent')
+    expect((await owner.query('SELECT id FROM auth.verification WHERE value=$1',[holder.user.ownerId])).rows).toEqual([])
+    expect((await workspace.overview(unaffected.user)).accounts).toHaveLength(1)
+  } finally { rmSync(directory,{recursive:true,force:true}) }
 })

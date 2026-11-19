@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { api } from "@/ui/api";
+import { useHydrated } from "@/ui/use-hydrated";
 import {
   Send,
   CheckCircle,
@@ -44,6 +45,7 @@ export function ContactForm({
         ? "Back to billing"
         : "Back to overview"
     : "Back to home";
+  const ready = useHydrated();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
@@ -176,6 +178,7 @@ export function ContactForm({
             <form
               noValidate
               onSubmit={handleSubmit}
+              aria-busy={!ready || status === "sending"}
               className="p-6 sm:p-8 space-y-6"
             >
               {/* Error Banner */}
@@ -201,7 +204,7 @@ export function ContactForm({
                 </label>
                 <input
                   id="contact-name"
-                  disabled={status === "sending"}
+                  disabled={!ready || status === "sending"}
                   aria-invalid={invalidField === "contact-name"}
                   aria-describedby={
                     invalidField === "contact-name"
@@ -232,7 +235,7 @@ export function ContactForm({
                 </label>
                 <input
                   id="contact-email"
-                  disabled={status === "sending"}
+                  disabled={!ready || status === "sending"}
                   aria-invalid={invalidField === "contact-email"}
                   aria-describedby={
                     invalidField === "contact-email"
@@ -257,7 +260,7 @@ export function ContactForm({
                 <select
                   id="contact-topic"
                   value={topic}
-                  disabled={status === "sending"}
+                  disabled={!ready || status === "sending"}
                   onChange={(event) => {
                     if (isContactTopic(event.target.value))
                       setTopic(event.target.value);
@@ -283,7 +286,7 @@ export function ContactForm({
                 <textarea
                   maxLength={5000}
                   id="contact-message"
-                  disabled={status === "sending"}
+                  disabled={!ready || status === "sending"}
                   aria-invalid={invalidField === "contact-message"}
                   aria-describedby={
                     invalidField === "contact-message"
@@ -302,11 +305,12 @@ export function ContactForm({
                 />
               </div>
 
+              {!ready && <p className="text-sm text-gray-700">The form is loading. You can also email <a className="underline" href="mailto:support@cgttracker.com">support@cgttracker.com</a>.</p>}
               {/* Submit */}
               <button
                 type="submit"
-                disabled={status === "sending"}
-                className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold text-base hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all active:scale-[0.99] flex items-center justify-center gap-2 shadow-sm"
+                disabled={!ready || status === "sending"}
+                className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold text-base hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors active:scale-[0.99] flex items-center justify-center gap-2 shadow-sm"
               >
                 {status === "sending" ? (
                   <>

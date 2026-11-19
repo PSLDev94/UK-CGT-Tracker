@@ -8,8 +8,12 @@ export interface SupportingDetails {
   transactionId: string;
   reference: string;
   netAmountConfirmed: boolean;
+  statementBaseCurrency?: string;
 }
 export type ImportDetails = Record<string, SupportingDetails>;
+/** A conflict in read-only export fields requires a corrected statement. */
+export class StatementMismatchError extends Error {}
+
 export class SupportingFieldError extends Error {
   constructor(readonly field: keyof SupportingDetails, message: string) {
     super(message);
@@ -30,6 +34,7 @@ export function fingerprintDetails(d: SupportingDetails): SupportingDetails {
     gbpPerUnit: d.gbpPerUnit,
     transactionId: d.transactionId,
     netAmountConfirmed: d.netAmountConfirmed,
+    ...(d.statementBaseCurrency !== undefined && { statementBaseCurrency: d.statementBaseCurrency }),
   };
 }
 export function validateDetails(value: unknown): ImportDetails {
@@ -50,7 +55,7 @@ export function validateDetails(value: unknown): ImportDetails {
       throw new Error("Choose a valid CSV record.");
     const r = row as Record<string, unknown>;
     if (
-      Object.keys(r).sort().join(",") !==
+      Object.keys(r).filter(k => k !== "statementBaseCurrency").sort().join(",") !==
       "currency,fees,gbpPerUnit,isin,netAmountConfirmed,priceUnit,reference,transactionId"
     )
       throw new Error("Provide all supporting fields.");
@@ -66,6 +71,8 @@ export function validateDetails(value: unknown): ImportDetails {
         throw new Error(
           "Supporting fields must be text of at most 500 characters.",
         );
+    if (r.statementBaseCurrency !== undefined && (typeof r.statementBaseCurrency !== "string" || !/^[A-Z]{3}$/.test(r.statementBaseCurrency)))
+      throw new Error("Enter the three-letter base currency on the broker statement.");
     if (
       !["major", "minor"].includes(String(r.priceUnit)) ||
       r.netAmountConfirmed !== true ||

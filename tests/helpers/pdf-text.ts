@@ -9,6 +9,7 @@ import {
 export function reportPageText(
   document: PDFDocument,
   pageIndex?: number,
+  actualText = false,
 ): string {
   const decodeText = new TextDecoder("windows-1252");
   return document
@@ -26,8 +27,8 @@ export function reportPageText(
           decodePDFRawStream(stream).decode(),
         ).toString("ascii");
         return Array.from(
-          commands.matchAll(/<([A-Fa-f0-9]*)>\s*Tj/g),
-          (match) => decodeText.decode(Buffer.from(match[1]!, "hex")),
+          commands.matchAll(actualText ? /\/Span\s+<<\s*\/MCID \d+\s+\/ActualText <FEFF([A-Fa-f0-9]*)>/gi : /<([A-Fa-f0-9]*)>\s*Tj/g),
+          (match) => (actualText ? new TextDecoder("utf-16be") : decodeText).decode(Buffer.from(match[1]!, "hex")),
         );
       });
     })

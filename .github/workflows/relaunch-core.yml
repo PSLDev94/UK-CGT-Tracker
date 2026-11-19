@@ -12,7 +12,7 @@ jobs:
   core:
     name: Application, financial and browser contracts
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -47,7 +47,7 @@ jobs:
           path: ${{ runner.temp }}/full-audit.json
           if-no-files-found: ignore
       - run: node scripts/check-job-bundle.mjs
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:ui
 
   container:

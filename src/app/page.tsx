@@ -87,7 +87,7 @@ export default async function LandingPage() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
               </span>
-              Relaunch preview · Tax years through 2026-27
+              <span>Relaunch preview · Tax years through <span className="whitespace-nowrap">2026-27</span></span>
             </div>
 
             <h1 className="text-5xl md:text-7xl font-extrabold text-gray-900 tracking-tight mb-8 max-w-4xl mx-auto leading-[1.1]">
@@ -268,6 +268,7 @@ export default async function LandingPage() {
                 <Link key={broker.id} href={`/supported-brokers#${broker.id}`} className="relative group">
                   <div className="bg-white rounded-xl border border-gray-200 p-5 text-center hover:shadow-lg hover:border-gray-300 transition-all duration-300 hover:-translate-y-0.5">
                     <div
+                      aria-hidden="true"
                       className={`w-10 h-10 rounded-lg bg-gradient-to-br ${ACCENTS[broker.id]} mx-auto mb-3 flex items-center justify-center shadow-sm`}
                     >
                       <span className="text-white font-bold text-sm">
@@ -613,7 +614,7 @@ export default async function LandingPage() {
         <section className="py-12 sm:py-24 bg-blue-600 text-white text-center px-4 relative overflow-hidden">
           {/* Background Pattern */}
           <div
-            className="absolute inset-0 opacity-10"
+            className="absolute inset-0 opacity-[0.03]"
             style={{
               backgroundImage:
                 "radial-gradient(circle at 2px 2px, white 1px, transparent 0)",

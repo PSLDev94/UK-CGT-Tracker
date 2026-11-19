@@ -1,3 +1,4 @@
+import { noDisposalsLabel, reportIssueMessage, scopeStatement } from "./eligibility";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { roundingDifferences } from "./rounding";
 import { Money, netOutcome } from "../values";
@@ -5,7 +6,6 @@ import { reportStructure } from "./pdf-structure";
 import { saleBreakdownUnavailable, type SaleBreakdown } from "../cgt/types";
 import { BROKERS } from "../imports/brokers";
 import {
-  reportIssueMessage,
   reportStatus,
   type ReportSnapshot,
 } from "./report";
@@ -45,10 +45,14 @@ export async function reportPdf(
   const regular = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   const glyphs = new Set(regular.getCharacterSet());
-  const printable = (text: string) =>
-    Array.from(text, (char) =>
-      glyphs.has(char.codePointAt(0)!) ? char : "?",
-    ).join("");
+  // Keep references printable on any device. Marked-content ActualText preserves
+  // the original Unicode when copied/extracted, even for glyphs outside WinAnsi.
+  let escapedText = false;
+  function printableChar(char: string) {
+    if (char === "\\") return "\\\\";
+    const code = char.codePointAt(0)!;
+    return glyphs.has(code) ? char : "\\u{" + code.toString(16).toUpperCase() + "}";
+  }
   const title = evidence ? "Calculation evidence" : "Capital gains summary";
   doc.setTitle(
     `CGT Tracker - ${sample ? "Synthetic sample - " : ""}${title} ${r.taxYear}`,
@@ -116,32 +120,36 @@ export async function reportPdf(
     }
   }
   function wrap(text: string, font: typeof regular, size: number) {
-    const lines: string[] = [];
-    let buffer = "",
-      width = 0;
+    const lines: { printed: string; original: string }[] = [];
+    let printed = "", original = "", width = 0;
     function flush() {
-      lines.push(buffer.trimEnd());
-      buffer = "";
+      lines.push({ printed: printed.replace(/ +$/, ""), original: original.replace(/ +$/, "") });
+      printed = "";
+      original = "";
       width = 0;
     }
-    for (const word of printable(text).split(/(\s+)/)) {
-      if (!buffer && !word.trim()) continue;
-      const w = font.widthOfTextAtSize(word, size);
+    for (const word of text.split(/( +)/)) {
+      if (!word || (!printed && /^ +$/.test(word))) continue;
+      const encoded = Array.from(word, printableChar).join("");
+      const w = font.widthOfTextAtSize(encoded, size);
       if (w <= right - left) {
-        if (width + w > right - left && buffer) flush();
-        if (!buffer && !word.trim()) continue;
-        buffer += word;
+        if (width + w > right - left && printed) flush();
+        if (!printed && /^ +$/.test(word)) continue;
+        printed += encoded;
+        original += word;
         width += w;
       } else {
         for (const char of word) {
-          const cw = font.widthOfTextAtSize(char, size);
-          if (width + cw > right - left && buffer) flush();
-          buffer += char;
+          const chunk = printableChar(char);
+          const cw = font.widthOfTextAtSize(chunk, size);
+          if (width + cw > right - left && printed) flush();
+          printed += chunk;
+          original += char;
           width += cw;
         }
       }
     }
-    if (buffer) flush();
+    if (printed) flush();
     return lines;
   }
   function line(
@@ -153,10 +161,12 @@ export async function reportPdf(
   ) {
     const font = strong ? bold : regular;
     const item = tags.element(role, tags.document);
-    for (const content of wrap(text, font, size)) {
+    for (const { printed, original } of wrap(text, font, size)) {
+      if (printed !== original) escapedText = true;
       space(size + 5);
       tags.mark(page, item, () =>
-        page.drawText(content, { x: left, y, size, font, color }),
+        page.drawText(printed, { x: left, y, size, font, color }),
+        printed !== original ? original : undefined,
       );
       y -= size + 5;
     }
@@ -311,12 +321,12 @@ export async function reportPdf(
 
   line(`${r.taxYear}  ${title}`, true, 19, ink, "H1");
   if (!r.disposals.length) {
-    line("No disposals in this tax year", true, 17);
+    line(noDisposalsLabel(r, snapshot.coverage_confirmed), true, 17);
   } else if (r.summary) {
     const net = r.summary.netGainGBP;
     line(`${netOutcome(net)}  ${pounds(net.replace(/^-/, ""))}`, true, 22);
   } else {
-    line("Total pending acquisition history", true, 17);
+    line("Total pending review", true, 17);
   }
   line(reportStatus(snapshot), true, 10, blue);
   if (sample)
@@ -338,9 +348,11 @@ export async function reportPdf(
       ],
     );
   } else {
-    line("Resolve missing acquisition history before relying on totals.");
+    for (const message of new Set(r.issues.map(reportIssueMessage))) line(message);
   }
+  if (r.hasLaterSales) line("Your portfolio includes sales later in this tax year. Extend the history cutoff and recalculate.");
   heading("Account coverage");
+  line(scopeStatement(r));
   line(
     `Account history confirmed: ${snapshot.coverage_confirmed ? "Yes" : "Incomplete"}. History through ${date(r.historyThrough)}.`,
   );
@@ -354,9 +366,21 @@ export async function reportPdf(
       10,
     );
   }
+  if (r.reviewedOpeningPools?.length) {
+    heading("Reviewed opening positions", 90);
+    for (const pool of r.reviewedOpeningPools) {
+      const lines = [
+        `${pool.securityId} · ${date(pool.asOf)} · ${shares(pool.quantity)} · verified cost £${pool.costGBP}`,
+        `Review case: ${pool.caseReference}`,
+        `Supporting evidence: ${pool.sourceReference}`,
+      ];
+      space(lines.reduce((height, entry) => height + 14 * wrap(entry, regular, 9).length, 3));
+      for (const entry of lines) line(entry, false, 9);
+    }
+  }
   if (evidence) {
     heading("Disposals and share matching", r.disposals.length ? 220 : 48);
-    if (!r.disposals.length) line("No disposals in this tax year.");
+    if (!r.disposals.length) line(noDisposalsLabel(r, snapshot.coverage_confirmed) + ".");
     for (const [index, d] of r.disposals.entries()) {
       space(160);
       line(
@@ -475,6 +499,9 @@ export async function reportPdf(
   if (evidence && references.size) {
     heading("Transaction references", 150);
     for (const [key, { id, role }] of references) sourceLine(key, id, role);
+  }
+  if (escapedText) {
+    line("Printed reference notation: unsupported characters appear as Unicode code points in braces after a backslash and the letter u. Two backslashes represent one literal backslash. The original text is available in the CSV.", false, 9, muted);
   }
   const pages = doc.getPages();
   pages.forEach((p, index) =>

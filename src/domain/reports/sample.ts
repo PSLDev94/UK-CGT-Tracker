@@ -63,9 +63,12 @@ export const sampleReport: ReportSnapshot = {
   created_at: "2026-05-06T12:00:00Z",
   coverage_confirmed: true,
   accounts: [account],
-  result: calculateGains(trades, {
-    taxYear: "2025-26",
-    historyThrough: "2026-05-05",
-  }),
+  result: {
+    ...calculateGains(trades, {
+      taxYear: "2025-26",
+      historyThrough: "2026-05-05",
+    }),
+    scopeDeclaration: "personal-uk-resident-v1",
+  },
   sources,
 };

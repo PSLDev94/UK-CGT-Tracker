@@ -46,7 +46,7 @@ export function reportStructure(doc: PDFDocument) {
   }
   const document = element("Document");
 
-  function mark(page: PDFPage, item: Element, draw: () => void) {
+  function mark(page: PDFPage, item: Element, draw: () => void, actualText?: string) {
     let parents = byPage.get(page);
     if (!parents) {
       parents = ctx.obj([]);
@@ -59,8 +59,8 @@ export function reportStructure(doc: PDFDocument) {
     item.children.push(ctx.obj({ Type: "MCR", Pg: page.ref, MCID: id }));
     page.pushOperators(
       PDFOperator.of(PDFOperatorNames.BeginMarkedContentSequence, [
-        PDFName.of(item.role),
-        `<< /MCID ${id} >>`,
+        PDFName.of(actualText === undefined ? item.role : "Span"),
+        `<< /MCID ${id}${actualText === undefined ? "" : " /ActualText " + PDFHexString.fromText(actualText).toString()} >>`,
       ]),
     );
     draw();

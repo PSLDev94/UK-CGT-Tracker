@@ -8,7 +8,7 @@ import { api, ApiError, workspaceApi } from "./api";
 import { hasActiveTrades, type Overview } from "./workspace-types";
 import type { BillingStatus } from "@/server/billing";
 import { Notice, Button, SelectField, money } from "./primitives";
-import { evidenceIssue } from "@/domain/reports/eligibility";
+import { evidenceIssue, noDisposalsLabel, purchaseIssue, reportIssueMessage } from "@/domain/reports/eligibility";
 import { roundingDifferences } from "@/domain/reports/rounding";
 import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
 import { billingUrl, reportDestination, type PdfFormat } from "../domain/reports/destination";
@@ -94,6 +94,7 @@ function ReportContents({
 }) {
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState("");
+  const [reloadAttempt, setReloadAttempt] = useState(0);
   const [entitlement, setEntitlement] = useState<BillingStatus | null>(null);
   const [billingError, setBillingError] = useState("");
   const [lastFeedback, setFeedback] = useState<Feedback | null>(null);
@@ -138,7 +139,7 @@ function ReportContents({
       controller.abort();
       request.current?.abort();
     };
-  }, [checkBilling, loadOverview]);
+  }, [checkBilling, loadOverview, reloadAttempt]);
   const focusedTarget = useRef("");
   useEffect(() => {
     if (!requestedFormat) {
@@ -263,6 +264,7 @@ function ReportContents({
 
   const result = calculation?.result;
   const noDisposals = result?.disposals.length === 0;
+  const purchaseBlock = result && calculation ? purchaseIssue(result, calculation.coverage_confirmed) : null;
   const differences = result ? roundingDifferences(result) : [];
   const confirmed =
     calculation?.coverage_confirmed && result?.status === "complete";
@@ -275,9 +277,12 @@ function ReportContents({
           {error}{" "}
           <button
             className={linkClass}
-            onClick={() => window.location.reload()}
+            onClick={() => {
+              setError("");
+              setReloadAttempt(attempt => attempt + 1);
+            }}
           >
-            Try again
+            Reload report
           </button>
         </Notice>
       )}
@@ -333,16 +338,16 @@ function ReportContents({
               </h2>
               <p className="text-xl font-bold tabular-nums">
                 {noDisposals
-                  ? "No disposals in this tax year"
+                  ? noDisposalsLabel(result, calculation!.coverage_confirmed)
                   : result.summary
                   ? `${netOutcome(result.summary.netGainGBP)} ${money(result.summary.netGainGBP.replace(/^-/, ""))}`
-                  : "Total awaiting complete history"}
+                  : result.issues.every(i => i.code === "MISSING_ACQUISITION_HISTORY") ? "Total awaiting complete history" : "Total pending review"}
               </p>
               <p className="text-sm text-gray-600">Share gains and losses before personal allowances, reliefs and other gains.</p>
-              {noDisposals && (
+              {(noDisposals || result.hasLaterSales) && (
                 <p>
-                  The saved history contains no share sales in {year}. Choose the year of your sale
-                  or <Link className={linkClass} href={uploadPath}>upload a file containing sales</Link>.
+                  {result.hasLaterSales ? <>Your portfolio already includes sales later in {year}. <Link className={linkClass} href={calculationPath + "#historyThrough"}>Extend the history cutoff and recalculate</Link>.</>
+                    : <>Check the reporting year and history cutoff or <Link className={linkClass} href={uploadPath}>upload a file containing sales</Link>.</>}
                 </p>
               )}
               <p className="text-sm">
@@ -371,7 +376,10 @@ function ReportContents({
                   {downloadFeedback("csv")}
                 </div>
               )}
-              {calculation && !draft && (!noDisposals || entitlement?.entitled) && (
+              {purchaseBlock?.code === "REPORT_INCOMPLETE" && !entitlement?.entitled && !draft && (
+                <Notice tone="warning">{purchaseBlock.message}{" "}<Link className={linkClass} href={calculationPath}>Review calculation</Link></Notice>
+              )}
+              {calculation && !draft && (!purchaseBlock || entitlement?.entitled) && (
                 <div role="group" aria-label="PDF reports" className="flex flex-wrap items-start gap-x-3 gap-y-2">
                   {cards.map((card) => {
                     const target = { year, format: card.kind };
@@ -489,7 +497,7 @@ function ReportContents({
                   })}
                 </div>
               )}
-              {!draft && (!noDisposals || entitlement?.entitled) && (
+              {!draft && (!purchaseBlock || entitlement?.entitled) && (
                 <details className="text-sm">
                   <summary>What each PDF includes</summary>
                   <dl className="mt-2 space-y-2">
@@ -548,14 +556,11 @@ function ReportContents({
                 <div className="text-sm">
                   {result.status === "blocked" ? (
                     <>
-                      <p>
-                        Draft exports list the unmatched sales and available
-                        evidence. A net total is withheld until the missing
-                        purchases can be matched.
-                      </p>
-                      <Link className={linkClass} href={uploadPath}>
-                        Upload earlier acquisitions
-                      </Link>
+                      <p>Draft exports list the available evidence. Resolve the issues before relying on an annual total.</p>
+                      <ul>{[...new Set(result.issues.map(reportIssueMessage))].map(text => <li key={text}>{text}</li>)}</ul>
+                      {result.issues.some(i => i.code === "MISSING_ACQUISITION_HISTORY") && (
+                        <Link className={linkClass} href={uploadPath}>Upload earlier acquisitions</Link>
+                      )}
                     </>
                   ) : (
                     <>

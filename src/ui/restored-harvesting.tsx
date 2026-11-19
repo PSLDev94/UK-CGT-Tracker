@@ -5,6 +5,7 @@ import Link from "next/link";
 import Decimal from "decimal.js";
 import { Calculator, TrendingDown } from "lucide-react";
 import { workspaceApi } from "./api";
+import { reportIssueMessage } from "../domain/reports/eligibility";
 import type { Overview } from "./workspace-types";
 import { Notice, money } from "./primitives";
 import { displayDate } from "./format";
@@ -16,7 +17,7 @@ export function RestoredHarvesting() {
   const [error, setError] = useState("");
   useEffect(() => {
     let active = true;
-    workspaceApi<Overview>({ action: "overview" })
+    workspaceApi<Overview>({ action: "overview", surface: "scenarios" })
       .then((d) => {
         if (active) {
           setData(d);
@@ -45,6 +46,7 @@ export function RestoredHarvesting() {
     const price = valid ? new Decimal(input) : null;
     return {
       ...p,
+      label: data?.instrumentNames?.[p.securityId] ? `${data.instrumentNames[p.securityId]} · ${p.securityId}` : p.securityId,
       input,
       valid,
       value: price?.mul(p.quantity),
@@ -111,8 +113,12 @@ export function RestoredHarvesting() {
           <p className="caption">
             Snapshot at {displayDate(result.poolAsOf)}.{" "}
             {savedRun?.coverage_confirmed && "Account coverage confirmed. "}
-            {result.status !== "complete" &&
-              "Complete the calculation's missing history before using its pools."}
+            {result.status === "provisional" &&
+              `Extend the history through ${displayDate(result.requiredHistoryThrough)} and recalculate to use the pools.`}
+            {result.status === "blocked" && (
+              <>{result.issues[0] && reportIssueMessage(result.issues[0])}{" "}
+                <Link className="underline" href={calculationHref}>Review calculation issues</Link>.</>
+            )}
           </p>
         )}
         {savedRun && !savedRun.coverage_confirmed && (
@@ -151,7 +157,7 @@ export function RestoredHarvesting() {
                 rows.map((p) => (
                   <tr key={p.securityId} role="row">
                     <th scope="row" role="rowheader" className={styles.asset}>
-                      {p.securityId}
+                      {p.label}
                     </th>
                     <td role="cell">
                       <span aria-hidden="true" className={styles.mobileLabel}>
@@ -174,7 +180,7 @@ export function RestoredHarvesting() {
                       </label>
                       <input
                         id={`price-${p.securityId}`}
-                        aria-label={`Your scenario price (£) for ${p.securityId}`}
+                        aria-label={`Your scenario price (£) for ${p.label}`}
                         aria-describedby={
                           p.input && !p.valid
                             ? `price-error-${p.securityId}`
@@ -236,7 +242,7 @@ export function RestoredHarvesting() {
                 className="bg-white p-4 rounded-lg border border-blue-100 mt-4"
                 key={p.securityId}
               >
-                <strong>{p.securityId}</strong>
+                <strong>{p.label}</strong>
                 <p className="text-sm mt-2 mb-0">
                   Scenario value {money(p.value!.toFixed(8))} · difference from
                   snapshot cost {money(p.gain!.toFixed(8))}

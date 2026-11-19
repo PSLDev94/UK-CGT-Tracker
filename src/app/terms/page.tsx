@@ -44,7 +44,7 @@ export default function Terms() {
         </p>
         <p>
           Check complete acquisition history, all taxable accounts and the
-          30-day period after the tax year. Unsupported or conflicting records
+          30-day period after the tax year. Use the calculation only for shares owned by one individual in the same capacity while UK resident throughout the relevant history. A change of residence, a short sale or a disposal before 6 April 2008 may require specialist review. Unsupported or conflicting records
           block an import. A successful import does not prove that the broker
           export contains every relevant transaction. See{" "}
           <Link className="text-blue-600 underline" href="/supported-brokers">
@@ -65,7 +65,7 @@ export default function Terms() {
           PDF reports require an active subscription entitlement. CSV
           calculation evidence and saved investment records remain accessible
           without a subscription. Manage renewal and cancellation through the
-          billing portal. Cancellation stops future renewal; it does not delete
+          billing portal. The plan renews annually until cancelled. Check the end date shown in Billing after cancellation. If you need help with renewal, a refund or a disputed charge, contact support@cgttracker.com with your invoice reference. Cancellation stops future renewal and does not delete
           your investment records.
         </p>
         <h2 className="text-xl font-semibold text-gray-900">

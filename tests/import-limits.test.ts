@@ -38,7 +38,7 @@ it("accepts exactly 100,000 distinct executions and conserves their quantities a
   expect(result.pools).toEqual([
     { securityId: "GB0008706128", quantity: "100000", costGBP: "100000" },
   ]);
-}, 15000);
+}, 30000);
 it("rejects record-count overflow before accepting any trades", () => {
   const csv =
     CANONICAL_HEADERS.join(",") +

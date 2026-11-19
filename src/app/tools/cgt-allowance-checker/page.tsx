@@ -18,7 +18,6 @@ const HIGHER_RATE = 0.24;
 export default function CGTAllowanceCheckerPage() {
   const [gains, setGains] = useState("");
   const [losses, setLosses] = useState("");
-  const [taxBand, setTaxBand] = useState<"basic" | "higher">("basic");
 
   const [taxableIncome, setTaxableIncome] = useState("");
   const valid = (v: string) => /^\d{1,12}(\.\d{1,2})?$/.test(v);
@@ -32,8 +31,7 @@ export default function CGTAllowanceCheckerPage() {
   const allowanceUsed = Money.clamp(netGain, 0, EXEMPT_AMOUNT);
   const exemptionRemaining = new Money(EXEMPT_AMOUNT).minus(allowanceUsed);
   const taxableGain = Money.max(0, netGain.minus(EXEMPT_AMOUNT));
-  const needTaxBand = hasInput && taxableGain.gt(0);
-  const needIncome = needTaxBand && taxBand === "basic";
+  const needIncome = hasInput && taxableGain.gt(0);
   const incomeInvalid =
     needIncome && taxableIncome !== "" && !valid(taxableIncome);
   let taxOwed = null;
@@ -153,41 +151,6 @@ export default function CGTAllowanceCheckerPage() {
                 className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
               />
             </div>
-            {needTaxBand && (
-              <fieldset>
-                <legend className="block text-sm font-semibold text-gray-700 mb-2">
-                  Are you a basic or higher rate taxpayer?
-                </legend>
-                <div className="flex gap-4">
-                  <label
-                    className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-green-700 ${taxBand === "basic" ? "border-green-500 bg-green-50 text-green-800" : "border-gray-200 hover:border-gray-300"}`}
-                  >
-                    <input
-                      type="radio"
-                      name="tax-band"
-                      value="basic"
-                      checked={taxBand === "basic"}
-                      onChange={() => setTaxBand("basic")}
-                      className="sr-only"
-                    />
-                    <span className="text-sm font-medium">Basic rate (18%)</span>
-                  </label>
-                  <label
-                    className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-green-700 ${taxBand === "higher" ? "border-green-500 bg-green-50 text-green-800" : "border-gray-200 hover:border-gray-300"}`}
-                  >
-                    <input
-                      type="radio"
-                      name="tax-band"
-                      value="higher"
-                      checked={taxBand === "higher"}
-                      onChange={() => setTaxBand("higher")}
-                      className="sr-only"
-                    />
-                    <span className="text-sm font-medium">Higher rate (24%)</span>
-                  </label>
-                </div>
-              </fieldset>
-            )}
           </div>
 
           {needIncome && (
@@ -208,9 +171,10 @@ export default function CGTAllowanceCheckerPage() {
                 className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm"
               />
               <p id="income-hint" className="text-sm text-gray-600 mt-2">
-                Enter your taxable income to split the gain between the 18% and
-                24% rates. This estimate uses the standard £37,700 basic-rate
-                band for 2025–26 and excludes other gains, reliefs and band extensions.
+                Use income after your Personal Allowance, including if you pay Scottish Income Tax.
+                The UK CGT basic-rate band is £37,700 for 2025–26. This estimate uses 18%
+                on gains within the remaining band and 24% above it, and excludes other gains,
+                reliefs and band extensions.
               </p>
             </div>
           )}
@@ -267,11 +231,9 @@ export default function CGTAllowanceCheckerPage() {
                   ) : (
                     <p className="text-sm font-medium text-gray-700">Enter your taxable income for an estimate.</p>
                   )}
-                  {needTaxBand && taxOwed && (
+                  {needIncome && taxOwed && (
                     <p className="text-xs text-gray-600 mt-1">
-                      {taxBand === "basic"
-                        ? "18% within the remaining basic-rate band and 24% above it"
-                        : "24% higher rate"}
+                      18% within the remaining UK basic-rate band and 24% above it
                     </p>
                   )}
                 </div>

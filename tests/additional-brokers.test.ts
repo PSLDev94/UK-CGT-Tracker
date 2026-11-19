@@ -198,7 +198,7 @@ describe("additional broker readers with explicit evidence", () => {
     const result = reviewCsv(
       usd,
       config("ibkr", {
-        "2": { ...detail, currency: "USD", gbpPerUnit: "0.8" },
+        "2": { ...detail, currency: "USD", gbpPerUnit: "0.8", statementBaseCurrency: "GBP" },
       }),
     );
     expect(result.status).toBe("ready");

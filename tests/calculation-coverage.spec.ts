@@ -90,6 +90,41 @@ test("Reports distinguishes no disposals from a real break-even sale before offe
   await expect(disposal).not.toContainText("gain");
 });
 
+test("the saved calculation identifies the approved opening basis and its sources", async ({ page }) => {
+  const { state } = await workspace(page, [], true);
+  const pool = { securityId: sale.securityId, asOf: "2024-04-05", quantity: "2", costGBP: "8.125",
+    caseReference: "REVIEW-123", sourceReference: "NOTE-412" };
+  const result = calculateGains([sale], { taxYear: "2024-25", historyThrough: cutoff, openingPools: [pool] });
+  state.calculations[0]!.result = { ...result, reviewedOpeningPools: [pool] };
+  await page.goto("/dashboard/calculations?year=2024-25");
+  const basis = page.getByRole("heading", { name: "Reviewed opening positions" }).locator("..");
+  await expect(basis).toContainText(pool.securityId);
+  await expect(basis).toContainText("2 shares · verified cost £8.125");
+  await expect(basis).toContainText("Review case REVIEW-123 · supporting evidence NOTE-412");
+});
+
+test("a midyear zero identifies the cutoff and the sales already on file", async ({ page }) => {
+  const { state } = await workspace(page, [], true);
+  state.calculations[0]!.result = {
+    ...calculateGains([], { taxYear: "2024-25", historyThrough: "2024-06-30" }),
+    hasLaterSales: true,
+  };
+  await page.route("**/api/v2/billing", route => route.fulfill({ json: { status:"none", entitled:false } }));
+  await page.goto("/dashboard");
+  await expect(page.getByText("No disposals through 30 June 2024", {exact:true})).toBeVisible();
+  await expect(page.getByText(/Your portfolio includes sales later in this tax year/)).toBeVisible();
+  await page.getByRole("link", { name: "Open latest report" }).click();
+  const summary = page.getByRole("region", { name: "Calculation summary" });
+  await expect(summary.getByText("No disposals through 30 June 2024", {exact:true})).toBeVisible();
+  await expect(summary.getByRole("link", { name: /upload a file containing sales/i })).toHaveCount(0);
+  await expect(page.locator("#report-summary, #report-evidence")).toHaveCount(0);
+  await summary.getByRole("link", {name:"Extend the history cutoff and recalculate"}).click();
+  const result = page.getByRole("region", { name: "Calculation result" });
+  await expect(result).toContainText("No disposals through 30 June 2024");
+  await expect(result).toContainText("Sales for this year are already on file after the cutoff");
+  await expect(page.locator("#historyThrough")).toHaveValue("2024-06-30");
+});
+
 async function workspace(page: Page, trades: Trade[], confirmed: boolean) {
   const run = (year: TaxYear, date: string, ids: string[]) => ({
     id: "run-" + year,
@@ -220,9 +255,11 @@ test("editing saved coverage hides old figures until recalculated and isolates t
     .filter({ hasText: "Settings changed" });
   await expect(date).toHaveValue(cutoff);
   await expect(accountBox).toBeChecked();
-  await expect(page.getByText(/Last saved calculation/)).toContainText(
-    "Confirmed accounts: Review account",
-  );
+  const scope = page.getByText("1 account confirmed", {exact: true});
+  await expect(scope).toBeVisible();
+  await scope.click();
+  await expect(page.locator("details[open]").getByText("Review account", {exact:true})).toBeVisible();
+  await scope.click();
   await expect(report).toBeVisible();
   await accountBox.uncheck();
   await expect(warning).toBeVisible();
@@ -255,6 +292,7 @@ test("editing saved coverage hides old figures until recalculated and isolates t
   await date.fill(cutoff);
   await expect(date).toHaveValue(cutoff);
   await expect(accountBox).not.toBeChecked();
+  await page.locator('input[name="personalScopeConfirmed"]').check();
   await page.getByRole("button", { name: "Recalculate", exact: true }).click();
   await expect(warning).toHaveCount(0);
   await expect(
@@ -262,9 +300,7 @@ test("editing saved coverage hides old figures until recalculated and isolates t
       .getByRole("status")
       .filter({ hasText: "Account coverage is not confirmed" }),
   ).toBeVisible();
-  await expect(page.getByText(/Last saved calculation/)).toContainText(
-    "No accounts confirmed",
-  );
+  await expect(page.getByText("No accounts confirmed.", {exact: true})).toBeVisible();
   await expect(report).toHaveAttribute(
     "href",
     "/dashboard/reports?year=2024-25",
@@ -344,6 +380,7 @@ test("missing purchase recovery preserves the year through upload, preview, save
   await page
     .getByRole("checkbox", { name: account.label, exact: true })
     .check();
+  await page.locator('input[name="personalScopeConfirmed"]').check();
   await page
     .getByRole("button", { name: "Calculate gains", exact: true })
     .click();
@@ -379,6 +416,7 @@ test("a change on another device discards unsaved coverage and requires a fresh 
   await page.goto("/dashboard/calculations?year=2024-25");
   await page.getByLabel("History complete through").fill("2025-06-03");
   await page.getByRole("checkbox", { name: account.label, exact: true }).check();
+  await page.locator('input[name="personalScopeConfirmed"]').check();
   await page.getByRole("button", { name: "Recalculate", exact: true }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Your portfolio changed." })).toBeVisible();
   const reference = page.getByRole("region", { name: "Previous calculation settings" });
@@ -470,10 +508,11 @@ test("a rate-limited checkout return explains when to retry and restores the sel
 });
 
 test("scenario prices and their labels are visible without sideways scrolling on narrow screens", async ({ page }) => {
-  await workspace(page, [purchase, sale], true);
+  const { state } = await workspace(page, [purchase, sale], true);
+  state.instrumentNames = { [sale.securityId]: "Apple Inc" };
   await page.goto("/dashboard/tax-loss-harvesting");
   const holding = page.getByRole("region", { name: "Holding scenario" });
-  const price = holding.getByRole("textbox", { name: "Your scenario price (£) for US0378331005" });
+  const price = holding.getByRole("textbox", { name: "Your scenario price (£) for Apple Inc · US0378331005" });
   for (const width of [320, 390, 820]) {
     await page.setViewportSize({ width, height: 844 });
     await expect(price).toBeVisible();
@@ -485,6 +524,7 @@ test("scenario prices and their labels are visible without sideways scrolling on
   }
   await price.fill("30");
   await expect(page.getByText(/Scenario value £30.00/)).toBeVisible();
+  await expect(page.getByText("Apple Inc · US0378331005", { exact: true })).toHaveCount(2);
   await price.fill("-1");
   await expect(price).toHaveAccessibleDescription(/Use a non-negative decimal/);
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -506,6 +546,7 @@ test("unsaved settings survive staying, and leaving or saving releases the guard
   await expect(name).toHaveValue("Edited investor");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByText("Profile updated successfully.")).toBeVisible();
+  await expect(page.getByText("Edited investor", { exact: true })).toHaveCount(1);
   await billing.click();
   await expect(page).toHaveURL(/\/billing$/);
   await page.goBack();
@@ -546,7 +587,12 @@ test("all report entry points prefer the latest save and the calculation year pr
   expect((await report.boundingBox())!.y).toBeLessThan((await cutoff.boundingBox())!.y);
   await year.focus();
   // WebKit uses Option-Tab to include links in its default keyboard traversal.
-  await page.keyboard.press(browserName === "webkit" ? "Alt+Tab" : "Tab");
+  const next = browserName === "webkit" ? "Alt+Tab" : "Tab";
+  await page.keyboard.press(next);
+  const accountNames = page.getByRole("region", { name: "Calculation result" }).locator("summary").filter({ hasText: "1 account confirmed" });
+  await expect(accountNames).toBeFocused();
+  await expect(accountNames.locator("..")).not.toHaveAttribute("open");
+  await page.keyboard.press(next);
   await expect(report).toBeFocused();
 });
 

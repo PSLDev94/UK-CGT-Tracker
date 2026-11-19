@@ -9,7 +9,7 @@ import {
   reportStatus,
   type ReportSnapshot,
 } from "../src/domain/reports/report";
-import { evidenceIssue } from "../src/domain/reports/eligibility";
+import { evidenceIssue, purchaseIssue } from "../src/domain/reports/eligibility";
 import { reportPdf } from "../src/domain/reports/pdf";
 import { createReportHandler } from "../src/server/reports-api";
 import { AppError } from "../src/server/errors";
@@ -91,6 +91,97 @@ describe("auditable report exports", () => {
       const text = reportPageText(await PDFDocument.load(await reportPdf(saved, evidence)));
       expect(text).toContain("No disposals in this tax year");
       expect(text).not.toContain("Break-even");
+    }
+  });
+  it("retains the original reviewed opening cost and case evidence in every format", async () => {
+    const pool = { securityId: "GB0008706128", asOf: "2024-04-05", quantity: "100.5", costGBP: "198.765",
+      caseReference: "CASE-238", sourceReference: "STATEMENT-10" };
+    const result = calculateGains([
+      { id: "verified-basis-sale", securityId: pool.securityId, date: "2024-07-01", side: "SELL",
+        quantity: "5", considerationGBP: "100", feesGBP: "0" },
+    ], { taxYear: "2024-25", historyThrough: "2025-05-05", openingPools: [pool] });
+    expect(result.summary?.netGainGBP).toBe("90.11");
+    const saved = { ...snapshot, result: { ...result, reviewedOpeningPools: [pool] } };
+    const csv = Papa.parse<string[]>(reportCsv(saved), { delimiter: "," }).data;
+    expect(csv).toContainEqual([pool.asOf, pool.securityId, pool.quantity, pool.costGBP, pool.caseReference, pool.sourceReference]);
+    for (const evidence of [false, true]) {
+      const content = reportPageText(await PDFDocument.load(await reportPdf(saved, evidence)));
+      expect(content).toContain("Reviewed opening positions");
+      expect(content).toContain("5 April 2024 · 100.5 shares · verified cost £198.765");
+      expect(content).toContain("Review case: CASE-238");
+      expect(content).toContain("Supporting evidence: STATEMENT-10");
+    }
+  });
+  it("records the saved residence and ownership declaration in all exports", async () => {
+    const saved: ReportSnapshot = { ...snapshot, result: { ...snapshot.result, scopeDeclaration: "personal-uk-resident-v1" } };
+    for (const content of [reportCsv(saved), ...await Promise.all([false, true].map(async evidence =>
+      reportPageText(await PDFDocument.load(await reportPdf(saved, evidence)))))]) {
+      expect(content.replace(/\s+/g, " ")).toContain("personal ownership in the same capacity and UK residence throughout the matching history, including later repurchases");
+    }
+    expect(reportCsv(snapshot)).toContain("no recorded ownership and UK residence declaration");
+  });
+  it("keeps the exact receipt references for Unicode text extraction and distinct printed references", async () => {
+    const account = { label: "取引口座", broker: "ibkr", confirmed: true };
+    const saved = {
+      ...snapshot,
+      accounts: [account],
+      sources: ["buy", "sell"].map((key, i) => ({
+        ...account, key, instrument: "普通株式", record: i + 2,
+        reference: ["東京", "大阪"][i]!, statementReference: String.raw`\u{6771}`,
+      })),
+    };
+    const evidence = await PDFDocument.load(await reportPdf(saved, true));
+    const printed = reportPageText(evidence);
+    const original = reportPageText(evidence, undefined, true);
+    const csv = reportCsv(saved);
+    for (const [value, fallback] of [
+      ["東京", String.raw`\u{6771}\u{4EAC}`],
+      ["大阪", String.raw`\u{5927}\u{962A}`],
+      ["取引口座", String.raw`\u{53D6}\u{5F15}\u{53E3}\u{5EA7}`],
+      [String.raw`\u{6771}`, String.raw`\\u{6771}`],
+    ]) {
+      expect(original).toContain(value);
+      expect(csv).toContain(value);
+      expect(printed).toContain(fallback);
+    }
+    expect(printed).toContain("Printed reference notation");
+    expect(printed).toContain("Trace reference: sell");
+  });
+  it("describes a zero only through its cutoff in CSV and both PDFs", async () => {
+    const result = { ...calculateGains([], { taxYear: "2025-26", historyThrough: "2025-06-30" }), hasLaterSales: true };
+    const saved = { ...snapshot, result };
+    const exports = [
+      reportCsv(saved),
+      ...await Promise.all([false, true].map(async evidence =>
+        reportPageText(await PDFDocument.load(await reportPdf(saved, evidence))))),
+    ];
+    for (const content of exports) {
+      expect(content).toContain("No disposals through 30 June 2025");
+      expect(content).toMatch(/sales later in this tax year/i);
+      expect(content).not.toContain("No disposals in this tax year");
+    }
+    expect(purchaseIssue(result, true)?.code).toBe("REPORT_INCOMPLETE");
+    expect(purchaseIssue(snapshot.result, false)?.code).toBe("REPORT_INCOMPLETE");
+    expect(purchaseIssue(snapshot.result, true)).toBeNull();
+    expect(purchaseIssue(calculateGains([], { taxYear: "2024-25", historyThrough: "2025-05-05" }), true)?.code).toBe("NO_DISPOSALS");
+  });
+  it("carries the historical matching block through CSV and both PDFs", async () => {
+    const trade = { securityId: "GB0008706128", quantity: "100", feesGBP: "0" };
+    const result = calculateGains([
+      { ...trade, id: "buy-2003", date: "2003-01-01", side: "BUY", considerationGBP: "100" },
+      { ...trade, id: "buy-2005", date: "2005-01-01", side: "BUY", considerationGBP: "900" },
+      { ...trade, id: "sell-2007", date: "2007-01-01", side: "SELL", considerationGBP: "1000" },
+      { ...trade, id: "sell-2024", date: "2024-07-01", side: "SELL", considerationGBP: "1000" },
+    ], { taxYear: "2024-25", historyThrough: "2025-05-05" });
+    const saved = { ...snapshot, result };
+    expect(result.summary).toBeNull();
+    expect(purchaseIssue(result, true)?.code).toBe("REPORT_INCOMPLETE");
+    const issue = result.issues.find(i => i.code === "HISTORICAL_SHARE_MATCHING")!;
+    for (const content of [reportCsv(saved), ...await Promise.all([false, true].map(async evidence =>
+      reportPageText(await PDFDocument.load(await reportPdf(saved, evidence)))))]) {
+      expect(content.replace(/\s+/g, " ")).toContain(issue.message);
+      expect(content).not.toContain("Upload the earlier purchases");
+      expect(content).not.toContain("£500.00");
     }
   });
   it.each([

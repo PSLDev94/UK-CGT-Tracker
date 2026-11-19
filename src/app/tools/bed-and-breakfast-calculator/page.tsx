@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import Decimal from "decimal.js";
+import type Decimal from "decimal.js";
+import { Money } from "@/domain/values";
 import Link from "next/link";
 import { Calculator, AlertCircle, CheckCircle } from "lucide-react";
 import { CalculatorUploadLink } from "@/components/calculator-upload-link";
@@ -47,7 +48,7 @@ export default function BedAndBreakfastCalculatorPage() {
           next[id] = `Enter the ${label}.`;
       } else if (
         !/^\d{1,12}(\.\d{1,8})?$/.test(value) ||
-        (id.endsWith("-qty") && new Decimal(value).isZero())
+        (id.endsWith("-qty") && new Money(value).isZero())
       ) {
         next[id] =
           `Enter the ${label} as ${id.endsWith("-qty") ? "a positive number" : "zero or a positive number"} with up to 8 decimal places.`;
@@ -62,15 +63,15 @@ export default function BedAndBreakfastCalculatorPage() {
     const diffMs = Date.parse(buyDate) - Date.parse(sellDate);
     const daysBetween = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-    const sQty = new Decimal(sellQty);
-    const sPrice = new Decimal(sellPrice);
-    const bQty = new Decimal(buyQty);
-    const bPrice = new Decimal(buyPrice);
+    const sQty = new Money(sellQty);
+    const sPrice = new Money(sellPrice);
+    const bQty = new Money(buyQty);
+    const bPrice = new Money(buyPrice);
 
     const isMatch = daysBetween > 0 && daysBetween <= 30;
-    const matchedQty = isMatch ? Decimal.min(sQty, bQty) : new Decimal(0);
-    const proceeds = matchedQty.mul(sPrice);
-    const cost = matchedQty.mul(bPrice);
+    const matchedQty = isMatch ? Money.min(sQty, bQty) : new Money(0);
+    const proceeds = matchedQty.mul(sPrice).toDP(2);
+    const cost = matchedQty.mul(bPrice).toDP(2);
     const gainLoss = proceeds.minus(cost);
 
     setResult({
@@ -393,7 +394,7 @@ export default function BedAndBreakfastCalculatorPage() {
                 <div>
                   <h3 className="font-bold text-gray-900 text-lg">
                     {result.isMatch
-                      ? `B&B Rule Triggered — ${result.daysBetween} days between transactions`
+                      ? `B&B Rule Triggered — ${result.daysBetween} ${result.daysBetween === 1 ? "day" : "days"} between transactions`
                       : result.daysBetween === 0
                         ? "Same-day matching takes priority — this is not a 30-day match"
                         : result.daysBetween < 0
@@ -438,12 +439,12 @@ export default function BedAndBreakfastCalculatorPage() {
                   </div>
                   <div className="bg-white rounded-xl p-4 border">
                     <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-                      {result.gainLoss.gte(0) ? "Gain" : "Loss"} on matched shares before fees
+                      {result.gainLoss.isZero() ? "Break-even" : result.gainLoss.gt(0) ? "Gain" : "Loss"} on matched shares before fees
                     </p>
                     <p
-                      className={`text-xl font-bold ${result.gainLoss.gte(0) ? "text-green-700" : "text-red-600"}`}
+                      className={`text-xl font-bold ${result.gainLoss.isZero() ? "text-gray-900" : result.gainLoss.gt(0) ? "text-green-700" : "text-red-600"}`}
                     >
-                      {result.gainLoss.gte(0) ? "+" : ""}
+                      {result.gainLoss.gt(0) ? "+" : ""}
                       {money(result.gainLoss.toString())}
                     </p>
                   </div>

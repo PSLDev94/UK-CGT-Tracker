@@ -92,6 +92,8 @@ async function initialise() {
       checkDatabase: () =>
         Promise.all([
           query(appDb, "SELECT display_summary FROM cgt.import_drafts LIMIT 0"),
+          query(appDb, "SELECT ibkr_client_account_id FROM cgt.broker_accounts LIMIT 0"),
+          query(appDb, "SELECT portfolio_revision FROM cgt.reviewed_opening_pools LIMIT 0"),
           query(authDb, "SELECT 1"),
         ]),
       workspaceHandler: createWorkspaceHandler(

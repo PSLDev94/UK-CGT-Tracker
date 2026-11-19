@@ -1,5 +1,6 @@
+import { noDisposalsLabel } from "../domain/reports/eligibility";
 import Link from "next/link";
-import { hasActiveTrades, type Overview } from "./workspace-types";
+import { draftLabel, hasActiveTrades, type Overview } from "./workspace-types";
 import { displayDate, money, netOutcome } from "./format";
 
 export function PortfolioOverview({
@@ -18,10 +19,15 @@ export function PortfolioOverview({
   let href = "/dashboard/calculations";
   if (draft) {
     const account = data.accounts.find((a) => a.id === draft.account_id);
-    title = "Your import is ready to review";
-    description = `Resume the saved preview for ${account?.label ?? "your broker account"}. Check each source row before saving.`;
-    action = "Resume review";
-    href = "/dashboard/upload?draft=" + encodeURIComponent(draft.id);
+    if (data.drafts.length > 1) {
+      title = `${data.drafts.length} saved previews`;
+      description = "Choose the file you want to review.";
+    } else {
+      title = "Your import is ready to review";
+      description = `Resume ${draftLabel(draft)} for ${account?.label ?? "your broker account"}.`;
+      action = "Resume review";
+      href = "/dashboard/upload?draft=" + encodeURIComponent(draft.id);
+    }
   } else if (!data.accounts.length) {
     title = "Add your first broker account";
     description =
@@ -30,8 +36,9 @@ export function PortfolioOverview({
     href = "/dashboard/accounts";
   } else if (saved) {
     title = `${saved.taxYear} share gains`;
-    description =
-      saved.status === "complete" && latestRun.coverage_confirmed
+    description = saved.hasLaterSales
+      ? "Your portfolio includes sales later in this tax year. Extend the history cutoff and recalculate."
+      : saved.status === "complete" && latestRun.coverage_confirmed
         ? `Matching complete. History through ${displayDate(saved.historyThrough)}.`
         : "Review the history coverage and matching evidence before using these figures.";
     action = "Open latest report";
@@ -44,9 +51,9 @@ export function PortfolioOverview({
     href = "/dashboard/upload";
   }
   return (
-    <section className="panel max-w-3xl">
+    <section className="panel max-w-3xl [overflow-wrap:anywhere]">
       <h2>{title}</h2>
-      {saved && !saved.disposals.length && !draft && <p className="font-semibold">No disposals in this tax year</p>}
+      {saved && !saved.disposals.length && !draft && <p className="font-semibold">{noDisposalsLabel(saved, latestRun.coverage_confirmed)}</p>}
       {saved?.summary && saved.disposals.length > 0 && !draft && (
         <p className="text-3xl font-bold text-blue-800 tabular-nums">
           {money(saved.summary.netGainGBP)}{" "}
@@ -65,7 +72,16 @@ export function PortfolioOverview({
           }).format(new Date(latestRun.created_at))}
         </p>
       )}
-      <div className="actions">
+      {data.drafts.length > 1 ? (
+        <ul className="record-list">
+          {data.drafts.map(item => (
+            <li key={item.id}>
+              <Link className="text-blue-700 underline" href={"/dashboard/upload?draft=" + encodeURIComponent(item.id)}>{draftLabel(item)}</Link>
+              <span className="caption">{data.accounts.find(a => a.id === item.account_id)?.label} · Preview {item.id.slice(-8)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : <div className="actions">
         <Link className="button primary" href={href}>
           {action}
         </Link>
@@ -79,7 +95,7 @@ export function PortfolioOverview({
             Review calculation
           </Link>
         )}
-      </div>
+      </div>}
     </section>
   );
 }

@@ -26,8 +26,14 @@ export async function api<T>(
         : AbortSignal.timeout(45000),
     });
   } catch {
+    const action = body && typeof body === "object" && "action" in body ? body.action : undefined;
+    const writesPortfolio = path === "/api/v2/workspace" && ["add-account", "prepare-import", "supply-import-details", "discard-draft", "commit-import", "reverse-import", "calculate"].includes(String(action));
+    const readingReports = action === "overview" && body && typeof body === "object" && "surface" in body && body.surface === "reports";
+    const message = readingReports ? "Your saved reports couldn’t load. Try again."
+      : writesPortfolio ? "The connection was interrupted. Your change may have reached the server. Check your workspace before trying again."
+      : "The connection was interrupted. Try again.";
     throw new ApiError(
-      "The connection was interrupted. This request may have reached the server. Check your workspace before repeating an upload or adding an account.",
+      message,
       0,
       "CONNECTION_INTERRUPTED",
     );

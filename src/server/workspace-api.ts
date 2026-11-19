@@ -103,6 +103,7 @@ export function createWorkspaceHandler(
             identity, input.surface === "accounts",
             input.surface === "reports" || input.surface === "calculations",
             input.surface === "imports" && input.receiptId ? text("receiptId") : undefined,
+            input.surface === "scenarios",
           );
           if (input.surface === "reports") recordJourney("reports_opened");
           return privateResponse(overview);
@@ -247,6 +248,7 @@ export function createWorkspaceHandler(
               taxYear: text("taxYear"),
               historyThrough: text("historyThrough"),
               confirmedAccountIds: input.confirmedAccountIds,
+              personalScopeConfirmed: input.personalScopeConfirmed === true,
             });
           recordJourney(calculation.result.status === "complete" && calculation.coverageConfirmed ? "calculation_complete" : "calculation_incomplete");
           // The PDF and CSV readers load the full pool ledger from the stored run.

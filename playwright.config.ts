@@ -7,7 +7,11 @@ export default defineConfig({
   workers: 3,
   retries: 0,
   use: { baseURL: "http://127.0.0.1:3200", trace: "retain-on-failure" },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    { name: "desktop-webkit", use: { ...devices["Desktop Safari"], viewport: { width: 1440, height: 900 } } },
+    { name: "mobile-webkit", use: { ...devices["iPhone 13"] } },
+  ],
   webServer: {
     command: "npm run start",
     env: { PORT: "3200", HOSTNAME: "127.0.0.1" },

@@ -11,7 +11,7 @@ import {
   AJ_HISTORY_HEADERS,
   IBKR_HEADERS,
 } from "./additional-brokers";
-import type { SupportingDetails } from "./supporting-details";
+import { StatementMismatchError, type SupportingDetails } from "./supporting-details";
 import type { BrokerId } from "./brokers";
 
 // Exact, versioned layouts observed in public sample exports. Unknown columns
@@ -198,27 +198,18 @@ const freetrade: NativeAdapter = {
       throw new Error(
         "Zero-value executions require review; they must not become ordinary purchases or sales.",
       );
-    if (
-      !quantity
-        .times(
-          decimal(
-            r["Price per Share in Account Currency"]!,
-            "Price per Share in Account Currency",
-          ),
-        )
-        .toDP(2)
-        .eq(gross) ||
-      !quantity.times(price).toDP(2).eq(sourceGross)
-    )
-      throw new Error(
-        "Freetrade quantity, prices and gross amount do not reconcile to the penny.",
-      );
-    if (
-      !sourceGross.times(rate).times(basisPoints).div(10000).toDP(2).eq(fxFee)
-    )
-      throw new Error(
-        "Exported FX fee does not match the base conversion and fee percentage.",
-      );
+    const accountGross = quantity.times(decimal(
+      r["Price per Share in Account Currency"]!, "Price per Share in Account Currency",
+    )).toDP(2);
+    const instrumentGross = quantity.times(price).toDP(2);
+    if (!instrumentGross.eq(sourceGross))
+      throw new StatementMismatchError(`Quantity × instrument price gives ${instrumentGross.toFixed(2)} ${r["Instrument Currency"]}. Total Shares Amount is ${sourceGross.toFixed(2)}. Check the execution contract note and request corrected figures from Freetrade.`);
+    const ConversionMismatch = r["Base FX Rate"] || r["FX Rate"] ? StatementMismatchError : Error;
+    if (!accountGross.eq(gross))
+      throw new ConversionMismatch(`Quantity × account price gives £${accountGross.toFixed(2)}. The converted gross is £${gross.toFixed(2)}. Check the gross sterling amount and charges on the contract note. Use the template only once you can evidence both amounts for every execution.`);
+    const calculatedFee = sourceGross.times(rate).times(basisPoints).div(10000).toDP(2);
+    if (!calculatedFee.eq(fxFee))
+      throw new ConversionMismatch(`The exported FX fee is £${fxFee.toFixed(2)}. The base conversion and fee percentage give £${calculatedFee.toFixed(2)}. Obtain the contract note or ask Freetrade to confirm the fee and gross sterling amount before using the template.`);
     const fees = stamp.plus(fxFee);
     if (
       foreign &&
@@ -446,12 +437,12 @@ export function nativeAdapter(
 }
 export const NATIVE_GUIDANCE: Record<BrokerId, string> = {
   freetrade:
-    "Use the Activity Feed CSV. The documented 29-column layout, including renamed account/instrument amount columns, supports GBP trades and verified foreign trades. Foreign fees, base/effective rates and cash totals must reconcile. Transfers and some corporate actions may be missing from the export; reconcile complete history separately.",
+    "Use the Activity Feed CSV. The documented 29-column layout, including renamed account/instrument amount columns, supports GBP trades and verified foreign trades. Foreign fees, base/effective rates and cash totals must reconcile. For a fractional order with conflicting sterling figures, check the gross GBP amount and separate fees on the execution contract note. Keep all records and use the template with the original Order IDs only when every execution and event can be accounted for. Transfers and some corporate actions may be missing from the export; reconcile complete history separately.",
   trading212:
     "Use the Invest account History CSV with all activity categories. Documented 21- and 33-column layouts support GBP/GBX prices and verified foreign trades with GBP totals. The newer layout also reconciles separately denominated stamp duty, French transaction tax and FINRA fees. Pie holdings and CFD exports cannot establish share acquisition history.",
-  hl: "HL Transaction Summary files need verified security identifiers and dealing-cost details from matching contract notes. Unit cost may be in pence. Supply these details in the preview; every trade must reconcile before saving.",
-  ii: "Interactive Investor exports can identify securities by SEDOL and may omit the wallet currency. Confirm the security ISIN, wallet currency, execution amounts and fees in the supporting-details form beside each unresolved record.",
-  ibkr: "IBKR Activity Statements, Flex Queries and Transaction History are different formats. A Flex Query must include execution IDs, ISINs, asset categories, currency, gross proceeds, commission and trade-date FX. Use the documented 16-column execution Flex layout; other sectioned layouts remain blocked.",
+  hl: "HL Transaction Summary files in UTF-8 and the dated Windows-1252 layout need verified security identifiers and dealing-cost details from matching contract notes. Unit cost may be in pence. Supply these details in the preview; every trade must reconcile before saving.",
+  ii: "This assisted 11-column profile was tested with a public parser layout and synthetic trades. Interactive Investor exports can identify securities by SEDOL and may omit the wallet currency. Confirm the security ISIN, wallet currency, execution amounts and fees in the supporting-details form beside each unresolved record.",
+  ibkr: "IBKR Activity Statements, Flex Queries and Transaction History are different formats. A Flex Query must include execution IDs, ISINs, asset categories, currency, gross proceeds, commission and trade-date FX. Use the 16-column execution Flex layout. For foreign trades, verify the statement account base is GBP. For a different base, use independently documented trade-date GBP rates in the template and enter ClientAccountID:TradeID as the transaction ID.",
   ajbell:
-    "Use Transaction history with Date, Description, Transaction, Quantity, Price and Amount (GBP). Confirm GBP prices in pounds, ISINs, execution references and dealing costs against contract notes in the preview. The older Type/Amount candidate also requires these details. Descriptions alone cannot identify a security safely.",
+    "The six-column GBP Transaction history profile follows published partner guidance and has been tested with synthetic trades. Use Date, Description, Transaction, Quantity, Price and Amount (GBP). Confirm GBP prices in pounds, ISINs, execution references and dealing costs against contract notes in the preview. The older Type/Amount candidate also requires these details. Descriptions alone cannot identify a security safely.",
 };

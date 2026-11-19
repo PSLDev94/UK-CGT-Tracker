@@ -1,0 +1,62 @@
+{
+  "authenticationRequired": {
+    "event": "invoice.payment_action_required",
+    "subscriptionStatus": "incomplete",
+    "invoice": {
+      "status": "open",
+      "amount_paid": 0,
+      "amount_remaining": 4900,
+      "billing_reason": "subscription_create"
+    }
+  },
+  "authenticationFailed": {
+    "event": "invoice.payment_failed",
+    "subscriptionStatus": "incomplete",
+    "invoice": {
+      "status": "open",
+      "amount_paid": 0,
+      "amount_remaining": 4900,
+      "billing_reason": "subscription_create"
+    }
+  },
+  "authenticationCompleted": {
+    "event": "invoice.paid",
+    "subscriptionStatus": "active",
+    "invoice": {
+      "status": "paid",
+      "amount_paid": 4900,
+      "amount_remaining": 0,
+      "billing_reason": "subscription_create"
+    }
+  },
+  "annualRenewal": {
+    "event": "invoice.paid",
+    "subscriptionStatus": "active",
+    "invoice": {
+      "status": "paid",
+      "amount_paid": 4900,
+      "amount_remaining": 0,
+      "billing_reason": "subscription_cycle"
+    }
+  },
+  "renewalDeclined": {
+    "event": "invoice.payment_failed",
+    "subscriptionStatus": "past_due",
+    "invoice": {
+      "status": "open",
+      "amount_paid": 0,
+      "amount_remaining": 4900,
+      "billing_reason": "subscription_cycle"
+    }
+  },
+  "renewalRecovered": {
+    "event": "invoice.paid",
+    "subscriptionStatus": "active",
+    "invoice": {
+      "status": "paid",
+      "amount_paid": 4900,
+      "amount_remaining": 0,
+      "billing_reason": "subscription_cycle"
+    }
+  }
+}

@@ -2,7 +2,7 @@ import Decimal from "decimal.js";
 import Link from "next/link";
 import { money, Notice } from "./primitives";
 import type { Calculation } from "../domain/cgt/types";
-import { missingAcquisitionGuidance } from "../domain/cgt/types";
+import { noDisposalsLabel, reportIssueMessage, scopeStatement } from "../domain/reports/eligibility";
 import { displayDate, netOutcome } from "./format";
 import { SaleAmounts } from "./sale-amounts";
 import { DisposalDetail } from "./disposal-detail";
@@ -36,13 +36,15 @@ export function CalculationResult({
   const target = previousDisposal && location && location.source < disposalSourceKeys(previousDisposal).length
     ? location : null;
   const savedInputs = (
-    <p className="caption">
-      Last saved calculation · History through{" "}
-      {displayDate(result.historyThrough)}.{" "}
-      {confirmedAccounts.length
-        ? "Confirmed accounts: " + confirmedAccounts.join(", ") + "."
-        : "No accounts confirmed."}
-    </p>
+    <div className="caption">
+      <p>Last saved calculation · History through {displayDate(result.historyThrough)}.</p>
+      {confirmedAccounts.length ? (
+        <details>
+          <summary>{confirmedAccounts.length} {confirmedAccounts.length === 1 ? "account" : "accounts"} confirmed</summary>
+          <ul className="list-disc pl-5">{confirmedAccounts.map((name, i) => <li key={i}>{name}</li>)}</ul>
+        </details>
+      ) : <p>No accounts confirmed.</p>}
+    </div>
   );
   if (settingsEdited) {
     return (
@@ -62,7 +64,6 @@ export function CalculationResult({
       aria-label="Calculation result"
       className="space-y-6 mb-8"
     >
-      {savedInputs}
       {location && !target && (
         <Notice>
           This calculation has changed since you opened the receipt.
@@ -81,7 +82,7 @@ export function CalculationResult({
           {result.status === "complete"
             ? "Matching complete"
             : result.status === "blocked"
-              ? "Missing history"
+              ? "Review required"
               : "Provisional"}
         </span>
       </div>
@@ -99,28 +100,23 @@ export function CalculationResult({
       )}
       {!!result.issues.length && (
         <Notice tone="error">
-          <strong>Acquisition history is missing.</strong>
+          <strong>Review the calculation issues.</strong>
           <ul>
             {result.issues.map((issue, i) => (
               <li key={i}>
-                {issue.securityId} · {displayDate(issue.date)} ·{" "}
-                {issue.quantity} unmatched shares
+                {issue.securityId} · {displayDate(issue.date)} · {issue.quantity} shares.{" "}
+                {reportIssueMessage(issue)}
               </li>
             ))}
           </ul>
-          <p>{missingAcquisitionGuidance}</p>
-          <Link
-            className="button primary"
-            href={
-              "/dashboard/upload?year=" + encodeURIComponent(result.taxYear)
-            }
-          >
-            Upload earlier acquisitions
-          </Link>
+          {result.issues.some(i => i.code === "MISSING_ACQUISITION_HISTORY") && (
+            <Link className="button secondary" href={"/dashboard/upload?year=" + encodeURIComponent(result.taxYear)}>Upload earlier acquisitions</Link>
+          )}
         </Notice>
       )}
       {noDisposals && <Notice>
-        <strong>No disposals in this tax year.</strong> Check the tax year or upload the sales you want to calculate.
+        <strong>{noDisposalsLabel(result, coverage)}.</strong>{" "}
+        {result.hasLaterSales ? <>Sales for this year are already on file after the cutoff. <a href="#historyThrough">Review the history date</a> and recalculate.</> : "Check the reporting year and included history."}
       </Notice>}
       {result.summary && !noDisposals && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -132,7 +128,7 @@ export function CalculationResult({
             ],
             ["Total Gains", result.summary.gainsGBP, "text-green-700"],
             ["Total Losses", result.summary.lossesGBP, "text-red-600"],
-          ].map(([label, value, tone]) => (
+          ].map(([label, value, tone], index) => (
             <div
               key={label}
               className={`p-6 rounded-xl border shadow-sm ${label.startsWith("Net") || label === "Break-even" ? "bg-blue-50 border-blue-200 net-gain" : "bg-white"}`}
@@ -143,15 +139,12 @@ export function CalculationResult({
               <strong className={`text-2xl font-bold tabular-nums ${tone}`}>
                 {money(value)}
               </strong>
+              {index === 0 && savedInputs}
             </div>
           ))}
         </div>
       )}
-      <p className="caption">
-        {coverage
-          ? "Account coverage confirmed"
-          : "Account coverage incomplete"}
-      </p>
+      {(!result.summary || noDisposals) && savedInputs}
       <Link
         className={
           noDisposals || result.status === "blocked" ? "button secondary" : "button primary"
@@ -161,6 +154,21 @@ export function CalculationResult({
         {noDisposals ? "View calculation evidence" : result.status === "blocked" ? "View draft reports" : "View reports"}{" "}
         for {result.taxYear}
       </Link>
+      <p className="caption">{scopeStatement(result)}</p>
+      {!!result.reviewedOpeningPools?.length && (
+        <section>
+          <h3 className="text-lg font-semibold mb-3">Reviewed opening positions</h3>
+          <ul className="space-y-3 [overflow-wrap:anywhere]">
+            {result.reviewedOpeningPools.map(pool => (
+              <li key={pool.securityId}>
+                <strong>{pool.securityId}</strong> · {displayDate(pool.asOf)}
+                <p>{pool.quantity} {pool.quantity === "1" ? "share" : "shares"} · verified cost £{pool.costGBP}</p>
+                <p className="caption">Review case {pool.caseReference} · supporting evidence {pool.sourceReference}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {result.summary && (
         <div>
           <h3 className="text-lg font-semibold mb-3">Annual sale breakdown</h3>
@@ -184,7 +192,7 @@ export function CalculationResult({
         <div className="md:hidden p-4">
           {result.disposals.length === 0 && (
             <p>
-              No disposals fall in this tax year within the imported history.
+              {noDisposalsLabel(result, coverage)}.
             </p>
           )}
           {result.disposals.map((d, index) => (
@@ -230,8 +238,7 @@ export function CalculationResult({
               {result.disposals.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center">
-                    No disposals fall in this tax year within the imported
-                    history.
+                    {noDisposalsLabel(result, coverage)}.
                   </td>
                 </tr>
               ) : (

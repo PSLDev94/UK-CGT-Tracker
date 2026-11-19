@@ -32,10 +32,11 @@ export function RestoredSettings() {
         guard.current ? guard.current(action) : action()
       }
     >
-      {(user, sessionId) => (
+      {(user, sessionId, updateName) => (
         <SettingsEditor
           key={sessionId ?? user.email}
           user={user}
+          updateName={updateName}
           sessionId={sessionId}
           guard={guard}
         />
@@ -46,14 +47,15 @@ export function RestoredSettings() {
 
 function SettingsEditor({
   user,
+  updateName,
   sessionId,
   guard,
 }: {
   user: { name: string; email: string };
+  updateName: (name: string) => void;
   sessionId?: string;
   guard: RefObject<SignOutGuard | null>;
 }) {
-  const [savedName, setSavedName] = useState<string | null>(null);
   const [editedName, setEditedName] = useState<string | null>(() => {
     if (!profileDraft || !sessionId || profileDraft.session !== sessionId)
       return null;
@@ -62,7 +64,7 @@ function SettingsEditor({
       : null;
   });
   function editName(value: string) {
-    const name = value === (savedName ?? user.name) ? null : value;
+    const name = value === user.name ? null : value;
     setEditedName(name);
     if (name === null || !sessionId) {
       profileDraft = null;
@@ -121,7 +123,7 @@ function SettingsEditor({
       if (kind === "profile") {
         await authApi("update-user", { name });
         profileDraft = null;
-        setSavedName(name);
+        updateName(name);
         setEditedName(null);
         setMessage("Profile updated successfully.");
       } else {
@@ -173,7 +175,7 @@ function SettingsEditor({
             id="name"
             name="name"
             label="Full name"
-            value={editedName ?? savedName ?? user.name}
+            value={editedName ?? user.name}
             disabled={busy}
             onChange={(event) => editName(event.target.value)}
             autoComplete="name"

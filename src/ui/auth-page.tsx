@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AuthForm, type AuthMode } from "./auth-form";
 import { CheckCircle } from "lucide-react";
 import { redirect } from "next/navigation";
@@ -52,8 +53,8 @@ export async function AuthPage({
               </h2>
               <p className="text-blue-100 text-lg leading-relaxed">
                 Bring your trading history together, review every import and
-                follow the matching behind each gain. Start with the qualified
-                broker formats in our relaunch preview.
+                follow the matching behind each gain.{" "}
+                <Link className="text-white underline" href="/supported-brokers">See which broker files you can upload.</Link>
               </p>
             </div>
             <div className="mt-16 space-y-4">

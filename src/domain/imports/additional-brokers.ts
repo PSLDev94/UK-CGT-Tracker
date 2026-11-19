@@ -275,8 +275,12 @@ export const ibkr: NativeAdapter = {
         "IBKR gross proceeds, execution price, commission, taxes and net cash do not reconcile.",
       );
     let rate = "1";
+    if (r.CurrencyPrimary === "GBP" && !decimal(r.FXRateToBase!, "Flex rate to base").eq(1))
+      throw new Error("A GBP trade has a non-unit rate to the account base. Use a verified GBP-base Flex export or document the GBP conversions separately in the template.");
     if (r.CurrencyPrimary !== "GBP") {
       const d = details(supplied, "Check the exported rate and net cash against your statement. Add its reference and confirm the statement base currency is GBP.");
+      if (d.statementBaseCurrency !== "GBP")
+        throw new SupportingFieldError("statementBaseCurrency", "Check the account base currency on the statement. Only a GBP-base Flex export can supply a GBP conversion. For another base currency, use separately documented GBP rates in the template.");
       if (
         d.currency !== r.CurrencyPrimary ||
         d.isin !== r.ISIN ||

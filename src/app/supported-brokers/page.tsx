@@ -80,6 +80,16 @@ export default async function BrokerSupport({
   const { from } = await searchParams;
   const destination = safeReturnPath(typeof from === "string" ? from : undefined);
   const backToUpload = destination.split("?")[0] === "/dashboard/upload" ? destination : undefined;
+  function uploadFor(broker: string) {
+    const from = new URLSearchParams(backToUpload?.split("?")[1]);
+    const params = new URLSearchParams({ broker });
+    for (const key of ["year", "account"]) {
+      const value = from.get(key);
+      if (value) params.set(key, value);
+    }
+    return "/dashboard/upload?" + params;
+  }
+
   return (
     <>
       <Header backToUpload={backToUpload} />
@@ -111,6 +121,7 @@ export default async function BrokerSupport({
             formats may need contract notes. The examples use synthetic trades.
             Unknown records block saving. ISA and pension accounts are outside scope.
           </p>
+          <p className="mb-6 text-sm">CSV layouts checked on 19 November 2026. Open each broker’s accepted layouts and limits for the tested format.</p>
           <div className="broker-grid">
             {BROKERS.map((b) => (
               <article id={b.id} className="panel scroll-mt-20" key={b.id}>
@@ -134,6 +145,10 @@ export default async function BrokerSupport({
                     </a>
                   )}
                 </details>
+                <Link className="inline-block py-2 font-medium text-blue-700 underline"
+                  href={uploadFor(b.id)}>
+                  Upload a {b.name} CSV
+                </Link>
               </article>
             ))}
           </div>
@@ -158,7 +173,8 @@ export default async function BrokerSupport({
               For ordinary shares in taxable general investment accounts.
               Provide stable transaction IDs, valid ISINs, execution dates,
               quantities and explicit GBP exchange rates. Consideration is the
-              gross trade amount before fees; fees are entered separately.
+              positive gross trade amount before fees. Enter fees separately.
+              For an IBKR template, use ClientAccountID:TradeID from the statement.
             </p>
             <Link
               className="button secondary"
@@ -177,7 +193,10 @@ export default async function BrokerSupport({
               </p>
               <p>
                 CASH_DEPOSIT, CASH_WITHDRAWAL, CASH_DIVIDEND and CASH_INTEREST
-                are counted and excluded from share gains. Corporate actions,
+                are counted and excluded from share gains. On a cash row, leave
+                share quantity and dealing fees blank or zero. Only a dividend
+                can name its share. A nil-price trade needs its tax basis checked
+                before it can enter a completed calculation. Corporate actions,
                 transfers, reinvestments, funds, ETFs, derivatives, crypto and
                 pre-April-1982 transactions require additional handling. Do not
                 relabel them to force an import.

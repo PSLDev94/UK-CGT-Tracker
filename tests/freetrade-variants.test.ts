@@ -94,6 +94,18 @@ describe("Freetrade verified foreign fees and explicit renamed columns", () => {
     Object.assign(r[0]!, change);
     expect(reviewCsv(Papa.unparse(r), withEvidence).status).not.toBe("ready");
   });
+  it("shows both conflicting penny values and directs an immutable FX discrepancy to the source", () => {
+    for (const [column, value, message] of [
+      ["Price per Share in Account Currency", "10.0001", /£1000\.01.*£1000\.00.*contract note/],
+      ["FX Fee Amount", "4.49", /£4\.49.*£4\.50.*contract note/],
+    ] as const) {
+      const rows = foreign();
+      rows[0]![column] = value;
+      const record = reviewCsv(Papa.unparse(rows), withEvidence).records[0];
+      expect(record).toMatchObject({ status: "needs_review", canSupplyDetails: false });
+      expect(record?.reason).toMatch(message);
+    }
+  });
   it("requires evidence and rejects a fee-inclusive conversion or incorrect fees", () => {
     const source = Papa.unparse(foreign());
     expect(reviewCsv(source, options).status).toBe("needs_review");

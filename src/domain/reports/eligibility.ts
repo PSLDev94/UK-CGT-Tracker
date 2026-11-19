@@ -1,13 +1,44 @@
-import type { Calculation } from "../cgt/types";
+import { missingAcquisitionGuidance, type Calculation, type CalculationIssue } from "../cgt/types";
+import { TAX_YEARS, type TaxYear } from "../values";
 
 export interface ReportIssue {
   code:
+    | "REPORT_INCOMPLETE"
     | "REPORT_TOO_LARGE"
     | "REPORT_NEEDS_REFRESH"
     | "REPORT_UNAVAILABLE"
     | "NO_DISPOSALS"
     | "PENDING_IMPORTS";
   message: string;
+}
+
+const reportDate = new Intl.DateTimeFormat("en-GB", { dateStyle: "long", timeZone: "UTC" });
+
+export const scopeStatement = (result: Calculation) =>
+  result.scopeDeclaration === "personal-uk-resident-v1"
+    ? "The investor confirmed personal ownership in the same capacity and UK residence throughout the matching history, including later repurchases."
+    : "This calculation has no recorded ownership and UK residence declaration.";
+
+export function noDisposalsLabel(result: Calculation, coverageConfirmed: boolean) {
+  if (result.historyThrough < TAX_YEARS[result.taxYear as TaxYear].end)
+    return `No disposals through ${reportDate.format(new Date(result.historyThrough))}`;
+  return coverageConfirmed ? "No disposals in this tax year" : "No disposals in the included account history";
+}
+
+export const reportIssueMessage = (issue: CalculationIssue) =>
+  issue.code === "MISSING_ACQUISITION_HISTORY" ? missingAcquisitionGuidance : issue.message;
+
+export function purchaseIssue(result: Calculation, coverageConfirmed: boolean): ReportIssue | null {
+  if (!coverageConfirmed || result.status !== "complete" || !result.summary) {
+    const reason = result.issues[0] ? reportIssueMessage(result.issues[0])
+      : result.hasLaterSales ? "Your portfolio already includes sales after this cutoff. Extend the history date and recalculate."
+      : result.status === "provisional" ? `Extend the history through ${reportDate.format(new Date(result.requiredHistoryThrough))} to check later purchases, then recalculate.`
+      : "Confirm the complete account history for this year and recalculate.";
+    return { code: "REPORT_INCOMPLETE", message: `Only a draft is available for ${result.taxYear}. ${reason} The free CSV contains the available evidence.` };
+  }
+  if (!result.disposals.length)
+    return { code: "NO_DISPOSALS", message: `There are no saved disposals in ${result.taxYear}. Check the tax year or upload a file containing sales before buying a PDF.` };
+  return null;
 }
 
 export const EVIDENCE_LIMITS = { disposalGroups: 5000, references: 50000 };

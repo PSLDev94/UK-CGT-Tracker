@@ -1,4 +1,5 @@
 // Only workspace destinations can be resumed after authentication.
+import { BROKERS } from "../domain/imports/brokers";
 import { readDisposalLocation } from "./disposal-location";
 
 const destinations = new Set([
@@ -25,6 +26,8 @@ export function safeReturnPath(value?: string | null): string {
       return "/dashboard";
     const params = new URLSearchParams();
     for (const [key, val] of url.searchParams) {
+      if (key === "broker" && ["/dashboard/upload", "/dashboard/accounts"].includes(url.pathname) && BROKERS.some((broker) => broker.id === val))
+        params.set(key, val);
       if (key === "source" && (url.pathname === "/dashboard/calculations" || url.pathname === "/dashboard/history") && readDisposalLocation(val))
         params.set(key, val);
       if (url.pathname === "/dashboard/history" && (

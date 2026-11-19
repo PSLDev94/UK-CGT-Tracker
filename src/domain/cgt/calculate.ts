@@ -1,29 +1,57 @@
-import type Decimal from 'decimal.js'
-import { calendarDate, decimal, Money, plusDays, TAX_YEARS, type TaxYear } from '../values'
+import { ExactAmount } from './exact-amount'
+import { calendarDate, decimal, plusDays, TAX_YEARS, type TaxYear } from '../values'
 import type { Calculation, CalculationIssue, Disposal, Match, OpeningPool, PoolMovement, Trade } from './types'
 import { missingAcquisitionGuidance } from './types'
 
-export const ENGINE_VERSION = '2.0.0-alpha.3'
+export const ENGINE_VERSION = '2.0.0-alpha.4'
+
+function checkedAmount(value: string, label: string) {
+  decimal(value, label)
+  return ExactAmount.from(value)
+}
 
 interface DailySide {
-  quantity: Decimal
-  remaining: Decimal
-  value: Decimal
+  quantity: ExactAmount
+  remaining: ExactAmount
+  value: ExactAmount
   ids: string[]
 }
 interface Day {
   date: string
   buy: DailySide
   sell: DailySide
-  grossSales: Decimal
-  sellingCosts: Decimal
-  cost: Decimal
+  grossSales: ExactAmount
+  sellingCosts: ExactAmount
+  cost: ExactAmount
   matches: Match[]
+  holdingShortfall?: ExactAmount
 }
-const empty = (): DailySide => ({ quantity: new Money(0), remaining: new Money(0), value: new Money(0), ids: [] })
+const empty = (): DailySide => ({ quantity: ExactAmount.zero, remaining: ExactAmount.zero, value: ExactAmount.zero, ids: [] })
 
-function match(day: Day, buy: Day, quantity: Decimal, rule: 'SAME_DAY' | 'THIRTY_DAY') {
-  const cost = buy.buy.value.times(quantity).div(buy.buy.quantity)
+const modernRulesStart = '2008-04-06'
+
+/** A fully closed old holding cannot supply basis to the new one once the
+ * 30-day matching window has elapsed. Keep every other legacy sale for review. */
+function relevantDays(days: Day[], initialQuantity: ExactAmount, yearStart: string): Day[] {
+  let balance = initialQuantity
+  let needsHistoricBasis = false
+  let start = 0
+  for (const [index, day] of days.entries()) {
+    if (day.date >= yearStart) break
+    balance = balance.plus(day.buy.quantity).minus(day.sell.quantity)
+    if (balance.isNegative()) break
+    if (day.date < modernRulesStart && day.sell.quantity.isPositive()) needsHistoricBasis = true
+    const next = days[index + 1]
+    if (needsHistoricBasis && balance.isZero() && (!next || next.date > plusDays(day.date, 30))) {
+      start = index + 1
+      needsHistoricBasis = false
+    }
+  }
+  return start ? days.slice(start) : days
+}
+
+function match(day: Day, buy: Day, quantity: ExactAmount, rule: 'SAME_DAY' | 'THIRTY_DAY') {
+  const cost = buy.buy.value.portion(quantity, buy.buy.quantity)
   day.sell.remaining = day.sell.remaining.minus(quantity)
   buy.buy.remaining = buy.buy.remaining.minus(quantity)
   day.cost = day.cost.plus(cost)
@@ -75,16 +103,16 @@ export function calculateGains(
       throw new Error('Transactions overlap the opening pool')
     }
     if (trade.side !== 'BUY' && trade.side !== 'SELL') throw new Error('Unsupported transaction type')
-    const quantity = decimal(trade.quantity, 'Quantity')
-    if (!quantity.gt(0)) throw new Error('Quantity must be greater than zero')
-    const amount = decimal(trade.considerationGBP, 'Consideration')
-    const fees = decimal(trade.feesGBP, 'Fees')
+    const quantity = checkedAmount(trade.quantity, 'Quantity')
+    if (!quantity.isPositive()) throw new Error('Quantity must be greater than zero')
+    const amount = checkedAmount(trade.considerationGBP, 'Consideration')
+    const fees = checkedAmount(trade.feesGBP, 'Fees')
     // A sale can have negative net proceeds when disposal fees exceed proceeds.
     const value = trade.side === 'BUY' ? amount.plus(fees) : amount.minus(fees)
     if (!groups.has(trade.securityId)) groups.set(trade.securityId, new Map())
     const days = groups.get(trade.securityId)!
     if (!days.has(trade.date)) days.set(trade.date, {
-      date: trade.date, buy: empty(), sell: empty(), grossSales: new Money(0), sellingCosts: new Money(0), cost: new Money(0), matches: [],
+      date: trade.date, buy: empty(), sell: empty(), grossSales: ExactAmount.zero, sellingCosts: ExactAmount.zero, cost: ExactAmount.zero, matches: [],
     })
     const day = days.get(trade.date)!
     const side = trade.side === 'BUY' ? day.buy : day.sell
@@ -102,36 +130,47 @@ export function calculateGains(
   const issues: CalculationIssue[] = []
   const pools: Calculation['pools'] = []
   const poolMovements: PoolMovement[] = []
-  let annualProceeds = new Money(0)
-  let annualCosts = new Money(0)
-  let annualGains = new Money(0)
-  let annualLosses = new Money(0)
-  let reportedGrossSales = new Money(0)
-  let reportedSellingCosts = new Money(0)
-  let reportedProceedsAdjustment = new Money(0)
+  let annualProceeds = ExactAmount.zero
+  let annualCosts = ExactAmount.zero
+  let annualGains = ExactAmount.zero
+  let annualLosses = ExactAmount.zero
+  let reportedGrossSales = ExactAmount.zero
+  let reportedSellingCosts = ExactAmount.zero
+  let reportedProceedsAdjustment = ExactAmount.zero
   for (const [securityId, dayMap] of [...groups].sort(([a], [b]) => a.localeCompare(b))) {
-    const days = [...dayMap.values()].sort((a, b) => a.date.localeCompare(b.date))
+    const initial = opening.get(securityId)
+    const initialQuantity = ExactAmount.from(initial?.quantity ?? '0')
+    const days = relevantDays([...dayMap.values()].sort((a, b) => a.date.localeCompare(b.date)), initialQuantity, year.start)
+    const openingApplies = days.length === dayMap.size && initial
+    let held = openingApplies ? initialQuantity : ExactAmount.zero
+    let futureShortfall: {date: string; quantity: ExactAmount} | undefined
     for (const day of days) {
+      held = held.plus(day.buy.quantity).minus(day.sell.quantity)
+      if (held.isNegative()) {
+        day.holdingShortfall = held.negated()
+        if (day.date > cutoff && !futureShortfall)
+          futureShortfall = {date: day.date, quantity: day.holdingShortfall}
+      }
       day.buy.ids.sort()
       day.sell.ids.sort()
-      const quantity = Money.min(day.buy.quantity, day.sell.quantity)
-      if (quantity.gt(0)) match(day, day, quantity, 'SAME_DAY')
+      const quantity = ExactAmount.min(day.buy.quantity, day.sell.quantity)
+      if (quantity.isPositive()) match(day, day, quantity, 'SAME_DAY')
     }
     for (let index = 0; index < days.length; index++) {
       const day = days[index]!
       const end = plusDays(day.date, 30)
-      for (let next = index + 1; day.sell.remaining.gt(0) && next < days.length; next++) {
+      for (let next = index + 1; day.sell.remaining.isPositive() && next < days.length; next++) {
         const buy = days[next]!
         if (buy.date > end) break
-        const quantity = Money.min(day.sell.remaining, buy.buy.remaining)
-        if (quantity.gt(0)) match(day, buy, quantity, 'THIRTY_DAY')
+        const quantity = ExactAmount.min(day.sell.remaining, buy.buy.remaining)
+        if (quantity.isPositive()) match(day, buy, quantity, 'THIRTY_DAY')
       }
     }
 
-    const initial = opening.get(securityId)
-    let quantity = new Money(initial?.quantity ?? 0)
-    let cost = new Money(initial?.costGBP ?? 0)
-    function movement(date: string, kind: PoolMovement['kind'], quantityChange: Decimal, costChange: Decimal, sourceIds: string[]) {
+    let quantity = openingApplies ? initialQuantity : ExactAmount.zero
+    let basisUnavailable = false
+    let cost = openingApplies ? ExactAmount.from(openingApplies.costGBP) : ExactAmount.zero
+    function movement(date: string, kind: PoolMovement['kind'], quantityChange: ExactAmount, costChange: ExactAmount, sourceIds: string[]) {
       poolMovements.push({
         securityId, date, kind, sourceIds,
         quantityChange: quantityChange.toString(),
@@ -140,42 +179,65 @@ export function calculateGains(
         costAfterGBP: cost.toString(),
       })
     }
-    if (initial) movement(initial.asOf, 'opening', quantity, cost, [])
+    if (openingApplies) movement(openingApplies.asOf, 'opening', quantity, cost, [])
     // Pool state is at the requested tax-year end (or history cutoff), never
     // accidentally at the end of all supplied future transactions.
     for (const day of days.filter(day => day.date <= cutoff)) {
-      if (day.buy.remaining.gt(0)) {
-        const addedCost = day.buy.value.times(day.buy.remaining).div(day.buy.quantity)
+      if (!basisUnavailable && day.sell.quantity.isPositive() && day.date < modernRulesStart) {
+        basisUnavailable = true
+        issues.push({
+          code: 'HISTORICAL_SHARE_MATCHING', securityId, date: day.date, quantity: day.sell.quantity.toString(),
+          message: 'This holding has a disposal before 6 April 2008. Ask support to record a professionally reviewed opening position before completing this year.',
+        })
+      }
+      if (!basisUnavailable && day.buy.remaining.isPositive()) {
+        const addedCost = day.buy.value.portion(day.buy.remaining, day.buy.quantity)
         cost = cost.plus(addedCost)
         quantity = quantity.plus(day.buy.remaining)
         movement(day.date, 'acquisition', day.buy.remaining, addedCost, day.buy.ids)
       }
       if (day.sell.quantity.isZero()) continue
-      const pooled = Money.min(quantity, day.sell.remaining)
-      if (pooled.gt(0)) {
-        const pooledCost = pooled.eq(quantity) ? cost : cost.times(pooled).div(quantity)
+      // A repurchase within 30 days can identify the tax cost of a disposal,
+      // but cannot establish that the investor already owned the shares sold.
+      const shortage = day.sell.remaining.minus(quantity)
+      const unmatched = shortage.isPositive()
+      if (!basisUnavailable && (day.holdingShortfall || unmatched)) {
+        basisUnavailable = true
+        issues.push({
+          code: unmatched ? 'MISSING_ACQUISITION_HISTORY' : 'UNEVIDENCED_HOLDING',
+          securityId, date: day.date,
+          quantity: (day.holdingShortfall ?? shortage).toString(),
+          message: unmatched ? missingAcquisitionGuidance : 'The recorded sale exceeds the shares held on that date. Add the earlier holding history or seek specialist review if this was a short sale.',
+        })
+      }
+      const gap = futureShortfall
+      if (!basisUnavailable && gap && day.matches.some(m => m.rule === 'THIRTY_DAY' && m.acquisitionDate! >= gap.date)) {
+        basisUnavailable = true
+        issues.push({
+          code: 'UNEVIDENCED_HOLDING', securityId, date: gap.date, quantity: gap.quantity.toString(),
+          message: 'The 30-day match uses a repurchase after the recorded holding went below zero. Add the missing history or ask support for a specialist review.',
+        })
+      }
+      const pooled = ExactAmount.min(quantity, day.sell.remaining)
+      if (!basisUnavailable && pooled.isPositive()) {
+        const pooledCost = cost.portion(pooled, quantity)
         quantity = quantity.minus(pooled)
         cost = cost.minus(pooledCost)
-        movement(day.date, 'disposal', pooled.neg(), pooledCost.neg(), day.sell.ids)
+        movement(day.date, 'disposal', pooled.negated(), pooledCost.negated(), day.sell.ids)
         day.sell.remaining = day.sell.remaining.minus(pooled)
         day.cost = day.cost.plus(pooledCost)
         day.matches.push({ rule: 'SECTION_104', quantity: pooled.toString(), costGBP: pooledCost.toString() })
       }
-      const missing = day.sell.remaining.gt(0)
-      if (missing) issues.push({
-        code: 'MISSING_ACQUISITION_HISTORY', securityId, date: day.date,
-        quantity: day.sell.remaining.toString(),
-        message: missingAcquisitionGuidance,
-      })
+      const missing = basisUnavailable
       if (day.date < year.start) continue
       const exactGain = day.sell.value.minus(day.cost)
       annualProceeds = annualProceeds.plus(day.sell.value)
       annualCosts = annualCosts.plus(day.cost)
-      if (exactGain.isNegative()) annualLosses = annualLosses.plus(exactGain.abs())
+      if (exactGain.isNegative()) annualLosses = annualLosses.plus(exactGain.negated())
       else annualGains = annualGains.plus(exactGain)
-      const gross = day.grossSales.toDP(2)
-      const sellingCosts = day.sellingCosts.toDP(2)
-      const proceedsAdjustment = day.sell.value.toDP(2).minus(gross.minus(sellingCosts))
+      const gross = day.grossSales.toPence()
+      const sellingCosts = day.sellingCosts.toPence()
+      const proceedsAdjustment = day.sell.value.toPence().minus(gross.minus(sellingCosts))
       reportedGrossSales = reportedGrossSales.plus(gross)
       reportedSellingCosts = reportedSellingCosts.plus(sellingCosts)
       reportedProceedsAdjustment = reportedProceedsAdjustment.plus(proceedsAdjustment)
@@ -184,19 +246,19 @@ export function calculateGains(
         proceedsGBP: day.sell.value.toFixed(2), allowableCostGBP: missing ? null : day.cost.toFixed(2),
         saleBreakdown: {
           grossProceedsGBP: gross.toFixed(2), sellingCostsGBP: sellingCosts.toFixed(2),
-          totalAllowableCostsGBP: missing ? null : day.cost.toDP(2).plus(sellingCosts).toFixed(2),
+          totalAllowableCostsGBP: missing ? null : day.cost.toPence().plus(sellingCosts).toFixed(2),
           proceedsRoundingAdjustmentGBP: proceedsAdjustment.toFixed(2),
         },
-        gainGBP: missing ? null : day.sell.value.toDP(2).minus(day.cost.toDP(2)).toFixed(2),
-        unmatchedQuantity: day.sell.remaining.toString(), matches: day.matches,
+        gainGBP: missing ? null : day.sell.value.toPence().minus(day.cost.toPence()).toFixed(2),
+        unmatchedQuantity: missing ? day.sell.quantity.toString() : '0', matches: missing ? [] : day.matches,
       })
     }
-    if (quantity.gt(0)) pools.push({ securityId, quantity: quantity.toString(), costGBP: cost.toString() })
+    if (!basisUnavailable && quantity.isPositive()) pools.push({ securityId, quantity: quantity.toString(), costGBP: cost.toString() })
   }
   disposals.sort((a, b) => a.date.localeCompare(b.date) || a.securityId.localeCompare(b.securityId))
-  const sum = (values: string[]) => values.reduce((a, b) => a.plus(b), new Money(0))
-  const gains = sum(disposals.filter(d => new Money(d.gainGBP ?? 0).gt(0)).map(d => d.gainGBP!))
-  const losses = sum(disposals.filter(d => new Money(d.gainGBP ?? 0).lt(0)).map(d => d.gainGBP!)).abs()
+  const sum = (values: string[]) => values.reduce((a, b) => a.plus(ExactAmount.from(b)), ExactAmount.zero)
+  const gains = sum(disposals.filter(d => ExactAmount.from(d.gainGBP ?? '0').isPositive()).map(d => d.gainGBP!))
+  const losses = sum(disposals.filter(d => ExactAmount.from(d.gainGBP ?? '0').isNegative()).map(d => d.gainGBP!)).negated()
   const reportedAcquisitionCosts = sum(disposals.map(d => d.allowableCostGBP ?? '0'))
   return {
     engineVersion: ENGINE_VERSION, taxYear: options.taxYear, historyThrough, requiredHistoryThrough,
