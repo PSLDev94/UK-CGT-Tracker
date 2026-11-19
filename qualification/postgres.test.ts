@@ -230,6 +230,21 @@ describe('PostgreSQL 18 deployment qualification',()=> {
     expect(await query(app,'SELECT * FROM cgt.broker_accounts')).toEqual([])
   })
 
+  it('allocates the final session check in a shared window once across concurrent PostgreSQL requests', async()=>{
+    const origin='http://localhost:3000', header='x-test-client-ip';
+    const auth=createAuth(authDb,{origin,secret:randomBytes(32).toString('base64url'),secureCookies:false,clientIpHeader:header},async()=>{});
+    const read=()=>auth.handler(new Request(origin+'/api/v2/auth/get-session',{headers:{[header]:'198.51.100.12'}}));
+    const known=await owner.query("SELECT key FROM auth.\"rateLimit\" WHERE key LIKE 'session-read:%'");
+    expect((await read()).status).toBe(200);
+    const key=(await owner.query("SELECT key FROM auth.\"rateLimit\" WHERE key LIKE 'session-read:%' AND NOT (key=ANY($1::text[]))",[known.rows.map(r=>r.key)])).rows[0].key;
+    await owner.query('UPDATE auth."rateLimit" SET count=59 WHERE key=$1',[key]);
+    const results=await Promise.all([read(),read()]);
+    expect(results.map(r=>r.status).sort()).toEqual([200,429]);
+    expect(Number(results.find(r=>r.status===429)?.headers.get('retry-after'))).toBeGreaterThan(0);
+    await owner.query('UPDATE auth."rateLimit" SET "lastRequest"="lastRequest"-60001 WHERE key=$1',[key]);
+    expect((await read()).status).toBe(200);
+  })
+
   it('completes verification and session revocation using the restricted auth login', async()=> {
     const inbox: AuthMail[]=[]
     const origin='http://localhost:3301'

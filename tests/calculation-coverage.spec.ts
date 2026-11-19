@@ -506,6 +506,49 @@ test("older calculation rules explain why the same portfolio must be recalculate
   await expect(previous).not.toContainText("changed history");
 });
 
+test("a delayed session on the Stripe return resumes the selected paid PDF and focus", async ({ page }) => {
+  await workspace(page, [purchase, sale], true);
+  let ready = false;
+  await page.route("**/api/v2/auth/get-session", route => route.fulfill(ready
+    ? { json: { user: { name: "Test investor" }, session: { id: "paid-review" } } }
+    : { status: 429, headers: { "X-Retry-After": "2" }, json: {} }));
+  await page.route("**/api/v2/billing", route => route.fulfill({
+    json: { entitled: true, status: "active", canManage: true, testMode: true },
+  }));
+  const target = "/dashboard/reports?year=2024-25&format=evidence&checkout=returned";
+  await page.goto(target);
+  await expect(page.getByRole("status")).toContainText("check your session again in 2 seconds");
+  ready = true;
+  const evidence = page.locator("#report-evidence");
+  await expect(evidence.getByRole("button", { name: "Download evidence PDF" })).toBeEnabled();
+  await expect(evidence).toBeFocused();
+  expect(new URL(page.url()).pathname + new URL(page.url()).search).toBe(target);
+});
+
+test("repeated session throttling stops at manual recovery on the requested workspace year", async ({ page }) => {
+  await workspace(page, [purchase, sale], true);
+  let ready = false;
+  let checks = 0;
+  await page.clock.install();
+  await page.route("**/api/v2/auth/get-session", route => {
+    checks++;
+    return route.fulfill(ready
+      ? { json: { user: { name: "Test investor" } } }
+      : { status: 429, headers: { "Retry-After": "2" }, json: {} });
+  });
+  await page.goto("/dashboard/calculations?year=2024-25");
+  await expect(page.getByRole("status")).toContainText("check your session again in 2 seconds");
+  await page.clock.fastForward(2200);
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("Try again in 2 seconds");
+  const taken = checks;
+  await page.clock.fastForward(65000);
+  expect(checks).toBe(taken);
+  ready = true;
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByLabel("Tax year", { exact: true })).toHaveValue("2024-25");
+  expect(checks).toBe(taken + 1);
+});
+
 test("a rate-limited checkout return explains when to retry and restores the selected paid PDF", async ({
   page,
 }) => {

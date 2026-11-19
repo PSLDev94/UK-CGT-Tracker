@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { WorkspaceEntry } from "./workspace-entry";
 import { useRouter } from "next/navigation";
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
-import { authApi } from "./api";
+import { authApi, readWorkspaceSession } from "./api";
 import { Notice, Button } from "./primitives";
 type Session = {
   user: { name: string; email: string };
@@ -24,25 +24,24 @@ export function DashboardShell({
   const [session, setSession] = useState<Session | null>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [sessionAttempt, setSessionAttempt] = useState(0);
+  const [sessionWait, setSessionWait] = useState("");
   function load() {
     setError("");
-    authApi<Session | null>("get-session")
-      .then(setSession)
-      .catch((e) => setError(e.message));
+    setSessionWait("");
+    setSessionAttempt(attempt => attempt + 1);
   }
   useEffect(() => {
-    let active = true;
-    authApi<Session | null>("get-session")
+    const controller = new AbortController();
+    readWorkspaceSession<Session | null>(controller.signal, setSessionWait)
       .then((s) => {
-        if (active) setSession(s);
+        if (!controller.signal.aborted) setSession(s);
       })
       .catch((e) => {
-        if (active) setError(e.message);
+        if (!controller.signal.aborted) setError(e.message);
       });
-    return () => {
-      active = false;
-    };
-  }, []);
+    return () => controller.abort();
+  }, [sessionAttempt]);
   async function signOut() {
     if (busy) return;
     setBusy(true);
@@ -72,7 +71,7 @@ export function DashboardShell({
             <Button onClick={load}>Try again</Button>
           </section>
         ) : (
-          <Notice>Loading your workspace…</Notice>
+          <Notice>{sessionWait || "Loading your workspace…"}</Notice>
         )}
       </main>
     );
@@ -94,6 +93,8 @@ export function DashboardShell({
             <Notice tone="error">{error}</Notice>
             <Button onClick={load}>Try again</Button>
           </section>
+        ) : sessionWait ? (
+          <Notice>{sessionWait}</Notice>
         ) : typeof children === "function" ? (
           children(session.user, session.session?.id, (name) => setSession((current) => current && ({ ...current, user: { ...current.user, name } })))
         ) : (

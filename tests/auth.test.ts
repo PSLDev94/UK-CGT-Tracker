@@ -101,6 +101,33 @@ describe('real Better Auth handlers with PostgreSQL and captured email', () => {
     expect((await request('/request-password-reset', { email: 'session@example.test', redirectTo: 'https://untrusted.example' })).status).toBe(403)
   })
 
+  it('bounds session reads in fixed windows, reports retry seconds and keeps sign-in limits separate', async () => {
+    const ip = '198.51.100.183'
+    const readSession = () => request('/get-session', undefined, undefined, ip)
+    const rows = () => query<{key:string; count:number; start:string}>(database.db,
+      'SELECT key,count,"lastRequest"::text AS start FROM auth."rateLimit" WHERE key LIKE $1', ['session-read:%'])
+    const existing = new Set((await rows()).map(row => row.key))
+    expect((await readSession()).status).toBe(200)
+    const quota = (await rows()).find(row => !existing.has(row.key))!
+    expect(quota.count).toBe(1)
+    expect(quota.key.includes(ip)).toBe(false)
+    // Simulate other users' session checks from this same ingress during this window.
+    await query(database.db,'UPDATE auth."rateLimit" SET count=59 WHERE key=$1',[quota.key])
+    expect((await readSession()).status).toBe(200)
+    const limited = await readSession()
+    expect(limited.status).toBe(429)
+    const retry = Number(limited.headers.get('retry-after'))
+    expect(retry).toBeGreaterThan(0)
+    expect(retry).toBeLessThanOrEqual(60)
+    expect(limited.headers.get('x-retry-after')).toBe(String(retry))
+    expect((await rows()).find(row=>row.key===quota.key)?.start).toBe(quota.start)
+    expect((await request('/sign-in/email',{email:'unknown@example.test',password},undefined,ip)).status).toBe(401)
+    // Repeated recent reads do not extend the window; only the original start matters.
+    await query(database.db,'UPDATE auth."rateLimit" SET "lastRequest"="lastRequest"-61000 WHERE key=$1',[quota.key])
+    expect((await readSession()).status).toBe(200)
+    expect((await rows()).find(row=>row.key===quota.key)?.count).toBe(1)
+  })
+
   it('enforces database-backed authentication rate limits', async () => {
     const ip = '198.51.100.15'
     const statuses: number[] = []

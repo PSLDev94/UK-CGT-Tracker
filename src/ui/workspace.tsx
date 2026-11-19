@@ -29,7 +29,7 @@ import {
   plusDays,
   type TaxYear,
 } from "../domain/values";
-import { authApi, workspaceApi, ApiError } from "./api";
+import { authApi, readWorkspaceSession, workspaceApi, ApiError } from "./api";
 import {
   Button,
   Field,
@@ -136,6 +136,8 @@ function WorkspaceBody({
   const [previewAttempt, setPreviewAttempt] = useState(0);
   const savedDraft = data?.drafts.find((draft) => draft.id === requestedDraft);
   const [loading, setLoading] = useState(true);
+  const [sessionWait, setSessionWait] = useState("");
+  const [sessionAttempt, setSessionAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const reloadGeneration = useRef(0);
@@ -209,44 +211,50 @@ function WorkspaceBody({
     requestAnimationFrame(() => messageRef.current?.focus());
   }, []);
 
-  const reload = useCallback(async (receiptId = savedImportId) => {
+  const reload = useCallback(async (receiptId = savedImportId, signal?: AbortSignal) => {
     const generation = ++reloadGeneration.current;
     const [overview, imports] = await Promise.all([
-      workspaceApi<Overview>({ action: "overview", surface: view, ...(receiptId && { receiptId }) }),
-      view === "history" ? workspaceApi<History>({ action: "import-history", page: historyPage.current }) : null,
+      workspaceApi<Overview>({ action: "overview", surface: view, ...(receiptId && { receiptId }) }, signal),
+      view === "history" ? workspaceApi<History>({ action: "import-history", page: historyPage.current }, signal) : null,
     ]);
-    if (generation === reloadGeneration.current) {
+    if (!signal?.aborted && generation === reloadGeneration.current) {
       setData(overview);
       setHistory(imports);
     }
   }, [view, savedImportId]);
 
-  const initialise = useCallback(() => {
-    return authApi<{ user: { name: string } } | null>("get-session")
+  function retryWorkspace() {
+    setError("");
+    setSessionWait("");
+    setLoading(true);
+    setSessionAttempt(attempt => attempt + 1);
+  }
+  useEffect(() => {
+    const controller = new AbortController();
+    const { signal } = controller;
+    readWorkspaceSession<{ user: { name: string } } | null>(signal, setSessionWait)
       .then(async (session) => {
+        if (signal.aborted) return;
         if (!session) {
           setAuthRequired(true);
           return;
         }
         setUserName(session.user.name);
         setAuthRequired(false);
-        await reload();
+        await reload(undefined, signal);
       })
-      .catch(fail)
-      .finally(() => setLoading(false));
-  }, [fail, reload]);
-
-  useEffect(() => {
-    void initialise();
-  }, [initialise]);
+      .catch(error => { if (!signal.aborted) fail(error); })
+      .finally(() => { if (!signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [sessionAttempt, fail, reload]);
   useEffect(() => {
     const refresh = () => {
-      if (document.visibilityState === "visible" && !busyRef.current)
+      if (userName !== null && !loading && document.visibilityState === "visible" && !busyRef.current)
         void reload().catch(fail);
     };
     document.addEventListener("visibilitychange", refresh);
     return () => document.removeEventListener("visibilitychange", refresh);
-  }, [reload, fail]);
+  }, [reload, fail, userName, loading]);
   useEffect(() => {
     if (
       !requestedDraft ||
@@ -475,11 +483,11 @@ function WorkspaceBody({
   if (userName === null) {
     return (
       <main id="main" className="classic-auth">
-        {loading ? <Notice>Loading your workspace…</Notice> : (
+        {loading ? <Notice>{sessionWait || "Loading your workspace…"}</Notice> : (
           <section className="auth-wrap panel">
             <h1>Your workspace couldn’t be loaded</h1>
             {error && <Notice tone="error">{error}</Notice>}
-            <Button onClick={() => { setLoading(true); setError(""); void initialise(); }}>Try again</Button>
+            <Button onClick={retryWorkspace}>Try again</Button>
           </section>
         )}
       </main>
@@ -522,17 +530,13 @@ function WorkspaceBody({
           {message && <Notice tone="success">{message}</Notice>}
         </div>
         {loading ? (
-          <Notice>Loading your workspace…</Notice>
+          <Notice>{sessionWait || "Loading your workspace…"}</Notice>
         ) : !data ? (
           <section className="panel">
             <h2>Your workspace couldn’t be loaded</h2>
             <Button
               variant="secondary"
-              onClick={() => {
-                setLoading(true);
-                setError("");
-                void initialise();
-              }}
+              onClick={retryWorkspace}
             >
               Try again
             </Button>

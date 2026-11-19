@@ -834,11 +834,26 @@ test("session expiry and setup failures leave recoverable pages", async ({
     page.getByRole("heading", { name: "Your workspace couldn’t be loaded" }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Try again" })).toBeEnabled();
-  await page.route("**/api/v2/auth/**", (route) =>
-    route.fulfill({ status: 429, headers: { "Retry-After": "12" }, json: {} }),
-  );
-  await page.getByRole("button", { name: "Try again" }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "Try again in 12 seconds" })).toBeVisible();
+  await page.clock.install();
+  let checks = 0;
+  await page.route("**/api/v2/auth/get-session", route => {
+    checks++;
+    return checks <= 2
+      ? route.fulfill({ status: 429, headers: { "Retry-After": "12" }, json: {} })
+      : route.fulfill({ contentType: "application/json", body: "null" });
+  });
+  const main = page.getByRole("main");
+  await main.getByRole("button", { name: "Try again" }).click();
+  await expect(main.getByRole("status")).toContainText("check your session again in 12 seconds");
+  expect(checks).toBe(1);
+  await page.clock.fastForward(12001);
+  await expect(main.getByRole("alert")).toContainText("Try again in 12 seconds");
+  expect(checks).toBe(2);
+  await page.clock.fastForward(60000);
+  expect(checks).toBe(2);
+  await main.getByRole("button", { name: "Try again" }).click();
+  await expect(main.getByRole("heading", { name: "Sign in to your workspace." })).toBeVisible();
+  expect(checks).toBe(3);
   await expect(page.getByText("Staging configuration is still being completed.", {exact:false})).toHaveCount(0);
 });
 

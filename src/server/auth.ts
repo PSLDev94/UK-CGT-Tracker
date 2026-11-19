@@ -1,6 +1,8 @@
 import { recordJourney } from "./journey";
 import { betterAuth, type BetterAuthOptions } from 'better-auth'
-import type { Database } from './database'
+import { getIP } from 'better-auth/api'
+import { createHmac } from 'node:crypto'
+import { query, type Database } from './database'
 
 export interface AuthConfig {
   origin: string
@@ -12,12 +14,40 @@ export interface AuthConfig {
 export type AuthMail = { to: string; kind: 'verification' | 'password-reset'; url: string }
 export type SendAuthMail = (message: AuthMail) => Promise<void>
 
+const sessionReadMaximum = 60
+const sessionWindowMs = 60_000
+const isSessionRead = (request: Request) =>
+  request.method === 'GET' && new URL(request.url).pathname === '/api/v2/auth/get-session'
+
+// Better Auth's default counts from the last request. For this read endpoint
+// an active shared network needs a fixed window even while navigation continues.
+async function consumeSessionRead(db: Database, key: string) {
+  const [window] = await query<{ count: number; seconds: number }>(db, `
+    INSERT INTO auth."rateLimit" AS quota(id,key,count,"lastRequest")
+    VALUES($1,$1,1,floor(extract(epoch FROM statement_timestamp())*1000)::bigint)
+    ON CONFLICT(key) DO UPDATE SET
+      count=CASE WHEN excluded."lastRequest" >= quota."lastRequest"+$2::bigint
+        THEN 1 ELSE least(quota.count+1,$3::int+1) END,
+      "lastRequest"=CASE WHEN excluded."lastRequest" >= quota."lastRequest"+$2::bigint
+        THEN excluded."lastRequest" ELSE quota."lastRequest" END
+    RETURNING count,greatest(1,ceil(("lastRequest"+$2::bigint-extract(epoch FROM clock_timestamp())*1000)/1000))::int AS seconds`,
+    [key, sessionWindowMs, sessionReadMaximum])
+  if (!window) throw new Error('Session read quota unavailable')
+  if (window.count > sessionReadMaximum) {
+    const seconds = String(Math.min(60, window.seconds))
+    return Response.json({message: 'Too many session checks. Please try again shortly.'}, {
+      status: 429, headers: {'Retry-After': seconds, 'X-Retry-After': seconds, 'Cache-Control': 'private, no-store'},
+    })
+  }
+}
+
 /** Injectable mail transport keeps verification/reset tests off the real email service. */
 export function authOptions(db: Database, config: AuthConfig, sendMail: SendAuthMail): BetterAuthOptions {
   const origin = new URL(config.origin)
   if (origin.origin !== config.origin || config.secret.length < 32 || (config.secureCookies && origin.protocol !== 'https:')) {
     throw new Error('Invalid authentication origin or secret configuration')
   }
+  const ipAddress = { ipAddressHeaders: [config.clientIpHeader] }
   return {
     appName: 'CGT Tracker',
     baseURL: config.origin,
@@ -51,12 +81,23 @@ export function authOptions(db: Database, config: AuthConfig, sendMail: SendAuth
       // Always consult persisted sessions; revocation takes effect immediately.
       cookieCache: { enabled: false },
     },
+    plugins: [{
+      id: 'bounded-session-reads',
+      async onRequest(request) {
+        if (!isSessionRead(request)) return
+        const address = getIP(request, {advanced: {ipAddress}}) ?? 'unknown-ingress'
+        const key = 'session-read:' + createHmac('sha256', config.secret).update(address).digest('hex')
+        const response = await consumeSessionRead(db, key)
+        if (response) return {response}
+      },
+    }],
     rateLimit: {
       enabled: true,
       storage: 'database',
       window: 60,
       max: 60,
       customRules: {
+        '/get-session': (request, standardRule) => isSessionRead(request) ? false : standardRule,
         '/sign-in/email': { window: 60, max: 5 },
         '/sign-up/email': { window: 60, max: 3 },
         '/request-password-reset': { window: 60, max: 3 },
@@ -69,7 +110,7 @@ export function authOptions(db: Database, config: AuthConfig, sendMail: SendAuth
       disableOriginCheck: false,
       useSecureCookies: config.secureCookies,
       cookiePrefix: 'cgt',
-      ipAddress: { ipAddressHeaders: [config.clientIpHeader] },
+      ipAddress,
       defaultCookieAttributes: { httpOnly: true, sameSite: 'lax', path: '/' },
     },
     user: { deleteUser: { enabled: false }, changeEmail: { enabled: false } },
