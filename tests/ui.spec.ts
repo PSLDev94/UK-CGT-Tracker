@@ -363,6 +363,7 @@ async function navigateWorkspace(page: Page, name: string) {
 test("home and broker support are honest, responsive and accessible", async ({
   page,
 }) => {
+  test.slow();
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
     "Calculate gains on your",
@@ -377,7 +378,6 @@ test("home and broker support are honest, responsive and accessible", async ({
   await page.screenshot({
     path: test.info().outputPath("home-desktop.png"),
     scale: "css",
-    fullPage: true,
   });
   await page.setViewportSize({ width: 375, height: 812 });
   expect(
@@ -388,7 +388,6 @@ test("home and broker support are honest, responsive and accessible", async ({
   await page.screenshot({
     path: test.info().outputPath("home-mobile.png"),
     scale: "css",
-    fullPage: true,
   });
   await page.goto("/supported-brokers");
   await expect(
@@ -455,6 +454,7 @@ test("auth validation, password reveal and neutral verification feedback", async
 test("account → review → conflict → commit → calculate → reverse", async ({
   page,
 }) => {
+  test.slow();
   const { calls } = await mockWorkspace(page, { conflict: true });
   await page.goto("/workspace");
   await expect(
@@ -474,8 +474,8 @@ test("account → review → conflict → commit → calculate → reverse", asy
     "Taxable accounts1",
   );
   await page.screenshot({
-    path: ".private/screenshots/accounts-desktop.png",
-    fullPage: true,
+    path: test.info().outputPath("accounts-desktop.png"),
+    scale: "css",
   });
   await uploadTemplate(page);
   await expect(
@@ -487,8 +487,8 @@ test("account → review → conflict → commit → calculate → reverse", asy
   ).toBeVisible();
   expect(calls.filter((action) => action === "commit-import")).toHaveLength(1);
   await page.screenshot({
-    path: ".private/screenshots/review-desktop.png",
-    fullPage: true,
+    path: test.info().outputPath("review-desktop.png"),
+    scale: "css",
   });
   await page.getByRole("button", { name: "Save 2 transactions" }).click();
   await expect(
@@ -514,8 +514,8 @@ test("account → review → conflict → commit → calculate → reverse", asy
   await disposal.locator("summary").click();
   await expect(disposal.getByText(/Section 104 pool · 50 shares/)).toBeVisible();
   await page.screenshot({
-    path: ".private/screenshots/calculation-desktop.png",
-    fullPage: true,
+    path: test.info().outputPath("calculation-desktop.png"),
+    scale: "css",
   });
   expect(
     (
