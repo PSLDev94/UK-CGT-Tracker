@@ -463,6 +463,23 @@ test("Reports keeps year-specific recovery after an import on another device and
   await expect(page.getByLabel("Tax year")).toHaveValue("2025-26");
 });
 
+test("older calculation rules explain why the same portfolio must be recalculated", async ({ page }) => {
+  const { state } = await workspace(page, [purchase, sale], true);
+  state.calculations = [];
+  state.staleReportYears = ["2024-25"];
+  state.previousCalculationInputs = [{ taxYear: "2024-25", historyThrough: cutoff,
+    confirmedAccountIds: [account.id], recoveryReason: "rules" }];
+  await page.goto("/dashboard/reports?year=2024-25");
+  const recovery = page.getByRole("region", { name: "Reports to recalculate" });
+  await expect(recovery).toContainText("The calculation rules have changed");
+  await expect(recovery).not.toContainText("Your portfolio has changed");
+  await recovery.getByRole("link", { name: "Recalculate 2024-25" }).click();
+  const previous = page.getByRole("region", { name: "Previous calculation settings" });
+  await expect(previous).toContainText("The calculation rules have changed");
+  await expect(previous).toContainText("Review the saved date and confirm coverage");
+  await expect(previous).not.toContainText("changed history");
+});
+
 test("a rate-limited checkout return explains when to retry and restores the selected paid PDF", async ({
   page,
 }) => {

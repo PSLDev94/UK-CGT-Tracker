@@ -408,7 +408,7 @@ describe("authenticated PostgreSQL application workflow", () => {
     expect(stale.calculations).toEqual([]);
     expect(stale.staleReportYears).toEqual(years);
     expect(stale.previousCalculationInputs).toEqual(years.map((taxYear) => ({
-      taxYear, historyThrough: input.historyThrough, confirmedAccountIds: [s.account.id],
+      taxYear, historyThrough: input.historyThrough, confirmedAccountIds: [s.account.id], recoveryReason: "portfolio",
     })));
     for (const runId of oldIds) {
       await expect(otherDevice.reportSnapshot(s.user, runId)).rejects.toMatchObject({ code: "REPORT_UNAVAILABLE" });
@@ -424,7 +424,7 @@ describe("authenticated PostgreSQL application workflow", () => {
     const refreshed = await workspace.overview(s.user);
     expect(refreshed.staleReportYears).toEqual(["2025-26"]);
     expect(refreshed.previousCalculationInputs).toEqual([
-      { taxYear: "2025-26", historyThrough: input.historyThrough, confirmedAccountIds: [s.account.id] },
+      { taxYear: "2025-26", historyThrough: input.historyThrough, confirmedAccountIds: [s.account.id], recoveryReason: "portfolio" },
     ]);
     expect(refreshed.calculations.map((c) => c.tax_year)).toEqual(["2024-25"]);
     const freshOwner = await owner("report-year-recovery-isolated");
@@ -752,10 +752,14 @@ describe("report ownership and assisted draft concurrency", () => {
     await expect(workspace.calculate(s.user, { ...input, personalScopeConfirmed: false })).rejects.toMatchObject({ code: "SCOPE_CONFIRMATION_REQUIRED" });
     const run = await workspace.calculate(s.user, input);
     const legacy = { ...run.result, engineVersion: version, scopeDeclaration: undefined };
+    const revision = (await workspace.overview(s.user)).portfolio.revision;
     await database.pg.exec("RESET ROLE");
     await database.pg.query("UPDATE cgt.calculation_runs SET engine_version=$2,result=$3::jsonb WHERE id=$1", [run.runId, version, JSON.stringify(legacy)]);
     await database.pg.exec("SET ROLE cgt_app");
-    expect(await workspace.overview(s.user, false, true)).toMatchObject({ calculations: [], staleReportYears: ["2024-25"] });
+    expect(await workspace.overview(s.user, false, true)).toMatchObject({
+      portfolio: { revision }, calculations: [], staleReportYears: ["2024-25"],
+      previousCalculationInputs: [{ taxYear: "2024-25", recoveryReason: "rules" }],
+    });
     for (const format of ["summary", "evidence"] as const) {
       expect(await workspace.selectedReportIssue(s.user, { year: input.taxYear, format }, "purchase")).toMatchObject({ code: "REPORT_UNAVAILABLE" });
     }

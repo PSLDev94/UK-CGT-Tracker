@@ -375,7 +375,8 @@ test("home and broker support are honest, responsive and accessible", async ({
     ).violations,
   ).toEqual([]);
   await page.screenshot({
-    path: ".private/screenshots/home-desktop.png",
+    path: test.info().outputPath("home-desktop.png"),
+    scale: "css",
     fullPage: true,
   });
   await page.setViewportSize({ width: 375, height: 812 });
@@ -385,7 +386,8 @@ test("home and broker support are honest, responsive and accessible", async ({
     ),
   ).toBe(true);
   await page.screenshot({
-    path: ".private/screenshots/home-mobile.png",
+    path: test.info().outputPath("home-mobile.png"),
+    scale: "css",
     fullPage: true,
   });
   await page.goto("/supported-brokers");

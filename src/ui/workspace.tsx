@@ -697,6 +697,7 @@ function WorkspaceBody({
                 {justSaved && !requestedDraft && (
                   <ReportRecovery
                     years={data.staleReportYears ?? []}
+                    previousInputs={data.previousCalculationInputs}
                     draftId={data.drafts[0]?.id}
                     linkedYears={[...justSaved.disposalYears.map(({ year }) => year), requestedYear].filter((year) => Object.hasOwn(TAX_YEARS, year))}
                   />
@@ -1074,7 +1075,11 @@ function WorkspaceBody({
                               </ul>
                             </>
                           ) : <p>No account confirmations were recorded.</p>}
-                          <p>Review the changed history and confirm coverage again below.</p>
+                          <p>{previousInputs.recoveryReason === "rules"
+                            ? "The calculation rules have changed. Review the saved date and confirm coverage again below."
+                            : previousInputs.recoveryReason === "portfolio"
+                              ? "Review the changed history and confirm coverage again below."
+                              : "Review the saved date and confirm coverage again below."}</p>
                           <Button
                             variant="secondary"
                             disabled={busy || historyThrough === previousInputs.historyThrough}

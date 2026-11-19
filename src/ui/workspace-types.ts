@@ -35,7 +35,7 @@ export interface Overview {
   importCount?: number;
   drafts: { id: string; account_id: string; expires_at: string; created_at?: string; display_summary?: DraftSummary | null }[];
   staleReportYears?: string[];
-  previousCalculationInputs?: { taxYear: string; historyThrough: string; confirmedAccountIds: string[] }[];
+  previousCalculationInputs?: { taxYear: string; historyThrough: string; confirmedAccountIds: string[]; recoveryReason?: "portfolio" | "rules" }[];
   calculations: {
     id: string;
     tax_year: string;

@@ -315,7 +315,7 @@ function ReportContents({
               ))}
             </SelectField>
           </div>
-          <ReportRecovery years={staleYears} draftId={draft?.id} />
+          <ReportRecovery years={staleYears} previousInputs={data.previousCalculationInputs} draftId={draft?.id} />
           {(draft || !calculation) && !staleYears.includes(year) ? (
             <Notice tone="warning">
               {draft

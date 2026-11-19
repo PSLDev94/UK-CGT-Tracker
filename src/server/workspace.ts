@@ -403,20 +403,23 @@ export class Workspace {
           history_through: string;
           coverage_confirmed: boolean;
           created_at: string;
-        }) | { id: null; tax_year: string; previous_date: string; previous_accounts: string[] }
+        }) | { id: null; tax_year: string; previous_date: string; previous_accounts: string[]; recovery_reason: "portfolio" | "rules" | null }
       >(
         tx,
         `SELECT r.id, years.tax_year, r.status, r.history_through, ${includeReportEligibility ? "r.result" : "r.result - 'poolMovements'"} AS result,
         r.portfolio_id, r.portfolio_revision, r.input_digest, r.coverage_confirmed, r.coverage_accounts, r.created_at,
         coalesce(saved.history_through, years.history_through)::text AS previous_date,
-        coalesce(saved.coverage_accounts, years.coverage_accounts) AS previous_accounts
-        FROM (SELECT DISTINCT ON (tax_year) tax_year, history_through, coverage_accounts
+        coalesce(saved.coverage_accounts, years.coverage_accounts) AS previous_accounts,
+        CASE WHEN coalesce(saved.portfolio_revision, years.portfolio_revision) <> f.revision THEN 'portfolio'
+             WHEN saved.id IS NOT NULL AND r.id IS NULL THEN 'rules' END AS recovery_reason
+        FROM (SELECT DISTINCT ON (tax_year) tax_year, history_through, coverage_accounts, portfolio_revision
               FROM cgt.calculation_runs WHERE portfolio_id=$1
               ORDER BY tax_year, portfolio_revision DESC, created_at DESC, id DESC) years
-        LEFT JOIN cgt.published_calculations p ON p.portfolio_id=$1 AND p.tax_year=years.tax_year
+        JOIN cgt.portfolios f ON f.id=$1
+        LEFT JOIN cgt.published_calculations p ON p.portfolio_id=f.id AND p.tax_year=years.tax_year
         LEFT JOIN cgt.calculation_runs saved ON saved.id=p.run_id
         LEFT JOIN cgt.calculation_runs r ON r.id=p.run_id
-          AND r.portfolio_revision=(SELECT revision FROM cgt.portfolios WHERE id=$1)
+          AND r.portfolio_revision=f.revision
           AND r.engine_version=$2 AND r.result->>'engineVersion'=$2 AND r.result->>'scopeDeclaration'=$3
         ORDER BY years.tax_year DESC`,
         [portfolios[0]!.id, ENGINE_VERSION, scopeDeclaration],
@@ -429,6 +432,7 @@ export class Workspace {
           staleReportYears.push(run.tax_year);
           previousCalculationInputs.push({
             taxYear: run.tax_year, historyThrough: run.previous_date, confirmedAccountIds: run.previous_accounts,
+            ...(run.recovery_reason && { recoveryReason: run.recovery_reason }),
           });
           continue;
         }
