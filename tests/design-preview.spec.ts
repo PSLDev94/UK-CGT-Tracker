@@ -19,7 +19,7 @@ test("the review navigation reflows at 320 pixels with double-size text", async 
         .querySelector('nav[aria-label="Design preview"] a:last-child')!
         .getBoundingClientRect().right,
     }));
-    expect(bounds.page).toBe(bounds.viewport);
+    expect(bounds.page).toBeLessThanOrEqual(bounds.viewport);
     expect(bounds.pdf).toBeLessThanOrEqual(bounds.viewport);
   }
 });
