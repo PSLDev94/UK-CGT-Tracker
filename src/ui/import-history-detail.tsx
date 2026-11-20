@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import styles from "./workspace-records.module.css";
 import { workspaceApi } from "./api";
 import { Button } from "./primitives";
 import { ImportTradeDetails, tradeSummary } from "./import-trade-detail";
@@ -29,6 +30,26 @@ const labels = {
   excluded: "Excluded",
   duplicate: "Duplicate",
 };
+
+export function ReceiptReference({ id }: { id: string }) {
+  const [status, setStatus] = useState<"idle" | "copied" | "manual">("idle");
+  return <div>
+    <p>Receipt {id.length > 16 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id}{" "}
+      <button type="button" className="text-button" onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(id);
+          setStatus("copied");
+        } catch {
+          setStatus("manual");
+        }
+      }}>Copy full receipt ID</button>
+    </p>
+    <span role="status">{status === "copied" && "Receipt ID copied."}</span>
+    {status === "manual" && <label>Full receipt ID
+      <input readOnly value={id} onFocus={(event) => event.target.select()} />
+    </label>}
+  </div>;
+}
 
 export function ImportReceiptStatus({ accountLabel, status, reversalReason }: {
   accountLabel: string;
@@ -117,7 +138,7 @@ export function ImportHistoryDetail({
       <summary>View import details</summary>
       {open && (
         <>
-          <h3 className="mt-4">Saved source rows</h3>
+          {initiallyOpen ? <h2 className="mt-4">Saved source rows</h2> : <h3 className="mt-4">Saved source rows</h3>}
           {error ? (
             <div role="alert">
               <p>{error}</p>
@@ -142,12 +163,13 @@ export function ImportHistoryDetail({
                     key={row.record}
                     id={row.record === sourceRecord ? `receipt-record-${row.record}` : undefined}
                     tabIndex={row.record === sourceRecord ? -1 : undefined}
-                    className="border-b border-gray-200 py-2"
+                    className={`border-b border-gray-200 py-2 ${row.record === sourceRecord ? styles.receiptSource : ""}`}
                   >
                     <dt className="font-semibold">
                       Record {row.record} · {row.status === "accepted" && reversed ? "Included when imported" : labels[row.status]}
                     </dt>
                     <dd>
+                      {row.record === sourceRecord && <span className={styles.receiptSourceLabel}>Source for this calculation</span>}
                       {row.reason}
                       {row.statementReference && <p className="caption">Statement reference on this import: {row.statementReference}</p>}
                       {row.tradeDetail && <ImportTradeDetails record={row.record} trade={row.tradeDetail} />}

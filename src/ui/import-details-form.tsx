@@ -4,8 +4,8 @@ import type { ImportRecord } from "../domain/imports/review";
 import { sourceIdentity } from "../domain/imports/source-identity";
 import type { SupportingDetails } from "../domain/imports/supporting-details";
 import { validISIN } from "../domain/imports/isin";
-import { Money } from "../domain/values";
 import { feesInTradeCurrency } from "../domain/imports/exported-terms";
+import { ImportCashCheck } from "./import-cash-check";
 import { Button, Field, Notice, SelectField } from "./primitives";
 export function ImportDetailsForm({
   row,
@@ -31,6 +31,8 @@ export function ImportDetailsForm({
   const terms = row.exportedTerms ?? {};
   const initialCurrency = terms.currency ?? initial?.currency ?? "";
   const [currency, setCurrency] = useState(initialCurrency);
+  const [fees, setFees] = useState(initial?.fees ?? "");
+  const [priceUnit, setPriceUnit] = useState(terms.priceUnit ?? initial?.priceUnit ?? "");
   const exportedFees =
     terms.feesGBP !== undefined || terms.feesInCurrency !== undefined;
   const savedIssue = initial && row.status === "needs_review" ? row.reason : "";
@@ -213,7 +215,8 @@ export function ImportDetailsForm({
               name="priceUnit"
               error={fieldErrors.priceUnit}
               label="Price units in the export"
-              defaultValue={initial?.priceUnit ?? ""}
+              value={priceUnit}
+              onChange={(event) => setPriceUnit(event.target.value)}
             >
               <option value="">Choose verified units</option>
               <option value="major">Pounds / major currency units</option>
@@ -229,7 +232,8 @@ export function ImportDetailsForm({
               error={fieldErrors.fees || feeIssue}
               label="Dealing fees and transaction taxes"
               hint="Enter the trade-specific charges you actually paid, in the trade currency. Exclude account or portfolio management fees. Enter 0 only if the statement confirms no fees."
-              defaultValue={initial?.fees ?? ""}
+              value={fees}
+              onChange={(event) => setFees(event.target.value)}
               inputMode="decimal"
             />
           )}
@@ -266,13 +270,6 @@ export function ImportDetailsForm({
             )}
             <dt>Instrument currency</dt>
             <dd>{terms.currency}</dd>
-            <dt>Price per share</dt>
-            <dd>
-              {row.source?.["Price per Share"] ||
-                row.source?.["Price / share"] ||
-                row.source?.TradePrice}{" "}
-              {terms.currency}
-            </dd>
             {terms.fxRateToBase && (
               <><dt>FX rate to account base</dt><dd>{terms.fxRateToBase}</dd></>
             )}
@@ -284,20 +281,9 @@ export function ImportDetailsForm({
                 </dd>
               </>
             )}
-            {terms.feesGBP !== undefined && (
-              <>
-                <dt>Fees in GBP</dt>
-                <dd>£{new Money(terms.feesGBP).toFixed(2)}</dd>
-              </>
-            )}
-            {terms.feesInCurrency !== undefined && (
-              <>
-                <dt>Fees in {terms.currency}</dt>
-                <dd>{terms.feesInCurrency}</dd>
-              </>
-            )}
           </dl>
         )}
+        <ImportCashCheck row={row} broker={broker} currency={currency} priceUnit={priceUnit} fees={fees} />
         <label className="checkbox-line">
           <input
             name="netAmountConfirmed"
@@ -324,6 +310,8 @@ export function ImportDetailsForm({
           onClick={() => {
             setResetKey((k) => k + 1);
             setCurrency(initialCurrency);
+            setFees(initial?.fees ?? "");
+            setPriceUnit(terms.priceUnit ?? initial?.priceUnit ?? "");
             setFieldErrors({});
             setError("");
 

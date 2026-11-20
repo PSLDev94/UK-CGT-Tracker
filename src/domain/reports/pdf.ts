@@ -7,6 +7,7 @@ import { reportStructure } from "./pdf-structure";
 import { saleBreakdownUnavailable, type SaleBreakdown } from "../cgt/types";
 import { BROKERS } from "../imports/brokers";
 import {
+  matchingSaleNames,
   reportStatus,
   statementSaleLimit,
   type ReportSnapshot,
@@ -114,6 +115,7 @@ export async function reportPdf(
   const sources = new Map(
     snapshot.sources?.map((source) => [source.key, source]),
   );
+  const saleNames = snapshot.statementSaleNames ?? matchingSaleNames(r.disposals, key => sources.get(key)?.instrument);
   function space(height: number) {
     if (y - height < 50) {
       page = doc.addPage([595.28, 841.89]);
@@ -419,10 +421,11 @@ export async function reportPdf(
         start: { x: tableLeft, y: baseline + 13 }, end: { x: right, y: baseline + 13 }, thickness: 0.45, color: border,
       }));
       const row = tags.element("TR", ledger);
-      const name = d.sourceIds.find(key => sources.get(key)?.instrument);
-      const nameCell = cell(row, "TD", (name && sources.get(name)?.instrument) || d.securityId,
+      const name = saleNames[d.sourceIds[0]!];
+      const nameCell = cell(row, "TD", name || d.securityId,
         tableLeft, baseline, columnWidth, "left", bold, 10);
-      tags.mark(page, nameCell, () => page.drawText(date(d.date), { x: tableLeft, y: baseline - 10, font: regular, size: 8, color: muted }));
+      const detail = name && name !== d.securityId ? `${d.securityId} · ${date(d.date)}` : date(d.date);
+      tags.mark(page, nameCell, () => page.drawText(detail, { x: tableLeft, y: baseline - 10, font: regular, size: 8, color: muted }));
       const value = d.gainGBP === null ? "Unresolved" : (new Money(d.gainGBP).gt(0) ? "+" : "") + pounds(d.gainGBP);
       cell(row, "TD", value, right, baseline, 80, "right", regular, 11);
     }
@@ -490,10 +493,8 @@ export async function reportPdf(
         ink,
         "H3",
       );
-      const instrument = d.sourceIds
-        .map((id) => sources.get(id)?.instrument)
-        .find(Boolean);
-      if (instrument) line(instrument, false, 10, muted);
+      const instrument = saleNames[d.sourceIds[0]!];
+      if (instrument && instrument !== d.securityId) line(instrument, false, 10, muted);
       saleAmounts(d.saleBreakdown, d.proceedsGBP, d.allowableCostGBP, [
         ["Gain / loss", d.gainGBP === null ? "Unresolved" : pounds(d.gainGBP)],
       ], d.gainGBP);

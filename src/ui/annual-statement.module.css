@@ -115,6 +115,12 @@
 .ledger a:hover { color: var(--color-primary); }
 .ledger + a { display: inline-block; margin-top: .75rem; }
 .compactDate { display: none; }
+.securityId {
+  display: block;
+  color: var(--statement-muted);
+  font-size: .8rem;
+  font-weight: 450;
+}
 .arithmetic dl {
   margin: 0;
   display: block;

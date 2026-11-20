@@ -311,3 +311,44 @@ for (const [tool, label] of [
     await expect(field).toHaveValue("100");
   });
 }
+
+test("the mobile public menu reveals keyboard destinations in both directions", async ({ page, browserName }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/supported-brokers");
+  const open = page.getByRole("button", { name: "Open menu" });
+  const close = page.getByRole("button", { name: "Close menu" });
+  const panel = page.locator("#public-mobile");
+  await open.click();
+  await panel.getByRole("link", { name: "Log in" }).focus();
+  const tab = browserName === "webkit" ? "Alt+Tab" : "Tab";
+  await page.keyboard.press(tab);
+  const broker = page.getByRole("navigation", { name: "Jump to broker" }).getByRole("link", { name: "Trading 212" });
+  await expect(broker).toBeFocused();
+  await expect(panel).toHaveCount(0);
+  expect(await broker.evaluate(link => {
+    const bounds = link.getBoundingClientRect();
+    return link.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
+  })).toBe(true);
+  await open.click();
+  await close.focus();
+  await page.keyboard.press("Shift+" + tab);
+  await expect(page.getByRole("link", { name: "Sign up free", exact: true })).toBeFocused();
+  await expect(panel).toHaveCount(0);
+  await open.click();
+  await page.keyboard.press("Escape");
+  await expect(open).toBeFocused();
+});
+
+test("both homepage navigation layouts lead to the interactive sample statement", async ({ page }) => {
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/");
+    const nav = page.getByRole("navigation", { name: "Main navigation" });
+    if (width === 390) await nav.getByText("Menu", { exact: true }).click();
+    const sample = nav.getByRole("link", { name: "Sample statement", exact: true });
+    await expect(sample).toHaveAttribute("href", "/sample-calculation");
+    await sample.click();
+    await expect(page).toHaveURL(/\/sample-calculation$/);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  }
+});

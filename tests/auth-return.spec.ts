@@ -239,3 +239,45 @@ test("broker help carries the selected upload options and Escape returns focus f
   await expect(account).toHaveValue("second-account");
   await expect(format).toHaveValue("canonical-v1");
 });
+
+test("signup clears corrected errors and rechecks both passwords without resubmission", async ({ page }) => {
+  await page.goto("/signup");
+  const name = page.getByLabel("Your name");
+  const email = page.getByLabel("Email address");
+  const password = page.getByLabel("Password", { exact: true });
+  const confirmation = page.getByLabel("Confirm password", { exact: true });
+  await page.getByRole("button", { name: "Create account", exact: true }).click();
+  await expect(name).toHaveAttribute("aria-invalid", "true");
+  await name.fill("Example investor");
+  await expect(name).toHaveAttribute("aria-invalid", "false");
+  await expect(email).toHaveAttribute("aria-invalid", "true");
+  await email.fill("investor@example.test");
+  await expect(page.getByText("Enter a valid email address.")).toHaveCount(0);
+  const initialPassword = "sample account password";
+  await password.fill(initialPassword);
+  await confirmation.fill(initialPassword);
+  await expect(page.locator("input[aria-invalid=true]")).toHaveCount(0);
+  await password.fill(initialPassword + "!");
+  await expect(confirmation).toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByText("The passwords do not match.")).toBeVisible();
+  await confirmation.fill(initialPassword + "!");
+  await expect(confirmation).toHaveAttribute("aria-invalid", "false");
+  await expect(page.getByText("The passwords do not match.")).toHaveCount(0);
+});
+
+test("a signed-out broker upload names the broker through registration and sign-in", async ({ page }) => {
+  await page.route("**/api/v2/auth/get-session", route => route.fulfill({ json: null }));
+  await page.route("**/api/v2/workspace", route => route.fulfill({ status: 401, json: { error: "Sign in required." } }));
+  await page.goto("/supported-brokers#freetrade");
+  await page.getByRole("link", { name: "Upload CSV for Freetrade" }).click();
+  await expect(page.getByText("Sign in or create a free account to continue to your Freetrade CSV upload.")).toBeVisible();
+  const next = "/dashboard/upload?broker=freetrade";
+  await page.getByRole("link", { name: "Create account" }).click();
+  await expect(page.getByText(/then sign in to upload your Freetrade CSV/)).toBeVisible();
+  expect(new URL(page.url()).searchParams.get("next")).toBe(next);
+  await expect(page.getByRole("link", { name: "Back to Freetrade instructions" })).toHaveAttribute("href", "/supported-brokers#freetrade");
+  await expect(page.getByText(/Example account · AJ Bell/)).toBeVisible();
+  await page.getByRole("link", { name: "Back to sign in" }).click();
+  await expect(page.getByText("Sign in to continue to your Freetrade CSV upload.")).toBeVisible();
+  expect(new URL(page.url()).searchParams.get("next")).toBe(next);
+});

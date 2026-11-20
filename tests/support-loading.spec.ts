@@ -48,7 +48,7 @@ test("the broker directory retains the year and the selected account on the uplo
   });
   await page.goto("/supported-brokers?" + from);
   const href = await page
-    .getByRole("link", { name: "Upload a Trading 212 CSV" })
+    .getByRole("link", { name: "Upload CSV for Trading 212" })
     .getAttribute("href");
   const url = new URL(href!, "https://example.test");
   expect(url.pathname).toBe("/dashboard/upload");

@@ -207,27 +207,31 @@ export function BillingPanel({
     !awaiting &&
     !status.needsReview &&
     ["none", "canceled", "incomplete_expired"].includes(status.status);
+  const showPlanFirst = status?.status === "none" && !status.needsReview && !awaiting;
+  const plan = (
+    <div className={styles.plan}>
+      <p className={styles.price}>
+        {ANNUAL_REPORT_PRICE} <span>per year</span>
+      </p>
+      <div>
+        <p>
+          Imports, calculations and CSV evidence are free. The subscription
+          renews annually until cancelled. Manage renewal in Billing.
+          PDF access does not include a tax adviser’s review.{" "}
+          <Link className="text-blue-700 underline" href="/terms">Service terms and support</Link>.
+        </p>
+        <p className="caption">
+          Staging uses Stripe test payments. No real money is charged.
+        </p>
+      </div>
+    </div>
+  );
   return (
     <div className={styles.page}>
       <WorkspaceMasthead title="Your subscription">
-        Download PDF summaries and matching evidence with CGT Tracker annual reports.
+        {showPlanFirst && "Download PDF summaries and matching evidence with CGT Tracker annual reports."}
       </WorkspaceMasthead>
-      <div className={styles.plan}>
-        <p className={styles.price}>
-          {ANNUAL_REPORT_PRICE} <span>per year</span>
-        </p>
-        <div>
-          <p>
-            Imports, calculations and CSV evidence are free. The subscription
-            renews annually until cancelled. Manage renewal in Billing.
-            PDF access does not include a tax adviser’s review.{" "}
-            <Link className="text-blue-700 underline" href="/terms">Service terms and support</Link>.
-          </p>
-          <p className="caption">
-            Staging uses Stripe test payments. No real money is charged.
-          </p>
-        </div>
-      </div>
+      {showPlanFirst && plan}
       <section aria-label="Subscription status" className={styles.billingStatus}>
         {destination && (
           <p className="font-medium">
@@ -388,6 +392,7 @@ export function BillingPanel({
           {destination ? `Back to ${destination.year} report` : "View reports"}
         </Link>
       </div>
+      {!showPlanFirst && plan}
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { WorkspaceScreen } from "@/ui/workspace";
 import { DashboardShell } from "@/ui/dashboard-shell";
-import { ImportHistoryDetail } from "@/ui/import-history-detail";
+import { WorkspaceMasthead } from "@/ui/workspace-masthead";
+import { ImportHistoryDetail, ReceiptReference } from "@/ui/import-history-detail";
 import { TAX_YEARS } from "@/domain/values";
 import { calculationSourceHref } from "@/ui/disposal-location";
 
@@ -24,8 +25,8 @@ export default async function Page({
         <Link className="text-blue-700 underline" href={calculation}>
           Back to calculation
         </Link>
-        <h1 className="text-2xl font-bold">Import receipt</h1>
-        <p className="break-all">Receipt {receipt}</p>
+        <WorkspaceMasthead title="Import receipt" />
+        <ReceiptReference key={receipt} id={receipt} />
         <ImportHistoryDetail
           key={receipt + "/" + record}
           importId={receipt}

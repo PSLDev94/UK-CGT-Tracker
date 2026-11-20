@@ -36,6 +36,7 @@ export interface ReportSource {
 }
 export interface ReportSnapshot {
   sources?: ReportSource[];
+  statementSaleNames?: Record<string, string>;
   id: string;
   input_digest: string;
   created_at: string | Date;
@@ -44,6 +45,24 @@ export interface ReportSnapshot {
   result: Calculation;
 }
 export const statementSaleLimit = 5;
+
+/** A disposal can group fills from different brokers. Label it only when every sale record agrees. */
+export function matchingSaleNames(
+  disposals: Calculation["disposals"],
+  nameForSource: (key: string) => string | null | undefined,
+): Record<string, string> {
+  const names: Record<string, string> = {};
+  for (const sale of disposals) {
+    const first = sale.sourceIds[0];
+    if (!first) continue;
+    const name = nameForSource(first)?.trim();
+    const normalised = name?.toLowerCase();
+    if (name && sale.sourceIds.every(key => nameForSource(key)?.trim().toLowerCase() === normalised)) {
+      names[first] = name;
+    }
+  }
+  return names;
+}
 
 export type ReportKind = "csv" | "summary" | "evidence";
 type ReportCell = string | { decimal: string };

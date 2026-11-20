@@ -50,7 +50,7 @@ export default async function LandingPage() {
           <nav aria-label="Main navigation" className={styles.mainNav}>
             <div className={styles.desktopLinks}>
               <a href="#brokers">Brokers</a>
-              <a href="/samples/cgt-evidence.pdf">Sample report</a>
+              <Link href="/sample-calculation">Sample statement</Link>
               <Link href="/guide">CGT guide</Link>
               <Link href="/pricing">Pricing</Link>
             </div>

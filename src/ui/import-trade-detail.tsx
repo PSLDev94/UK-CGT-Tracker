@@ -3,7 +3,7 @@ import type { ImportTradeDetail } from "../domain/imports/trade-detail";
 import { Money } from "../domain/values";
 import { displayDate } from "./format";
 
-function statementAmount(value: string, currency: string) {
+export function statementAmount(value: string, currency: string) {
   const amount = new Money(value);
   const digits = amount.abs().toFixed(Math.max(2, amount.decimalPlaces()));
   const [whole, fraction] = digits.split(".");

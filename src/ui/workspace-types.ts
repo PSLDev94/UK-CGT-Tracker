@@ -67,6 +67,7 @@ export interface Preview {
     page: number;
     pageSize: number;
     issueCount: number;
+    firstIncluded?: { record: number; name?: string; trade: ImportTradeDetail } | null;
     sourceBlockerCount: number;
     nextUnresolved: {
       record: number;

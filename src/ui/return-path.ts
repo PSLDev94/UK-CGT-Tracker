@@ -70,3 +70,16 @@ export function authHref(path: string, next?: string | null) {
     new URLSearchParams({ next: destination })
   );
 }
+
+export function brokerUploadDestination(destination: string) {
+  const [path, query] = destination.split("?");
+  if (path !== "/dashboard/upload") return;
+  const id = new URLSearchParams(query).get("broker");
+  return BROKERS.find((broker) => broker.id === id);
+}
+
+export function authBackLink(destination: string) {
+  const broker = brokerUploadDestination(destination);
+  if (broker) return { href: `/supported-brokers#${broker.id}`, label: `Back to ${broker.name} instructions` };
+  if (destination.split("?")[0] === "/billing") return { href: "/pricing", label: "Back to pricing" };
+}

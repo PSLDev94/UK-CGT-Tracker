@@ -1,3 +1,4 @@
+import { sourceIdentity } from "../domain/imports/source-identity";
 import { recordJourney } from "./journey";
 import { authenticate, type SessionReader } from "./identity";
 import { AppError } from "./errors";
@@ -36,10 +37,16 @@ export function reviewPage(review: ImportReview, page: number) {
       if (firstBlocker === -1) firstBlocker = position;
     }
   }
+  const firstIncluded = review.records.find((row) => row.status === "accepted" && row.trade);
   const index = firstBlocker === -1 ? firstRepair : firstBlocker;
   const next = review.records[index];
   return {
     ...review,
+    firstIncluded: firstIncluded?.trade ? {
+      record: firstIncluded.record,
+      name: sourceIdentity(firstIncluded.source).description,
+      trade: importTradeDetail(firstIncluded.trade, firstIncluded.provenance, firstIncluded.executionReference),
+    } : null,
     records: review.records.slice((page - 1) * pageSize, page * pageSize).map((record) =>
       record.trade
         ? { ...record, tradeDetail: importTradeDetail(record.trade, record.provenance, record.executionReference) }
@@ -103,7 +110,8 @@ export function createWorkspaceHandler(
             identity, input.surface === "accounts",
             input.surface === "reports" || input.surface === "calculations",
             input.surface === "imports" && input.receiptId ? text("receiptId") : undefined,
-            input.surface === "reports" ? "statement-sales" : input.surface === "scenarios",
+            input.surface === "reports" ? "statement-sales" :
+              input.surface === "calculations" ? "calculation-sales" : input.surface === "scenarios",
           );
           if (input.surface === "reports") recordJourney("reports_opened");
           return privateResponse(overview);

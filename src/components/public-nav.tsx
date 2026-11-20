@@ -41,6 +41,7 @@ export function PublicNav({ backToUpload }: { backToUpload?: string } = {}) {
   const [mobileOpen, setMobileOpen] = useState(false); // mobile hamburger
   const toolsButton = useRef<HTMLButtonElement>(null);
   const mobileButton = useRef<HTMLButtonElement>(null);
+  const mobileList = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close desktop dropdown when clicking outside
@@ -56,6 +57,26 @@ export function PublicNav({ backToUpload }: { backToUpload?: string } = {}) {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    function closeOutside(event: Event) {
+      const target = event.target;
+      if (
+        target instanceof Node &&
+        !mobileButton.current?.contains(target) &&
+        !mobileList.current?.contains(target)
+      ) {
+        setMobileOpen(false);
+      }
+    }
+    document.addEventListener("focusin", closeOutside);
+    document.addEventListener("pointerdown", closeOutside);
+    return () => {
+      document.removeEventListener("focusin", closeOutside);
+      document.removeEventListener("pointerdown", closeOutside);
+    };
+  }, [mobileOpen]);
 
   useEffect(() => {
     const close = (event: KeyboardEvent) => {
@@ -147,7 +168,7 @@ export function PublicNav({ backToUpload }: { backToUpload?: string } = {}) {
           </button>
         </div>
         {mobileOpen && (
-          <div id="public-mobile" className={styles.mobileList}>
+          <div id="public-mobile" ref={mobileList} className={styles.mobileList}>
             {navLinks()}
             <p>Free Tools</p>
             {toolLinks()}

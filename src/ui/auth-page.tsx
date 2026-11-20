@@ -5,7 +5,7 @@ import { samplePreview } from "@/domain/reports/sample-view";
 import styles from "./auth-frame.module.css";
 import { redirect } from "next/navigation";
 import { hasPublicSession } from "@/server/public-session";
-import { safeReturnPath } from "./return-path";
+import { authBackLink, safeReturnPath } from "./return-path";
 
 export async function AuthPage({
   mode,
@@ -26,7 +26,7 @@ export async function AuthPage({
     redirect(safeReturnPath(next));
   }
   return (
-    <AuthFrame aside={mode === "sign-up" && <SampleStatement />}>
+    <AuthFrame back={authBackLink(safeReturnPath(next))} aside={mode === "sign-up" && <SampleStatement />}>
       <AuthForm
         nextPath={next}
         mode={mode}
@@ -43,7 +43,7 @@ function SampleStatement() {
     <aside className={styles.sample} aria-labelledby="signup-sample-title">
       <header className={styles.sampleHeading}>
         <h2 id="signup-sample-title">Sample annual statement</h2>
-        <span>{broker} / {year}</span>
+        <span>Example account · {broker} / {year}</span>
       </header>
       <dl>
         {sales.map((sale) => (

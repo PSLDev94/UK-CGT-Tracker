@@ -10,6 +10,14 @@ import { SaleAmounts } from "./sale-amounts";
 import { DisposalDetail } from "./disposal-detail";
 import { disposalSourceKeys, type DisposalLocation } from "./disposal-location";
 
+function DisposalIdentity({ name, id, date }: { name?: string; id: string; date?: string }) {
+  const reference = date ? `${id} · ${date}` : id;
+  return name && name !== id ? <>
+    <span className="break-words">{name}</span>
+    <span className="block text-sm font-normal text-gray-600">{reference}</span>
+  </> : <span className="break-words">{reference}</span>;
+}
+
 function MobileDisposalOutcome({ gain }: { gain: string | null }) {
   const amount = <strong className="tabular-nums">{money(gain)}</strong>;
   if (gain === null) return <>{amount} gain unresolved</>;
@@ -25,6 +33,7 @@ export function CalculationResult({
   coverage,
   confirmedAccounts,
   settingsEdited,
+  saleNames = {},
 }: {
   result: Calculation;
   runId: string;
@@ -32,6 +41,7 @@ export function CalculationResult({
   coverage: boolean;
   confirmedAccounts: string[];
   settingsEdited: boolean;
+  saleNames?: Record<string, string>;
 }) {
   const unknownPools = unresolvedPoolIssues(result);
   const blockingIssues = result.issues.filter(issue => issue.scope !== "pool");
@@ -196,9 +206,8 @@ export function CalculationResult({
               returnSource={target?.disposal === index ? target.source : undefined}
               className="mb-2"
             >
-                <span className="break-all">{d.securityId}</span> · {displayDate(d.date)}
-                <br />
-                <MobileDisposalOutcome gain={d.gainGBP} />
+                <DisposalIdentity name={saleNames[d.sourceIds[0]!]} id={d.securityId} date={displayDate(d.date)} />
+                <span className="block"><MobileDisposalOutcome gain={d.gainGBP} /></span>
             </DisposalDetail>
           ))}
         </div>
@@ -238,7 +247,7 @@ export function CalculationResult({
                   <tr key={`${runId}-${index}`} className="hover:bg-gray-50">
                     <td className="whitespace-nowrap">{displayDate(d.date)}</td>
                     <td className="font-medium text-gray-900">
-                      {d.securityId}
+                      <DisposalIdentity name={saleNames[d.sourceIds[0]!]} id={d.securityId} />
                     </td>
                     <td>{d.quantity}</td>
                     <td className="number">{d.saleBreakdown ? money(d.saleBreakdown.grossProceedsGBP) : "Unavailable"}</td>
@@ -252,7 +261,7 @@ export function CalculationResult({
                         returnSource={target?.disposal === index ? target.source : undefined}
                         className="border-0 p-0 min-w-56"
                       >
-                        {displayDate(d.date)} · {d.securityId} · {money(d.gainGBP)}
+                        View matches<span className="sr-only"> for {d.securityId} on {displayDate(d.date)}</span>
                       </DisposalDetail>
                     </td>
                   </tr>

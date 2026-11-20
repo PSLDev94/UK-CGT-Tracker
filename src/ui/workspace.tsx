@@ -510,7 +510,7 @@ function WorkspaceBody({
         <WorkspaceMasthead
           title={{
             accounts: "Broker accounts",
-            imports: requestedDraft ? "Review your import" : "Upload CSV",
+            imports: requestedDraft ? (preview?.draftId === requestedDraft ? "Review before saving" : "Review your import") : "Upload CSV",
             calculations: "Calculations",
             overview: "Overview",
             history: "Import history",
@@ -944,7 +944,7 @@ function WorkspaceBody({
                         onLoaded?.();
                       })
                     }
-                    onDiscard={() =>
+                    onDiscard={(replacing) =>
                       void perform(async () => {
                         await workspaceApi({
                           action: "discard-draft",
@@ -960,7 +960,7 @@ function WorkspaceBody({
                         setPreview(null);
                         await reload();
                         setMessage(
-                          "Preview discarded. Saved transactions were not changed.",
+                          replacing ? "Choose the replacement CSV for this broker account." : "Preview discarded. Saved transactions were not changed.",
                         );
                       })
                     }
@@ -1042,6 +1042,7 @@ function WorkspaceBody({
                       runId={currentCalculation.id}
                       location={disposalLocation}
                       result={currentCalculation.result}
+                      saleNames={data.statementSaleNames}
                       coverage={currentCalculation.coverage_confirmed}
                       confirmedAccounts={savedAccounts.map(accountName)}
                       settingsEdited={settingsEdited}

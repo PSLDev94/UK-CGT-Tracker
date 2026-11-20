@@ -83,8 +83,7 @@
 .flow :global(.account-form) form { max-width: 39rem; }
 .flow :global(.field) small, .flow :global(.checkbox-label) > span { max-width: 82ch; }
 
-.index,
-.recordTotals {
+.index {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
   gap: .7rem 1.15rem;
@@ -93,14 +92,12 @@
   border-block: 1px solid var(--color-border);
 }
 .index dt,
-.recordTotals dt,
 .balanceParts dt,
 .outcomeLabel {
   color: var(--color-muted);
   font: 510 .82rem/1.4 var(--font-body);
 }
-.index dd,
-.recordTotals dd {
+.index dd {
   margin: .14rem 0 0;
   color: var(--color-ink);
   font: 480 clamp(1.8rem, 3.25vw, 2.75rem)/1.1 var(--font-statement);
@@ -112,11 +109,26 @@
   font: 400 .78rem/1.45 var(--font-body);
   letter-spacing: normal;
 }
-.recordTotals {
-  margin-block: 1rem;
-  padding: .85rem clamp(.8rem, 2vw, 1.5rem);
+.reviewCounts { color: var(--color-muted); font-size: .875rem; }
+.previewTrade {
+  margin: .75rem 0;
+  padding: .65rem 0;
+  border-block: 1px solid var(--color-border);
+  overflow-wrap: anywhere;
+}
+.previewTrade h2 { margin: 0 0 .25rem; font: 600 .875rem/1.4 var(--font-body); }
+.flow :global(.panel) > h2.rowHeading { margin: 1.25rem 0 .5rem; font-size: 1.35rem; }
+.previewTrade p { margin: .2rem 0 0; }
+.cashCheck h3 { font: 520 1.25rem/1.25 var(--font-statement); }
+.cashCheck dl { margin-block: .3rem 0; }
+.cashCheck dd { overflow-wrap: anywhere; }
+.receiptSource {
+  padding-inline: .8rem;
+  outline: 1px solid var(--color-border);
+  outline-offset: -1px;
   background: var(--color-sheet);
 }
+.receiptSourceLabel { display: block; font-weight: 650; }
 .overview,
 .balance,
 .plan {
@@ -241,7 +253,6 @@
 @media (max-width: 48rem) {
   .masthead { margin-bottom: .9rem; }
   .masthead h1 { overflow-wrap: anywhere; }
-  .recordTotals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .balance, .plan, .settingsSection { grid-template-columns: minmax(0, 1fr); }
   .settingsSection { gap: .65rem; }
   .settingsSection > h2 { grid-row: auto; }

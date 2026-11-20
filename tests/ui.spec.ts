@@ -11,6 +11,33 @@ import { calculateGains } from "../src/domain/cgt/calculate";
 import { TAX_YEARS } from "../src/domain/values";
 import type { HistoryImport, Overview, Preview } from "../src/ui/workspace-types";
 
+test("both PDFs share one recovery action and billing preserves the selected report", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 664 });
+  const { state } = await mockWorkspace(page, { account: true });
+  const result = calculateGains(tradesFromReview(reviewCsv(csv, {
+    broker: "trading212", accountId, accountType: "GIA", format: "canonical-v1",
+  })), { taxYear: "2024-25", historyThrough: "2025-05-05" });
+  state.calculations = [{ id: "saved", tax_year: "2024-25", result, coverage_confirmed: true }];
+  await page.route("**/api/v2/billing", (route) => route.fulfill({ json: {
+    status: "needs_review", entitled: false, needsReview: true, canManage: true,
+    periodEnd: null, cancelAtPeriodEnd: false, testMode: true,
+  } }));
+  for (const format of ["summary", "evidence"]) {
+    const query = `year=2024-25&format=${format}`;
+    await page.goto(`/dashboard/reports?${query}`);
+    const review = page.getByRole("link", { name: "Review subscription", exact: true });
+    await expect(review).toHaveCount(1);
+    await expect(review).toHaveAttribute("href", `/billing?${query}`);
+    await expect(page.locator(`#report-${format}`)).toBeFocused();
+    await expect(page.getByRole("button", { name: "Download CSV evidence" })).toBeEnabled();
+    await review.click();
+    await expect(page.getByRole("link", { name: "Contact billing support" })).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole("button", { name: "Open test checkout" })).toHaveCount(0);
+    await page.getByRole("link", { name: "Back to 2024-25 report" }).click();
+    await expect(page.locator(`#report-${format}`)).toBeFocused();
+  }
+});
+
 test("billing keeps test status explicit and recovers from interrupted requests", async ({
   page,
 }) => {
@@ -97,8 +124,13 @@ test("billing shows cancellation and prevents duplicate checkout while a request
       },
     });
   });
+  await page.setViewportSize({ width: 390, height: 664 });
   await page.goto("/billing");
-  await page.getByRole("button", { name: "Open test checkout" }).click();
+  const checkout = page.getByRole("button", { name: "Open test checkout" });
+  await expect(checkout).toBeEnabled();
+  const planTerms = page.getByRole("link", { name: "Service terms and support" });
+  expect((await planTerms.boundingBox())!.y).toBeLessThan((await checkout.boundingBox())!.y);
+  await checkout.click();
   await expect(
     page.getByRole("button", { name: "Open test checkout" }),
   ).toBeDisabled();
@@ -116,6 +148,7 @@ test("billing shows cancellation and prevents duplicate checkout while a request
   await expect(
     page.getByRole("button", { name: "Manage subscription" }),
   ).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Manage subscription" })).toBeInViewport({ ratio: 1 });
   expect(calls).toBe(1);
 });
 
@@ -645,6 +678,19 @@ test("direct receipts keep their effective status after a reversal", async ({ pa
   await expect(page.getByText("Saved", { exact: true })).toBeVisible();
   await expect(page.locator("#receipt-record-2")).toBeFocused();
   await expect(page.locator("#receipt-record-2 > dt")).toHaveText("Record 2 · Included");
+  await expect(page.locator("#receipt-record-2").getByText("Source for this calculation")).toBeVisible();
+  const copy = page.getByRole("button", { name: "Copy full receipt ID" });
+  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", {
+    configurable: true, value: { writeText: (value: string) => { document.body.dataset.copiedReceipt = value; } },
+  }));
+  await copy.click();
+  await expect(page.locator("body")).toHaveAttribute("data-copied-receipt", receipt.id);
+  await expect(page.getByText("Receipt ID copied.", { exact: true })).toBeVisible();
+  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", {
+    configurable: true, value: { writeText: () => Promise.reject(new Error("Clipboard unavailable")) },
+  }));
+  await copy.click();
+  await expect(page.getByLabel("Full receipt ID", { exact: true })).toHaveValue(receipt.id);
   receipt.status = "reversed";
   receipt.reversal_reason = "Superseded broker statement";
   await page.reload();
@@ -684,7 +730,9 @@ test("unsupported files cannot be saved and can be discarded", async ({
   await page.goBack();
   await expect(page).toHaveURL(new RegExp("draft=" + draftId));
   await expect(page.getByText("This format is not verified.", { exact: false })).toBeVisible();
-  await page.getByRole("button", { name: "Discard preview" }).click();
+  await expect(page.getByRole("link", { name: "Check the broker export instructions" })).toHaveAttribute("href", "/supported-brokers#trading212");
+  await page.getByRole("button", { name: "Replace file", exact: true }).click();
+  await expect(page.getByLabel("CSV file", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Review before saving" }),
   ).not.toBeVisible();
@@ -1160,7 +1208,9 @@ test("a long import opens its late blocker from page one and returns to the repa
   await page.goto("/dashboard/upload");
   await page.getByLabel("CSV file", { exact: true }).setInputFiles({
     name: "long-freetrade.csv", mimeType: "text/csv",
-    buffer: Buffer.from(longFreetradeStatement("QA-LONG")),
+    buffer: Buffer.from(longFreetradeStatement("QA-LONG")
+      .replace(",Total Amount,", ",Total Amount in Account Currency,")
+      .replace(",Total Shares Amount,", ",Total Amount in Instrument Currency,")),
   });
   await page.getByRole("checkbox", { name: /For a native broker export/ }).check();
   await page.getByRole("button", { name: "Review file", exact: true }).click();
@@ -1170,6 +1220,9 @@ test("a long import opens its late blocker from page one and returns to the repa
   await expect(page.getByRole("heading", { name: "Resolve record 202" })).toBeFocused();
   await expect(page.getByText("£4.50", { exact: true })).toBeVisible();
   await expect(page.getByText("£0.8 per USD", { exact: true })).toBeVisible();
+  const figures = page.getByRole("region", { name: "Trade figures to check" });
+  await expect(figures.getByText("£1,004.50", { exact: true })).toBeVisible();
+  await expect(figures.getByText("USD 1,250.00", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Price units in the export", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Dealing fees and transaction taxes", { exact: true })).toHaveCount(0);
   const original = page.locator("details").filter({ hasText: "Original CSV values · record 202" });
@@ -1214,6 +1267,11 @@ test("IBKR cash and execution references match between the preview and the recei
   await page.getByLabel("CSV file", { exact: true }).setInputFiles("tests/fixtures/brokers/ibkr-flex-gbp.csv");
   await page.getByRole("checkbox", { name: /For a native broker export/ }).check();
   await page.getByRole("button", { name: "Review file", exact: true }).click();
+  const sample = page.getByRole("group", { name: "First included trade" });
+  await expect(sample).toContainText("Buy 1000 shares");
+  await expect(sample).toContainText("−£505.50");
+  const saveButton = page.getByRole("button", { name: "Save 2 transactions", exact: true });
+  expect((await sample.boundingBox())!.y + (await sample.boundingBox())!.height).toBeLessThanOrEqual((await saveButton.boundingBox())!.y);
   async function checkTradeDetails() {
     for (const [record, amounts] of [[2, ["£500.00", "£5.50", "−£505.50", "12345"]], [3, ["£200.00", "£2.00", "£198.00", "12346"]]] as const) {
       const summary = page.getByText("Trade details for record " + record, { exact: true });
@@ -1698,4 +1756,31 @@ test("oversized evidence shows usable alternatives before payment and after a re
   await expect(
     page.getByRole("button", { name: "Download summary PDF" }),
   ).toBeVisible();
+});
+
+test("both assisted HL trades show the original cash beside fees and confirmation", async ({ page }) => {
+  const { state } = await mockWorkspace(page, { account: true });
+  state.accounts[0]!.broker = "hl";
+  await page.goto("/dashboard/upload");
+  await page.getByLabel("CSV file", { exact: true }).setInputFiles("tests/fixtures/brokers/hl-assisted.csv");
+  await page.getByRole("checkbox", { name: /For a native broker export/ }).check();
+  await page.getByRole("button", { name: "Review file", exact: true }).click();
+  for (const [record, side, quantity, price, gross, fee, cash] of [
+    [2, "Buy", "1000", "50 pence", "£500.00", "8.49", "−£508.49"],
+    [3, "Sell", "250", "80 pence", "£200.00", "2", "£198.00"],
+  ] as const) {
+    await page.getByRole("button", { name: `Resolve record ${record}`, exact: true }).click();
+    const figures = page.getByRole("region", { name: "Trade figures to check" });
+    for (const sourceValue of [side, quantity, price, gross, cash]) {
+      await expect(figures.getByText(sourceValue, { exact: true })).toBeVisible();
+    }
+    await expect(figures).toContainText("Enter verified charges above");
+    await page.getByLabel("Dealing fees and transaction taxes").fill(fee);
+    await expect(figures.getByText(record === 2 ? "£8.49" : "£2.00", { exact: true })).toBeVisible();
+    await page.getByLabel("Verified ISIN").fill("GB0008706128");
+    await page.getByLabel("Supporting statement or contract-note reference").fill(`Confirmed HL note ${record}`);
+    await page.getByRole("checkbox", { name: /I checked the currency/ }).check();
+    await page.getByRole("button", { name: "Check and save supporting details" }).click();
+  }
+  await expect(page.getByRole("button", { name: "Save 2 transactions" })).toBeEnabled();
 });

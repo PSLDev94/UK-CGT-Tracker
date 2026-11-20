@@ -32,7 +32,10 @@ export function HomeMenu() {
   }, []);
 
   return (
-    <details ref={menu} className={styles.menu}>
+    <details ref={menu} className={styles.menu} onBlur={(event) => {
+      if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget))
+        event.currentTarget.open = false;
+    }}>
       <summary>Menu</summary>
       <div
         className={styles.menuLinks}
@@ -41,7 +44,7 @@ export function HomeMenu() {
         }}
       >
         <a href="#brokers">Brokers</a>
-        <a href="/samples/cgt-evidence.pdf">Sample report</a>
+        <Link href="/sample-calculation">Sample statement</Link>
         <Link href="/pricing">Pricing</Link>
         <Link href="/guide">CGT guide</Link>
       </div>

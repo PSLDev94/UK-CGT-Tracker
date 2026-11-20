@@ -786,6 +786,15 @@ it("returns the imported instrument name only for the requested holdings or stat
   expect(statements.statementSaleNames).toEqual({
     [run.result.disposals[0]!.sourceIds[0]!]: "Synthetic ordinary share",
   });
+  expect((await workspace.overview(user, false, true, undefined, "calculation-sales")).statementSaleNames)
+    .toEqual(statements.statementSaleNames);
+  const summary = await workspace.reportSnapshot(user, run.runId, "summary");
+  expect(summary.statementSaleNames).toEqual(statements.statementSaleNames);
+  expect(summary.sources).toBeUndefined(); // The five-row summary does not load the complete evidence ledger.
+  const { reportPdf } = await import("../src/domain/reports/pdf");
+  const pdf = await PDFDocument.load(await reportPdf(summary));
+  expect(pdf.getPageCount()).toBe(1);
+  expect(reportPageText(pdf)).toContain("Synthetic ordinary share\nGB0008706128 · 1 August 2024");
 });
 
 it("uses only matching saved sale records to name a statement disposal", async () => {
@@ -806,6 +815,10 @@ it("uses only matching saved sale records to name a statement disposal", async (
   expect(earlier.result.disposals[0]!.sourceIds).toHaveLength(2);
   const result = await workspace.overview(user, false, true, undefined, "statement-sales");
   expect(result.statementSaleNames).toEqual({ [later.result.disposals[0]!.sourceIds[0]!]: "Later name" });
+  for (const kind of ["summary", "evidence"] as const) {
+    expect((await workspace.reportSnapshot(user, earlier.runId, kind)).statementSaleNames).toEqual({});
+    expect((await workspace.reportSnapshot(user, later.runId, kind)).statementSaleNames).toEqual(result.statementSaleNames);
+  }
 });
 
 describe("report ownership and assisted draft concurrency", () => {

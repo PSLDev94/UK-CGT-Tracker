@@ -151,7 +151,7 @@ export default async function BrokerSupport({
                   </details>
                   <Link className={styles.brokerLink}
                     href={uploadFor(b.id)}>
-                    Upload a {b.name} CSV
+                    Upload CSV for {b.name}
                   </Link>
                 </div>
               </article>

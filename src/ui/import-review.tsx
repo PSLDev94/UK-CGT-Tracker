@@ -3,7 +3,7 @@ import styles from "./workspace-records.module.css";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ImportDetailsForm } from "./import-details-form";
-import { ImportTradeDetails } from "./import-trade-detail";
+import { ImportTradeDetails, statementAmount, tradeSummary } from "./import-trade-detail";
 import { useModal } from "./navigation-guard";
 import type { ImportRecord } from "../domain/imports/review";
 import type { SupportingDetails } from "../domain/imports/supporting-details";
@@ -38,7 +38,7 @@ export function ImportReviewPanel({
   busy: boolean;
   onPage: (page: number, onLoaded?: () => void) => void;
   onCommit: () => void;
-  onDiscard: () => void;
+  onDiscard: (replacing?: boolean) => void;
   onDetails: (
     record: number,
     details: SupportingDetails,
@@ -56,10 +56,11 @@ export function ImportReviewPanel({
   const row = review.records.find((r) => r.record === editing);
   const pages = Math.max(1, Math.ceil(review.counts.total / review.pageSize));
   const next = review.nextUnresolved;
+  const unknownFormat = review.status === "unsupported" && review.issues.some((issue) => issue.code === "UNSUPPORTED_FORMAT");
   const repairable = review.counts.needsReview - review.sourceBlockerCount;
   useEffect(() => () => onDirty(false), [onDirty]);
   useEffect(() => {
-    title.current?.focus();
+    (title.current ?? document.getElementById("workspace-title"))?.focus();
   }, [row?.record, row?.canSupplyDetails, preview.draftId]);
   const changeDirty = (value: boolean) => {
     setDirty(value);
@@ -70,12 +71,10 @@ export function ImportReviewPanel({
     setEditing(id);
   };
   return (
-    <section className="panel" aria-labelledby="review-title">
-      <h2 id="review-title" ref={title} tabIndex={-1}>
-        {row
-          ? `${row.canSupplyDetails ? "Resolve" : "Review"} record ${row.record}`
-          : "Review before saving"}
-      </h2>
+    <section className="panel" aria-labelledby={row ? "review-title" : "workspace-title"}>
+      {row && <h2 id="review-title" ref={title} tabIndex={-1}>
+        {row.canSupplyDetails ? "Resolve" : "Review"} record {row.record}
+      </h2>}
       <p className="[overflow-wrap:anywhere]">
         <strong>{fileLabel}</strong> · {accountLabel}
       </p>
@@ -121,26 +120,14 @@ export function ImportReviewPanel({
         </>
       ) : (
         <>
-          <p>
-            {review.counts.total} source{" "}
-            {review.counts.total === 1 ? "record" : "records"} ·{" "}
-            {review.counts.needsReview}{" "}
-            {review.counts.needsReview === 1 ? "needs" : "need"} attention.
-            Nothing from this preview has been saved as transactions.
+          <p className={styles.reviewCounts}>
+            {review.counts.total} source {review.counts.total === 1 ? "record" : "records"}
+            {review.counts.accepted > 0 && ` · ${review.counts.accepted} included`}
+            {review.counts.excluded > 0 && ` · ${review.counts.excluded} excluded`}
+            {review.counts.duplicate > 0 && ` · ${review.counts.duplicate} duplicate`}
+            {review.counts.needsReview > 0 && ` · ${review.counts.needsReview} to review`}
+            {" · Unsaved preview"}
           </p>
-          <dl className={styles.recordTotals}>
-            {[
-              [review.counts.accepted, "Included"],
-              [review.counts.excluded, "Excluded"],
-              [review.counts.duplicate, "Duplicate"],
-              [review.counts.needsReview, "Needs review"],
-            ].map(([count, label]) => (
-              <div key={label}>
-                <dt>{label}</dt>
-                <dd>{count}</dd>
-              </div>
-            ))}
-          </dl>
           {saved !== null && (
             <Notice>
               Details checked for record {saved}.{" "}
@@ -161,13 +148,22 @@ export function ImportReviewPanel({
                   {repairable > 0 && ` Check ${review.sourceBlockerCount === 1 ? "this record" : "these records"} before adding supporting details for the other ${repairable === 1 ? "record" : repairable + " records"}.`}
                 </p>
               )}
-              {review.status === "unsupported"
-                ? "This format is not verified. Check the export instructions and upload a supported file."
+              {unknownFormat
+                ? <>This format is not verified. <Link href={`/supported-brokers#${broker}`}>Check the broker export instructions</Link> and choose a replacement CSV.</>
                 : review.counts.duplicate === review.counts.total &&
                     review.counts.total > 0
                   ? "Every record in this file was already imported. Discard this preview to keep your existing records."
                   : next ? `Record ${next.record}: ${next.reason}` : "This file cannot be saved yet. Check the original export and keep all source rows in the file."}
             </Notice>
+          )}
+          {review.firstIncluded && (
+            <div className={styles.previewTrade} aria-label="First included trade" role="group">
+              <h2>First included trade · record {review.firstIncluded.record}</h2>
+              {review.firstIncluded.name && review.firstIncluded.name !== review.firstIncluded.trade.securityId &&
+                <strong>{review.firstIncluded.name}</strong>}
+              <p>{tradeSummary(review.firstIncluded.trade)}</p>
+              <p>Net cash <strong>{statementAmount(review.firstIncluded.trade.netCash, review.firstIncluded.trade.currency)}</strong></p>
+            </div>
           )}
           {review.revalidatesReceiptId && <Notice tone="info">The original file matches your saved receipt. Confirm the check to keep its existing transactions and record the verified rows.</Notice>}
           {review.status === "ready" && !!preview.affectedReportYears?.length && (
@@ -183,7 +179,7 @@ export function ImportReviewPanel({
                   <>Save {review.counts.accepted.toLocaleString("en-GB")} {review.counts.accepted === 1 ? "transaction" : "transactions"}</>}
               </Button>
             )}
-            {next && (
+            {next && !unknownFormat && (
               <Button
                 busy={busy}
                 onClick={() => {
@@ -197,15 +193,15 @@ export function ImportReviewPanel({
             )}
             <Button
               busy={busy}
-              variant="secondary"
+              variant={unknownFormat ? "primary" : "secondary"}
               onClick={(event) => {
                 if ((preview.reviewVersion ?? 0) > 0) {
                   event.currentTarget.focus({ preventScroll: true });
                   setConfirmDiscard(true);
-                } else onDiscard();
+                } else onDiscard(unknownFormat);
               }}
             >
-              Discard preview
+              {unknownFormat ? "Replace file" : "Discard preview"}
             </Button>
           </div>
           <dialog
@@ -235,7 +231,7 @@ export function ImportReviewPanel({
                 variant="danger"
                 onClick={() => {
                   setConfirmDiscard(false);
-                  onDiscard();
+                  onDiscard(unknownFormat);
                 }}
               >
                 Discard corrected preview
@@ -275,9 +271,9 @@ export function ImportReviewPanel({
               )}
             </details>
           )}
-          <h3 className="mt-5">
+          <h2 className={styles.rowHeading}>
             Record outcomes{pages > 1 && ` · page ${review.page} of ${pages}`}
-          </h3>
+          </h2>
           {groups.map((group) => {
             const records = review.records.filter(
               (item) => item.status === group.key,

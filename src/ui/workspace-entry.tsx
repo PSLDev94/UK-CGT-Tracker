@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { AuthFrame } from "./auth-frame";
 import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
-import { authHref, safeReturnPath } from "./return-path";
+import { authBackLink, authHref, brokerUploadDestination, safeReturnPath } from "./return-path";
 
 export function WorkspaceEntry({
   next,
@@ -12,8 +12,9 @@ export function WorkspaceEntry({
 }) {
   const destination = safeReturnPath(next);
   const annualBilling = destination.split("?")[0] === "/billing";
+  const broker = brokerUploadDestination(destination);
   return (
-    <AuthFrame pricingReturn={annualBilling}>
+    <AuthFrame back={authBackLink(destination)}>
       <section>
         <h1>
           {annualBilling ? "Annual PDF reports" : "Sign in to your workspace."}
@@ -21,7 +22,9 @@ export function WorkspaceEntry({
         <p>
           {annualBilling
             ? `The annual PDF plan is ${ANNUAL_REPORT_PRICE} per year. Sign in or create an account to continue to billing.`
-            : "Sign in to open your personal portfolio, or create a free account to get started."}
+            : broker
+              ? `Sign in or create a free account to continue to your ${broker.name} CSV upload.`
+              : "Sign in to open your personal portfolio, or create a free account to get started."}
         </p>
         {message && <p role="status">{message}</p>}
         <div className="actions">

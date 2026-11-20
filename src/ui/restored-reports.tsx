@@ -273,6 +273,12 @@ function ReportContents({
     calculation?.coverage_confirmed && result?.status === "complete";
   const periods = result && calculation ? confirmedRatePeriods(result, calculation.coverage_confirmed) : [];
   const accounts = calculation?.coverage_accounts;
+  const evidenceProblem = calculation?.evidenceIssue === undefined && result
+    ? evidenceIssue(result)
+    : calculation?.evidenceIssue;
+  const recoveringAccess = entitlement && !entitlement.entitled &&
+    (entitlement.needsReview || !["none", "canceled", "incomplete_expired"].includes(entitlement.status));
+  const recoveryCard = requestedFormat === "evidence" && !evidenceProblem ? "evidence" : "summary";
   return (
     <div className={styles.page}>
       <header className={styles.masthead}>
@@ -402,12 +408,8 @@ function ReportContents({
                   <div role="group" aria-label="PDF reports" className="flex flex-wrap items-start gap-x-3 gap-y-2">
                     {cards.map((card) => {
                       const target = { year, format: card.kind };
-                      const issue =
-                        card.kind === "evidence"
-                          ? calculation.evidenceIssue === undefined
-                            ? evidenceIssue(calculation.result)
-                            : calculation.evidenceIssue
-                          : null;
+                      const issue = card.kind === "evidence" ? evidenceProblem : null;
+                      if (recoveringAccess && !issue && card.kind !== recoveryCard) return null;
                       const locked =
                         entitlement &&
                         (!entitlement.entitled ||
@@ -423,7 +425,7 @@ function ReportContents({
                         >
                           {requestedFormat === card.kind &&
                             !issue &&
-                            !(outcome === "returned" && billingError) &&
+                            !(outcome === "returned" && (billingError || recoveringAccess)) &&
                             outcome && (
                               <Notice
                                 tone={
@@ -467,20 +469,21 @@ function ReportContents({
                               )}
                             </Notice>
                           ) : locked ? (
-                            <Link
-                              className="button primary"
-                              href={billingUrl(target)}
-                            >
-                              {entitlement.needsReview
-                                ? "Review subscription"
-                                : ![
-                                      "none",
-                                      "canceled",
-                                      "incomplete_expired",
-                                    ].includes(entitlement.status)
-                                  ? "Manage PDF access"
-                                  : `Get ${card.name} · ${ANNUAL_REPORT_PRICE}/year`}
-                            </Link>
+                            <>
+                              {recoveringAccess && (
+                                <p className="caption mb-2">Both PDF downloads need billing attention.</p>
+                              )}
+                              <Link
+                                className="button primary"
+                                href={billingUrl(recoveringAccess && requestedFormat ? { year, format: requestedFormat } : target)}
+                              >
+                                {entitlement.needsReview
+                                  ? "Review subscription"
+                                  : recoveringAccess || entitlement.entitled
+                                    ? "Manage PDF access"
+                                    : `Get ${card.name} · ${ANNUAL_REPORT_PRICE}/year`}
+                              </Link>
+                            </>
                           ) : billingError ? (
                             <>
                               <Notice tone="warning">
@@ -548,6 +551,7 @@ function ReportContents({
                               <Link aria-label={`${name} sale on ${date}`} href={calculationSourceHref(year, source ? `${calculation.id}.${index}.0` : undefined)}>
                                 {name}
                               </Link>
+                              {name !== sale.securityId && <span className={styles.securityId}>{sale.securityId}</span>}
                               <time dateTime={sale.date} className={styles.compactDate}>{date}</time>
                             </th>
                             <td><time dateTime={sale.date}>{date}</time></td>

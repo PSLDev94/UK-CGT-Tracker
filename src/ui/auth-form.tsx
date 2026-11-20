@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useHydrated } from "./use-hydrated";
-import { authHref, safeReturnPath } from "./return-path";
+import { authHref, brokerUploadDestination, safeReturnPath } from "./return-path";
 import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
 import { authApi, ApiError } from "./api";
 import {
@@ -50,6 +50,29 @@ const copy: Record<
   },
 };
 
+function readAuthFields(form: HTMLFormElement, mode: AuthMode) {
+  const values = new FormData(form);
+  const email = String(values.get("email") ?? "").trim();
+  const password = String(values.get("password") ?? "");
+  const name = String(values.get("name") ?? "").trim();
+  const errors: Record<string, string> = {};
+  if (mode !== "reset" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    errors.email = "Enter a valid email address.";
+  if (mode === "sign-up" && (!name || name.length > 100))
+    errors.name = "Enter your name (up to 100 characters).";
+  if (
+    ["sign-in", "sign-up", "reset"].includes(mode) &&
+    (password.length < 12 || password.length > 128)
+  )
+    errors.password = "Use 12–128 characters.";
+  if (
+    ["sign-up", "reset"].includes(mode) &&
+    password !== values.get("confirmation")
+  )
+    errors.confirmation = "The passwords do not match.";
+  return { email, password, name, errors };
+}
+
 export function AuthForm({
   mode,
   token,
@@ -64,6 +87,7 @@ export function AuthForm({
   const router = useRouter();
   const ready = useHydrated();
   const destination = safeReturnPath(nextPath);
+  const broker = brokerUploadDestination(destination);
   const annualBilling = destination.split("?")[0] === "/billing";
   const href = (path: string) => authHref(path, destination);
   const [submittedAddress, setSubmittedAddress] = useState("");
@@ -75,6 +99,7 @@ export function AuthForm({
   const callbackURL = () =>
     location.origin + href("/account/sign-in?verification=complete");
   const [busy, setBusy] = useState(false);
+  const validateEdits = useRef(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -87,25 +112,8 @@ export function AuthForm({
     event.preventDefault();
     if (busy) return;
     const form = event.currentTarget;
-    const values = new FormData(form);
-    const email = String(values.get("email") ?? "").trim();
-    const password = String(values.get("password") ?? "");
-    const name = String(values.get("name") ?? "").trim();
-    const next: Record<string, string> = {};
-    if (mode !== "reset" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      next.email = "Enter a valid email address.";
-    if (mode === "sign-up" && (!name || name.length > 100))
-      next.name = "Enter your name (up to 100 characters).";
-    if (
-      ["sign-in", "sign-up", "reset"].includes(mode) &&
-      (password.length < 12 || password.length > 128)
-    )
-      next.password = "Use 12–128 characters.";
-    if (
-      ["sign-up", "reset"].includes(mode) &&
-      password !== values.get("confirmation")
-    )
-      next.confirmation = "The passwords do not match.";
+    const { email, password, name, errors: next } = readAuthFields(form, mode);
+    validateEdits.current = true;
     setErrors(next);
     setError("");
     setMessage("");
@@ -130,6 +138,7 @@ export function AuthForm({
           name,
           callbackURL: callbackURL(),
         });
+        validateEdits.current = false;
         form.reset();
         setSubmittedAddress(email);
         setResent(false);
@@ -151,6 +160,7 @@ export function AuthForm({
         );
       } else {
         await authApi("reset-password", { token, newPassword: password });
+        validateEdits.current = false;
         form.reset();
         setMessage(
           "Your password has been reset. Sign in with your new password to continue.",
@@ -187,7 +197,9 @@ export function AuthForm({
           <strong>{submittedAddress}</strong>.
         </p>
         <p>
-          Open the link to verify your email, then sign in to your workspace.
+          {broker
+            ? `Open the link to verify your email, then sign in to continue to your ${broker.name} upload.`
+            : "Open the link to verify your email, then sign in to your workspace."}
         </p>
         {error && <Notice tone="error">{error}</Notice>}
         <Link className="button primary" href={href("/account/sign-in")}>
@@ -234,14 +246,18 @@ export function AuthForm({
       </section>
     );
   }
+  let description = copy[mode].description;
+  if (annualBilling && (mode === "sign-in" || mode === "sign-up")) {
+    description = `Continue to billing for annual PDF reports (${ANNUAL_REPORT_PRICE} per year). You’ll review the subscription in checkout.`;
+  } else if (broker && mode === "sign-up") {
+    description = `Verify your email, then sign in to upload your ${broker.name} CSV and calculate for free.`;
+  } else if (broker && mode === "sign-in") {
+    description = `Sign in to continue to your ${broker.name} CSV upload.`;
+  }
   return (
     <section>
       <h1>{copy[mode].title}</h1>
-      <p className="muted">
-        {annualBilling && (mode === "sign-in" || mode === "sign-up")
-          ? `Continue to billing for annual PDF reports (${ANNUAL_REPORT_PRICE} per year). You’ll review the subscription in checkout.`
-          : copy[mode].description}
-      </p>
+      <p className="muted">{description}</p>
       {verificationNotice === "complete" && (
         <Notice tone="success">
           Your email is verified. Sign in to continue.
@@ -265,6 +281,9 @@ export function AuthForm({
           method="post"
           noValidate
           onSubmit={submit}
+          onChange={(event) => {
+            if (validateEdits.current) setErrors(readAuthFields(event.currentTarget, mode).errors);
+          }}
           className="form-stack"
           aria-busy={!ready || busy}
         >

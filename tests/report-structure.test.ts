@@ -153,6 +153,24 @@ it("keeps the annual ledger bounded and preserves long instrument names in the t
   expect(reportPageText(pdf, 0, true)).toContain(instrument);
 });
 
+it.each([false, true])("uses the verified name and ISIN for a loss without guessing from partial or conflicting fills (evidence %s)", async evidence => {
+  const sale = { ...result.disposals[0]!, gainGBP: "-3.00", sourceIds: ["s", "s2"] };
+  const snapshot = {
+    ...saved,
+    result: { ...result, disposals: [sale] },
+    sources: [{ ...saved.sources[0]!, instrument: "First broker label" }],
+  };
+  for (const sources of [snapshot.sources, [...snapshot.sources, { ...snapshot.sources[0]!, key: "s2", instrument: "Other label" }]]) {
+    const fallback = reportPageText(await PDFDocument.load(await reportPdf({ ...snapshot, sources }, evidence)), 0);
+    expect(fallback).toContain("GB0008706128\n1 June 2024\n-£3.00");
+    expect(fallback).not.toContain("First broker label");
+  }
+  const confirmed = reportPageText(await PDFDocument.load(await reportPdf({
+    ...snapshot, statementSaleNames: { s: "Verified share name" },
+  }, evidence)), 0);
+  expect(confirmed).toContain("Verified share name\nGB0008706128 · 1 June 2024\n-£3.00");
+});
+
 it("explains missing sale information in older snapshots without inferring a zero fee", async () => {
   const legacy = {
     ...result,

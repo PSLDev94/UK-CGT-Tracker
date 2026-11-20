@@ -3,18 +3,18 @@ import type { ReactNode } from "react";
 import { Brand } from "./brand";
 import styles from "./auth-frame.module.css";
 
-export function AuthFrame({ children, aside, pricingReturn = false }: {
+export function AuthFrame({ children, aside, back = { href: "/", label: "Back to home" } }: {
   children: ReactNode;
   aside?: ReactNode;
-  pricingReturn?: boolean;
+  back?: { href: string; label: string };
 }) {
   return (
     <div className={styles.frame}>
       <header className={styles.mast}>
         <div className={styles.mastInner}>
           <Brand />
-          <Link className={styles.back} href={pricingReturn ? "/pricing" : "/"}>
-            <span aria-hidden="true">←</span> {pricingReturn ? "Back to pricing" : "Back to home"}
+          <Link className={styles.back} href={back.href}>
+            <span aria-hidden="true">←</span> {back.label}
           </Link>
         </div>
       </header>

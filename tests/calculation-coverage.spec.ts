@@ -31,6 +31,20 @@ const purchase: Trade = {
 };
 const cutoff = "2025-05-05";
 
+test("the collapsed calculation and annual statement identify the same sale by name and ISIN", async ({ page, isMobile }) => {
+  const { state } = await workspace(page, [purchase, sale], true);
+  state.statementSaleNames = { [sale.id]: "Apple Inc" };
+  await page.goto("/dashboard/calculations?year=2024-25");
+  const sales = isMobile ? page.locator("details:visible > summary").filter({ hasText: sale.securityId })
+    : page.getByRole("region", { name: "Disposal evidence" }).getByRole("row").filter({ hasText: sale.securityId });
+  await expect(sales).toContainText("Apple Inc");
+  await expect(sales).toContainText(sale.securityId);
+  await page.goto("/dashboard/reports?year=2024-25");
+  const statement = page.getByRole("region", { name: "Sales in this statement" });
+  await expect(statement.getByRole("link", { name: /Apple Inc sale on/ })).toBeVisible();
+  await expect(statement.getByText(sale.securityId, { exact: true })).toBeVisible();
+});
+
 test("the selected year and ordinary-market declaration must both apply before calculating", async ({ page }) => {
   const { datedSubmissions } = await workspace(page, [{ ...purchase, date: "2024-04-06" }, sale], true);
   await page.goto("/dashboard/calculations?year=2024-25");

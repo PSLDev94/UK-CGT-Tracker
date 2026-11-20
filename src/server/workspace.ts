@@ -1,7 +1,7 @@
 import { reviewedCalculationInputs } from "./reviewed-opening-pools";
 import { createHash } from "node:crypto";
 import { evidenceIssue, purchaseIssue, type ReportIssue } from "../domain/reports/eligibility";
-import { statementSaleLimit } from "../domain/reports/report";
+import { matchingSaleNames, statementSaleLimit } from "../domain/reports/report";
 import type { ReportDestination } from "../domain/reports/destination";
 import { BROKERS, type BrokerId } from "../domain/imports/brokers";
 import {
@@ -79,6 +79,34 @@ interface EvidenceRun {
   portfolio_id: string;
   portfolio_revision: number;
   coverage_accounts: string[];
+}
+
+/** Read just the broker label and lookup key. Large portfolios share bounded, indexed queries. */
+async function brokerInstrumentNames(tx: Connection, keys: string[], keyColumn: "t.source_key" | "t.security_id") {
+  const byKey = new Map<string, string>();
+  const distinct = [...new Set(keys)];
+  const batchSize = 1000;
+  for (let offset = 0; offset < distinct.length; offset += batchSize) {
+    const rows = await query<{ key: string; name: string }>(tx, `
+      SELECT ${keyColumn} AS key, min(n.name) AS name
+      FROM cgt.transactions t
+      CROSS JOIN LATERAL (SELECT t.provenance->'native'->'fields' AS fields) f
+      CROSS JOIN LATERAL (SELECT coalesce(nullif(btrim(f.fields->>'Name'),''),
+        nullif(btrim(f.fields->>'Stock name'),''), nullif(btrim(f.fields->>'Title'),''),
+        nullif(btrim(CASE WHEN t.provenance#>>'{native,format}' LIKE 'ii-%'
+          THEN regexp_replace(f.fields->>'Description', '^(purchase|bought|buy|sale|sold|sell)([[:space:]]+of)?([[:space:]]+|$)', '', 'i')
+          ELSE f.fields->>'Description' END),'')) AS name) n
+      WHERE t.active AND ${keyColumn} = ANY($1::text[]) AND n.name IS NOT NULL
+      GROUP BY ${keyColumn} HAVING count(DISTINCT lower(n.name)) = 1 AND length(min(n.name)) <= 200
+    `, [distinct.slice(offset, offset + batchSize)]);
+    for (const row of rows) byKey.set(row.key, row.name);
+  }
+  return byKey;
+}
+
+async function disposalNames(tx: Connection, disposals: Calculation["disposals"]) {
+  const bySource = await brokerInstrumentNames(tx, disposals.flatMap(sale => sale.sourceIds), "t.source_key");
+  return matchingSaleNames(disposals, key => bySource.get(key));
 }
 
 async function transactionSources(tx: Connection, sourceKeys: string[]): Promise<ReportSource[]> {
@@ -401,7 +429,7 @@ export class Workspace {
     includeImportCount = false,
     includeReportEligibility = false,
     receiptId?: string,
-    namedInstruments: boolean | "statement-sales" = false,
+    namedInstruments: boolean | "statement-sales" | "calculation-sales" = false,
   ) {
     return this.db.run(identity, async (tx) => {
       // Unique owner index serialises concurrent first visits; no advisory key collisions.
@@ -533,46 +561,14 @@ export class Workspace {
         tx,
         "SELECT id, account_id, created_at, expires_at, display_summary FROM cgt.import_drafts WHERE expires_at > now() ORDER BY created_at DESC, id",
       );
-      let instrumentNames: Record<string, string> | undefined;
-      let statementSaleNames: Record<string, string> | undefined;
-      if (namedInstruments) {
-        // A statement label belongs to a saved disposal, including where a company changed names.
-        // Large groups keep their stable security ID and all their source rows in the evidence.
-        const statementSales = namedInstruments === "statement-sales"
-          ? calculations.flatMap(run => run.result.disposals.slice(0, statementSaleLimit))
-              .filter(sale => sale.sourceIds.length > 0 && sale.sourceIds.length <= 25)
-          : [];
-        const bySource = namedInstruments === "statement-sales";
-        const keyColumn = bySource ? "t.source_key" : "t.security_id";
-        const keys = [...new Set(bySource
-          ? statementSales.flatMap(sale => sale.sourceIds)
-          : calculations.flatMap(run => run.result.pools.map(pool => pool.securityId)))];
-        const names = keys.length ? await query<{ key: string; name: string }>(tx, `
-          SELECT ${keyColumn} AS key, min(n.name) AS name
-          FROM cgt.transactions t
-          CROSS JOIN LATERAL (SELECT t.provenance->'native'->'fields' AS fields) f
-          CROSS JOIN LATERAL (SELECT coalesce(nullif(btrim(f.fields->>'Name'),''),
-            nullif(btrim(f.fields->>'Stock name'),''), nullif(btrim(f.fields->>'Title'),''),
-            nullif(btrim(CASE WHEN t.provenance#>>'{native,format}' LIKE 'ii-%'
-              THEN regexp_replace(f.fields->>'Description', '^(purchase|bought|buy|sale|sold|sell)([[:space:]]+of)?([[:space:]]+|$)', '', 'i')
-              ELSE f.fields->>'Description' END),'')) AS name) n
-          WHERE t.active AND ${keyColumn} = ANY($1::text[]) AND n.name IS NOT NULL
-          GROUP BY ${keyColumn} HAVING count(DISTINCT lower(n.name)) = 1 AND length(min(n.name)) <= 200
-        `, [keys]) : [];
-        const byKey = Object.fromEntries(names.map(row => [row.key, row.name]));
-        if (bySource) {
-          statementSaleNames = {};
-          for (const sale of statementSales) {
-            const firstSource = sale.sourceIds[0]!;
-            const name = byKey[firstSource];
-            if (name && sale.sourceIds.every(key => byKey[key]?.toLowerCase() === name.toLowerCase())) {
-              statementSaleNames[firstSource] = name;
-            }
-          }
-        } else {
-          instrumentNames = byKey;
-        }
-      }
+      const instrumentNames = namedInstruments === true
+        ? Object.fromEntries(await brokerInstrumentNames(tx,
+            calculations.flatMap(run => run.result.pools.map(pool => pool.securityId)), "t.security_id"))
+        : undefined;
+      const statementSaleNames = namedInstruments === "statement-sales" || namedInstruments === "calculation-sales"
+        ? await disposalNames(tx, calculations.flatMap(run => namedInstruments === "statement-sales"
+            ? run.result.disposals.slice(0, statementSaleLimit) : run.result.disposals))
+        : undefined;
       return {
         portfolio: portfolios[0]!,
         accounts,
@@ -676,6 +672,10 @@ export class Workspace {
         if (snapshot.sources.length !== keys.size)
           throw new AppError(409, "REPORT_UNAVAILABLE",
             "The transaction evidence for this calculation is incomplete. Review the imports and recalculate before downloading.");
+      }
+      if (kind === "summary" || kind === "evidence") {
+        const sales = kind === "summary" ? snapshot.result.disposals.slice(0, statementSaleLimit) : snapshot.result.disposals;
+        snapshot.statementSaleNames = await disposalNames(tx, sales);
       }
       return snapshot;
     }, "repeatable read");
