@@ -329,11 +329,28 @@ test("the mobile public menu reveals keyboard destinations in both directions", 
     const bounds = link.getBoundingClientRect();
     return link.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
   })).toBe(true);
+
+  // WebKit's keyboard preference varies by port. Determine how this browser
+  // reaches the preceding link while the disclosure is closed.
+  const signup = page.getByRole("link", { name: "Sign up free", exact: true });
+  let reverseTab = "Shift+Tab";
+  await open.focus();
+  await page.keyboard.press(reverseTab);
+  if (browserName === "webkit" && !(await signup.evaluate(link => document.activeElement === link))) {
+    reverseTab = "Shift+Alt+Tab";
+    await open.focus();
+    await page.keyboard.press(reverseTab);
+  }
+  await expect(signup).toBeFocused();
   await open.click();
   await close.focus();
-  await page.keyboard.press("Shift+" + tab);
-  await expect(page.getByRole("link", { name: "Sign up free", exact: true })).toBeFocused();
+  await page.keyboard.press(reverseTab);
+  await expect(signup).toBeFocused();
   await expect(panel).toHaveCount(0);
+  expect(await signup.evaluate(link => {
+    const bounds = link.getBoundingClientRect();
+    return link.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
+  })).toBe(true);
   await open.click();
   await page.keyboard.press("Escape");
   await expect(open).toBeFocused();
