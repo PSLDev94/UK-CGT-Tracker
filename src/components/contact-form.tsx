@@ -103,7 +103,7 @@ export function ContactForm({
   const intro = (
     <>
       Have a question, feedback, or need help with your CGT calculations?
-      Contact PSL Digital at <a href="mailto:support@cgttracker.com">support@cgttracker.com</a>, or use this form.
+      Contact PSL Digital at <a className="underline" href="mailto:support@cgttracker.com">support@cgttracker.com</a>, or use this form.
     </>
   );
   return (
