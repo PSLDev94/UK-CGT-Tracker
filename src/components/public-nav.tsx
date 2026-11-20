@@ -40,6 +40,7 @@ export function PublicNav({ backToUpload }: { backToUpload?: string } = {}) {
   const [open, setOpen] = useState(false); // desktop tools dropdown
   const [mobileOpen, setMobileOpen] = useState(false); // mobile hamburger
   const toolsButton = useRef<HTMLButtonElement>(null);
+  const accountLink = useRef<HTMLAnchorElement>(null);
   const mobileButton = useRef<HTMLButtonElement>(null);
   const mobileList = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -150,6 +151,7 @@ export function PublicNav({ backToUpload }: { backToUpload?: string } = {}) {
             {!signedIn && <Link href="/login">Log in</Link>}
           </div>
           <Link
+            ref={accountLink}
             className={styles.account}
             href={signedIn ? (backToUpload ?? "/dashboard") : "/signup"}
           >
@@ -162,6 +164,13 @@ export function PublicNav({ backToUpload }: { backToUpload?: string } = {}) {
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
             aria-controls="public-mobile"
             ref={mobileButton}
+            onKeyDown={(event) => {
+              if (mobileOpen && event.key === "Tab" && event.shiftKey && !event.ctrlKey && !event.metaKey) {
+                event.preventDefault();
+                setMobileOpen(false);
+                accountLink.current?.focus();
+              }
+            }}
             onClick={() => setMobileOpen((v) => !v)}
           >
             {mobileOpen ? "Close" : "Menu"}

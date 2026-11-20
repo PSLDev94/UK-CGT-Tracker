@@ -342,15 +342,24 @@ test("the mobile public menu reveals keyboard destinations in both directions", 
     await page.keyboard.press(reverseTab);
   }
   await expect(signup).toBeFocused();
-  await open.click();
-  await close.focus();
-  await page.keyboard.press(reverseTab);
-  await expect(signup).toBeFocused();
-  await expect(panel).toHaveCount(0);
-  expect(await signup.evaluate(link => {
-    const bounds = link.getBoundingClientRect();
-    return link.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
-  })).toBe(true);
+  for (const chord of new Set([reverseTab, "Shift+Tab"])) {
+    await open.click();
+    await close.focus();
+    await expect(close).toBeFocused();
+    await page.keyboard.press(chord);
+    await expect.poll(() => page.evaluate(() => ({
+      tag: document.activeElement?.tagName,
+      name: document.activeElement?.getAttribute("aria-label") || document.activeElement?.textContent?.trim().slice(0, 60),
+      href: document.activeElement?.getAttribute("href"),
+    })), { message: `The expanded menu must return focus to signup on ${chord}` })
+      .toEqual({ tag: "A", name: "Sign up free", href: "/signup" });
+    await expect(signup).toBeFocused();
+    await expect(panel).toHaveCount(0);
+    expect(await signup.evaluate(link => {
+      const bounds = link.getBoundingClientRect();
+      return link.contains(document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
+    })).toBe(true);
+  }
   await open.click();
   await page.keyboard.press("Escape");
   await expect(open).toBeFocused();
