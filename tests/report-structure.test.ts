@@ -9,6 +9,7 @@ import {
   PDFRef,
 } from "pdf-lib";
 import { calculateGains } from "../src/domain/cgt/calculate";
+import { CURRENT_SCOPE_DECLARATION } from "../src/domain/cgt/types";
 import { reportPdf } from "../src/domain/reports/pdf";
 import { reportPageText } from "./helpers/pdf-text";
 
@@ -174,6 +175,37 @@ it("explains missing sale information in older snapshots without inferring a zer
       "Gross disposal proceeds, selling costs and total allowable costs are unavailable",
     );
     expect(text).not.toContain("Selling costs\n£0.00");
+  }
+});
+
+it("keeps the complete audit record together in short and multi-page 2024–25 summaries", async () => {
+  const securityId = "GB0008706128";
+  const calculation = calculateGains([
+    { id: "buy", date: "2024-06-01", securityId, side: "BUY", quantity: "1", considerationGBP: "5.25", feesGBP: "0" },
+    { id: "sell", date: "2024-08-01", securityId, side: "SELL", quantity: "1", considerationGBP: "10.50", feesGBP: "0" },
+  ], { taxYear: "2024-25", historyThrough: "2025-05-05" });
+  const accountBrokers = ["trading212", "ajbell", "hl", "ii"];
+  for (const count of [4, 5, 14]) {
+    const snapshot = {
+      ...saved,
+      id: "00000000-0000-4000-8000-000000000001",
+      input_digest: "f".repeat(64),
+      result: { ...calculation, scopeDeclaration: CURRENT_SCOPE_DECLARATION },
+      accounts: Array.from({ length: count }, (_, index) => ({
+        broker: accountBrokers[index % accountBrokers.length]!,
+        label: `Dealing account ${index + 1}`,
+        confirmed: true,
+      })),
+    };
+    const pdf = await PDFDocument.load(await reportPdf(snapshot));
+    if (count === 4) expect(pdf.getPageCount()).toBe(1);
+    if (count === 14) expect(pdf.getPageCount()).toBeGreaterThan(1);
+    const pages = pdf.getPages().map((_, i) => reportPageText(pdf, i));
+    const record = pages.find(page => page.split("\n").includes("Calculation record"));
+    expect(record).toContain("Saved ");
+    expect(record).toContain("Calculation reference: " + snapshot.id);
+    expect(record).toContain("Input fingerprint: " + snapshot.input_digest);
+    expect(pages.join("\n")).not.toContain("Calculation record (continued)");
   }
 });
 

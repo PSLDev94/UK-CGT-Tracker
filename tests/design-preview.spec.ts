@@ -18,7 +18,15 @@ test("the homepage and sample statement reflow at 320 pixels with double-size te
       path === "/"
         ? page.getByRole("button", { name: "Apple", exact: true })
         : page.getByRole("link", { name: "Open annual statement PDF" });
-    await target.scrollIntoViewIfNeeded();
+    // Edge-aligned scrolling rounds to a whole pixel in Chromium. Center the
+    // control so full visibility tests the layout, including at fractional sizes.
+    await target.evaluate((element) =>
+      element.scrollIntoView({
+        block: "center",
+        inline: "nearest",
+        behavior: "instant",
+      }),
+    );
     await expect(target).toBeInViewport({ ratio: 1 });
   }
 });

@@ -171,17 +171,18 @@ export async function reportPdf(
     size = 10,
     color = ink,
     role: "P" | "H1" | "H2" | "H3" = "P",
+    leading = size + 5,
   ) {
     const font = role === "H1" || role === "H2" ? serif : strong ? bold : regular;
     const item = tags.element(role, tags.document);
     for (const { printed, original } of wrap(text, font, size)) {
       if (printed !== original) escapedText = true;
-      space(size + 5);
+      space(leading);
       tags.mark(page, item, () =>
         page.drawText(printed, { x: left, y, size, font, color }),
         printed !== original ? original : undefined,
       );
-      y -= size + 5;
+      y -= leading;
     }
   }
   const references = new Map<string, { id: string; role: string }>();
@@ -597,14 +598,16 @@ export async function reportPdf(
     muted,
   );
   if (r.taxYear === "2024-25") line(adjustment2024Note, false, 9, muted);
-  heading("Calculation record");
-  line(
-    `Saved ${date(snapshot.created_at)} · engine ${r.engineVersion}`,
-    false,
-    9,
-  );
-  line(`Calculation reference: ${snapshot.id}`, false, 8);
-  line(`Input fingerprint: ${snapshot.input_digest}`, false, 8);
+  const record = [
+    { text: `Saved ${date(snapshot.created_at)} · engine ${r.engineVersion}`, size: 9 },
+    { text: `Calculation reference: ${snapshot.id}`, size: 8 },
+    { text: `Input fingerprint: ${snapshot.input_digest}`, size: 8 },
+  ];
+  // Keep the audit identifiers with their heading. Measure wrapped lines, including older engine names.
+  const recordHeight = record.reduce((height, { text, size }) =>
+    height + wrap(text, regular, size).length * (size + 2), 0);
+  heading("Calculation record", 8 + 17 + 5 + recordHeight);
+  for (const { text, size } of record) line(text, false, size, ink, "P", size + 2);
   if (evidence && references.size) {
     heading("Transaction references", 150);
     for (const [key, { id, role }] of references) sourceLine(key, id, role);
