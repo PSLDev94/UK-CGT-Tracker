@@ -1,0 +1,250 @@
+.page,
+.flow > * {
+  width: min(100%, 72rem);
+  min-width: 0;
+}
+.page,
+.flow {
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+}
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: .75rem 1.75rem;
+  margin-bottom: clamp(1rem, 2.6vw, 2rem);
+  padding-bottom: clamp(.8rem, 1.5vw, 1.2rem);
+  border-bottom: 1px solid #677883;
+}
+.masthead > div { min-width: 0; max-width: 100%; }
+.masthead h1 {
+  margin: 0;
+  color: var(--color-ink);
+  font: 490 clamp(2.35rem, 4.35vw, 4.25rem)/.99 var(--font-statement);
+  letter-spacing: -.045em;
+}
+.masthead p {
+  max-width: 62ch;
+  margin: .65rem 0 0;
+  color: var(--color-muted);
+  font-size: .9375rem;
+  line-height: 1.5;
+}
+.mastheadControls select { width: 100%; }
+.mastheadControls label { font-size: .8125rem; }
+
+.flow :global(.panel),
+.section,
+.settingsSection,
+.billingStatus {
+  min-width: 0;
+  margin: 0 0 1.5rem;
+  padding: clamp(1rem, 2.3vw, 2rem);
+  border: 0;
+  border-block: 1px solid var(--color-border);
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--color-surface);
+}
+.flow :global(.panel) > h2,
+.section > h2,
+.settingsSection > h2,
+.ledgerTitle,
+.resultHeader h2,
+.overview > h2 {
+  margin: 0 0 .85rem;
+  font: 520 clamp(1.5rem, 2.35vw, 2.15rem)/1.1 var(--font-statement);
+  letter-spacing: -.033em;
+  color: var(--color-ink);
+}
+.flow :global(.accounts-layout) { gap: clamp(1rem, 2.6vw, 2.2rem); }
+.flow :global(.account-form):only-child { grid-column: 1 / -1; max-width: 48rem; }
+.flow :global(.upload-box) {
+  background: var(--color-sheet);
+  border: 1px solid var(--color-border);
+  border-radius: 0;
+}
+.flow :global(.record-list) {
+  margin-block: .7rem 0;
+  border-block-start: 1px solid var(--color-border);
+}
+.flow :global(.record-list) > li { min-width: 0; }
+.flow :global(.record-list) > li > * { max-width: 100%; min-width: 0; }
+.flow :global(.pagination) { flex-wrap: wrap; }
+.savedSettings {
+  padding: 1rem;
+  background: var(--color-sheet);
+  border-block: 1px solid var(--color-border);
+}
+.savedSettings > * + * { margin-block-start: .65rem; }
+.flow :global(.form-stack) { max-width: 62rem; }
+.flow :global(.account-form) form { max-width: 39rem; }
+.flow :global(.field) small, .flow :global(.checkbox-label) > span { max-width: 82ch; }
+
+.index,
+.recordTotals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: .7rem 1.15rem;
+  margin: 0 0 1.35rem;
+  padding: .9rem 0;
+  border-block: 1px solid var(--color-border);
+}
+.index dt,
+.recordTotals dt,
+.balanceParts dt,
+.outcomeLabel {
+  color: var(--color-muted);
+  font: 510 .82rem/1.4 var(--font-body);
+}
+.index dd,
+.recordTotals dd {
+  margin: .14rem 0 0;
+  color: var(--color-ink);
+  font: 480 clamp(1.8rem, 3.25vw, 2.75rem)/1.1 var(--font-statement);
+  letter-spacing: -.04em;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.index .indexNote {
+  color: var(--color-muted);
+  font: 400 .78rem/1.45 var(--font-body);
+  letter-spacing: normal;
+}
+.recordTotals {
+  margin-block: 1rem;
+  padding: .85rem clamp(.8rem, 2vw, 1.5rem);
+  background: var(--color-sheet);
+}
+.overview,
+.balance,
+.plan {
+  min-width: 0;
+  background: var(--color-sheet);
+  border-block: 1px solid var(--color-border);
+  padding: clamp(1rem, 3vw, 2.25rem);
+}
+.overview { margin-bottom: 1.4rem; }
+.overview > p { max-width: 62ch; }
+.overview :global(.actions) { margin-bottom: 0; }
+.overview .overviewResult,
+.balanceNet > strong,
+.plan .price {
+  margin: .2rem 0;
+  color: var(--color-ink);
+  font: 455 clamp(2.8rem, 5vw, 4.6rem)/1.06 var(--font-statement);
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: -.055em;
+  overflow-wrap: anywhere;
+}
+.outcomeLabel { display: block; margin-block: .35rem .75rem; letter-spacing: normal; }
+
+.calculation { margin-bottom: 1.4rem; min-width: 0; }
+.calculation > * + * { margin-block-start: 1rem; }
+.resultHeader,
+.ledgerHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .4rem 1rem;
+}
+.resultHeader { padding-bottom: .65rem; border-bottom: 1px solid var(--color-border); }
+.resultHeader > h2, .ledgerHead > h3 { margin: 0; }
+.balance,
+.plan {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 1rem 2.5rem;
+  align-items: end;
+}
+.balanceNet {
+  display: block;
+  padding: 0;
+}
+.balanceNet h3 {
+  margin: 0 0 .15rem;
+  font: 520 .9rem/1.5 var(--font-body);
+  color: var(--color-muted);
+}
+.balanceNet > strong { display: block; }
+.balanceNet details { margin: 0; }
+.balanceParts { margin: 0; }
+.balanceParts > div,
+.breakdown dl > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, .8fr);
+  align-items: baseline;
+  gap: .5rem 1rem;
+  margin: 0;
+  padding-block: .45rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.balanceParts dd,
+.breakdown dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 580;
+  font-variant-numeric: tabular-nums;
+}
+.breakdown { max-width: 44rem; }
+.breakdown dl { display: block; }
+.ledger {
+  min-width: 0;
+  border-block: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.ledgerHead { padding: 1rem; border-bottom: 1px solid var(--color-border); }
+.ledger thead th {
+  padding: .7rem 1rem;
+  background: var(--color-sheet);
+  color: var(--color-muted);
+  font-size: .8rem;
+}
+.ledger :global(.number) { text-align: right; font-family: var(--font-body); }
+.receiptAmounts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  max-width: 42rem;
+  margin: .8rem 0;
+  font-size: .875rem;
+}
+.receiptAmounts > * { padding: .4rem 0; border-bottom: 1px solid var(--color-border); }
+.receiptAmounts dt { padding-inline-end: .8rem; color: var(--color-muted); }
+.receiptAmounts dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+
+.plan { align-items: start; margin-bottom: 1rem; }
+.plan .price span { display: block; margin-top: .25rem; font: 500 .9375rem/1.5 var(--font-body); letter-spacing: normal; }
+.plan p { margin: 0; }
+.plan p + p { margin-top: .8rem; }
+.billingStatus { max-width: 52rem; }
+.billingStatus > * + * { margin-top: .85rem; }
+.billingStatus :global(.actions):empty { display: none; }
+.settingsSection {
+  display: grid;
+  grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr);
+  align-items: start;
+  gap: .8rem 2rem;
+}
+.settingsSection > h2 { grid-row: span 2; }
+.settingsSection > :not(h2) { grid-column: 2; max-width: 37rem; }
+.settingsSection form > button,
+.settingsSection > a { justify-self: start; }
+.settingsSection p { margin: 0; }
+.scenarioValue {
+  margin-top: .8rem;
+  border-top: 1px solid var(--color-border);
+  padding-top: .8rem;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 48rem) {
+  .masthead { margin-bottom: .9rem; }
+  .masthead h1 { overflow-wrap: anywhere; }
+  .recordTotals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .balance, .plan, .settingsSection { grid-template-columns: minmax(0, 1fr); }
+  .settingsSection { gap: .65rem; }
+  .settingsSection > h2 { grid-row: auto; }
+  .settingsSection > :not(h2) { grid-column: 1; }
+  .index { grid-template-columns: repeat(auto-fit, minmax(min(100%, 6.8rem), 1fr)); }
+}

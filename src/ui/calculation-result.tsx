@@ -1,5 +1,6 @@
 import { Money } from "../domain/values";
 import Link from "next/link";
+import styles from "./workspace-records.module.css";
 import { money, Notice } from "./primitives";
 import type { Calculation } from "../domain/cgt/types";
 import { noDisposalsLabel, reportIssueMessage, scopeStatement, unresolvedPoolIssues } from "../domain/reports/eligibility";
@@ -65,7 +66,7 @@ export function CalculationResult({
     <section
       id="calculation-summary"
       aria-label="Calculation result"
-      className="space-y-6 mb-8"
+      className={styles.calculation}
     >
       {location && !target && (
         <Notice>
@@ -73,11 +74,11 @@ export function CalculationResult({
           {!noDisposals && " Select a disposal below to see its current sources."}
         </Notice>
       )}
-      <div className="flex flex-wrap gap-3 justify-between items-center">
+      <div className={styles.resultHeader}>
         <h2
           id="calculation-result-heading"
           tabIndex={-1}
-          className="scroll-mt-20 text-lg font-semibold text-gray-900"
+          className="scroll-mt-20"
         >
           {result.taxYear} share gains
         </h2>
@@ -122,29 +123,16 @@ export function CalculationResult({
         {result.hasLaterSales ? <>Sales for this year are already on file after the cutoff. <a href="#historyThrough">Review the history date</a> and recalculate.</> : "Check the reporting year and included history."}
       </Notice>}
       {result.summary && !noDisposals && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          {[
-            [
-              netOutcome(result.summary.netGainGBP),
-              result.summary.netGainGBP,
-              "text-blue-900",
-            ],
-            ["Total Gains", result.summary.gainsGBP, "text-green-700"],
-            ["Total Losses", result.summary.lossesGBP, "text-red-600"],
-          ].map(([label, value, tone], index) => (
-            <div
-              key={label}
-              className={`p-6 rounded-xl border shadow-sm ${label.startsWith("Net") || label === "Break-even" ? "bg-blue-50 border-blue-200 net-gain" : "bg-white"}`}
-            >
-              <h3 className="text-sm font-medium text-gray-600 mb-1">
-                {label}
-              </h3>
-              <strong className={`text-2xl font-bold tabular-nums ${tone}`}>
-                {money(value)}
-              </strong>
-              {index === 0 && savedInputs}
-            </div>
-          ))}
+        <div className={styles.balance}>
+          <div className={`net-gain ${styles.balanceNet}`}>
+            <h3>{netOutcome(result.summary.netGainGBP)}</h3>
+            <strong>{money(result.summary.netGainGBP)}</strong>
+            {savedInputs}
+          </div>
+          <dl className={styles.balanceParts}>
+            <div><dt>Total Gains</dt><dd>{money(result.summary.gainsGBP)}</dd></div>
+            <div><dt>Total Losses</dt><dd>{money(result.summary.lossesGBP)}</dd></div>
+          </dl>
         </div>
       )}
       {(!result.summary || noDisposals) && savedInputs}
@@ -173,8 +161,8 @@ export function CalculationResult({
         </section>
       )}
       {result.summary && (
-        <div>
-          <h3 className="text-lg font-semibold mb-3">Annual sale breakdown</h3>
+        <div className={styles.breakdown}>
+          <h3 className={styles.ledgerTitle}>Annual sale breakdown</h3>
           <SaleAmounts breakdown={result.saleBreakdown} net={result.summary.proceedsGBP} matched={result.summary.allowableCostsGBP} gain={result.summary.netGainGBP} summary={result.summary} />
           {roundingDifferences(result).length > 0 && <p className="caption mt-2">{annualRoundingNote(result)}</p>}
         </div>
@@ -183,9 +171,9 @@ export function CalculationResult({
         Gains and losses, not tax owed. Personal allowances, reliefs and other
         gains are not applied. This preview is not a filing-ready report.
       </p>
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <div className="px-6 py-4 border-b flex flex-wrap gap-2 items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900 m-0">
+      <div className={styles.ledger}>
+        <div className={styles.ledgerHead}>
+          <h3 className={styles.ledgerTitle}>
             Disposals ({result.taxYear})
           </h3>
           <span className="text-sm text-gray-500">
@@ -274,9 +262,9 @@ export function CalculationResult({
           </table>
         </div>
       </div>
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <div className="px-6 py-4 border-b">
-          <h3 className="text-lg font-semibold text-gray-900 m-0">
+      <div className={styles.ledger}>
+        <div className={styles.ledgerHead}>
+          <h3 className={styles.ledgerTitle}>
             Section 104 Pools at {displayDate(result.poolAsOf)}
           </h3>
         </div>

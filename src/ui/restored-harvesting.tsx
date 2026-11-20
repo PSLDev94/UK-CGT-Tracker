@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Money } from "../domain/values";
 import { ExactAmount } from "../domain/cgt/exact-amount";
-import { Calculator, TrendingDown } from "lucide-react";
+import { WorkspaceMasthead } from "./workspace-masthead";
+import records from "./workspace-records.module.css";
 import { workspaceApi } from "./api";
 import { reportIssueMessage, unresolvedPoolIssues } from "../domain/reports/eligibility";
 import type { Overview } from "./workspace-types";
@@ -56,16 +57,10 @@ export function RestoredHarvesting() {
     };
   });
   return (
-    <div className="max-w-5xl space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">
-          Tax-Loss Harvesting
-        </h1>
-        <p className="text-gray-600 mt-1">
-          Explore an illustrative price scenario against a saved Section 104
-          pool snapshot.
-        </p>
-      </div>
+    <div className={records.page}>
+      <WorkspaceMasthead title="Tax-Loss Harvesting">
+        Explore an illustrative price scenario against a saved Section 104 pool snapshot.
+      </WorkspaceMasthead>
       {error && (
         <Notice tone="error">
           {error}{" "}
@@ -79,11 +74,8 @@ export function RestoredHarvesting() {
         </Notice>
       )}
       {!data && !error && <Notice>Loading saved calculations…</Notice>}
-      <section className="bg-white rounded-xl shadow-sm border p-6">
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Calculator size={20} className="text-blue-600" aria-hidden="true" />
-          Explore a price scenario
-        </h2>
+      <section className={records.section}>
+        <h2>Explore a price scenario</h2>
         <p className="text-sm text-gray-600">
           Enter a hypothetical price to value the shares in each tax pool. A
           repurchase within 30 days of a sale can leave shares in the tax pool
@@ -237,16 +229,13 @@ export function RestoredHarvesting() {
         </div>
       </section>
       {rows.some((p) => p.gain) && (
-        <section className="bg-blue-50 rounded-xl shadow-sm border border-blue-200 p-6">
-          <h2 className="text-lg font-bold text-blue-900 flex items-center gap-2">
-            <TrendingDown size={20} aria-hidden="true" />
-            Illustrative tax-pool values
-          </h2>
+        <section className={records.section}>
+          <h2>Illustrative tax-pool values</h2>
           {rows
             .filter((p) => p.gain)
             .map((p) => (
               <div
-                className="bg-white p-4 rounded-lg border border-blue-100 mt-4"
+                className={records.scenarioValue}
                 key={p.securityId}
               >
                 <strong>{p.label}</strong>

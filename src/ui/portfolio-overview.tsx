@@ -1,5 +1,6 @@
 import { noDisposalsLabel } from "../domain/reports/eligibility";
 import Link from "next/link";
+import styles from "./workspace-records.module.css";
 import { draftLabel, hasActiveTrades, type Overview } from "./workspace-types";
 import { displayDate, money, netOutcome } from "./format";
 
@@ -51,13 +52,14 @@ export function PortfolioOverview({
     href = "/dashboard/upload";
   }
   return (
-    <section className="panel max-w-3xl [overflow-wrap:anywhere]">
+    <>
+    <section className={styles.overview}>
       <h2>{title}</h2>
       {saved && !saved.disposals.length && !draft && <p className="font-semibold">{noDisposalsLabel(saved, latestRun.coverage_confirmed)}</p>}
       {saved?.summary && saved.disposals.length > 0 && !draft && (
-        <p className="text-3xl font-bold text-blue-800 tabular-nums">
+        <p className={styles.overviewResult}>
           {money(saved.summary.netGainGBP)}{" "}
-          <span className="text-sm text-gray-600 font-medium">
+          <span className={styles.outcomeLabel}>
             {netOutcome(saved.summary.netGainGBP)}
           </span>
         </p>
@@ -97,5 +99,13 @@ export function PortfolioOverview({
         )}
       </div>}
     </section>
+    {data.accounts.length > 0 && (
+      <dl className={styles.index}>
+        <div><dt>Taxable accounts</dt><dd>{data.accounts.length.toLocaleString("en-GB")}</dd></div>
+        <div><dt>Calculated tax years</dt><dd>{data.calculations.length.toLocaleString("en-GB")}</dd></div>
+        <div><dt>Saved previews</dt><dd>{data.drafts.length.toLocaleString("en-GB")}</dd></div>
+      </dl>
+    )}
+    </>
   );
 }

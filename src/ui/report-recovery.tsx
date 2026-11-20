@@ -1,3 +1,4 @@
+import styles from "./workspace-records.module.css";
 import Link from "next/link";
 import type { Overview } from "./workspace-types";
 
@@ -13,8 +14,8 @@ export function ReportRecovery({ years, previousInputs, draftId, linkedYears = [
   const allPortfolio = years.every(year => reasons.get(year) === "portfolio");
   const saved = years.length === 1 ? "this report was saved" : "these reports were saved";
   return (
-    <section aria-label="Reports to recalculate" className="rounded-xl border bg-white p-5 sm:p-6">
-      <h2 className="text-lg font-semibold">Reports to recalculate</h2>
+    <section aria-label="Reports to recalculate" className={styles.section}>
+      <h2 className={styles.ledgerTitle}>Reports to recalculate</h2>
       <p className="mt-1 text-gray-700">
         {allRules ? `The calculation rules have changed since ${saved}.`
           : allPortfolio ? `Your portfolio has changed since ${saved}.`

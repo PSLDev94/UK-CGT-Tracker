@@ -1,3 +1,4 @@
+import styles from "@/components/public-pages.module.css";
 import Link from "next/link";
 import { PublicNav } from "@/components/public-nav";
 import { PublicFooter } from "@/components/public-footer";
@@ -5,13 +6,14 @@ export const metadata = { title: "Service terms" };
 
 export default function Terms() {
   return (
-    <>
+    <div className={styles.page}>
       <PublicNav />
       <main
         id="main"
-        className="max-w-3xl mx-auto px-4 py-16 space-y-6 text-gray-700"
+        tabIndex={-1}
+        className={`${styles.frame} ${styles.legal}`}
       >
-        <h1 className="text-3xl font-bold text-gray-900">
+        <h1 className={styles.articleTitle}>
           Service information
         </h1>
         <p>
@@ -24,7 +26,7 @@ export default function Terms() {
           </a>
           .
         </p>
-        <div className="rounded-xl border bg-blue-50 p-5">
+        <div className={styles.referenceBox}>
           <strong>Review version — sandbox payments only</strong>
           <p>
             No live payments are enabled. Production terms, consumer
@@ -94,6 +96,6 @@ export default function Terms() {
         </p>
       </main>
       <PublicFooter />
-    </>
+    </div>
   );
 }

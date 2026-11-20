@@ -1,3 +1,4 @@
+import styles from "./workspace-records.module.css";
 import type { ImportTradeDetail } from "../domain/imports/trade-detail";
 import { Money } from "../domain/values";
 import { displayDate } from "./format";
@@ -36,7 +37,7 @@ export function ImportTradeDetails({
       </p>
       <details className="my-2">
         <summary>Trade details for record {record}</summary>
-        <dl className="my-3 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
+        <dl className={styles.receiptAmounts}>
           <dt>Cash currency</dt>
           <dd>{trade.currency}</dd>
           <dt>Consideration</dt>

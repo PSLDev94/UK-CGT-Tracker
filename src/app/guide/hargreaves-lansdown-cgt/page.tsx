@@ -1,3 +1,4 @@
+import styles from "@/components/public-pages.module.css";
 import Link from "next/link";
 import { Metadata } from "next";
 import { GuideLayout } from "@/components/guide-layout";
@@ -76,7 +77,7 @@ export default function HargreavesLansdownCGTPage() {
         per share. Some securities are quoted in pounds or another currency.
       </p>
 
-      <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-lg my-6 not-prose">
+      <div className={`${styles.referenceBox} my-6 not-prose`}>
         <p className="text-sm text-amber-900">
           <strong>Check the price unit on the contract note.</strong> An
           unlabelled price of 178.50 could mean £178.50 or 178.50p (£1.785).
@@ -205,7 +206,7 @@ export default function HargreavesLansdownCGTPage() {
         </li>
       </ul>
 
-      <div className="bg-green-50 border-l-4 border-green-600 p-4 rounded-r-lg my-8 not-prose">
+      <div className={`${styles.referenceBox} my-8 not-prose`}>
         <p className="text-sm text-green-900">
           <strong>Support status:</strong> Documented Transaction Summary files use assisted review. Check price units, security identifiers and fees against your notes before saving. The calculation applies{" "}
           <Link

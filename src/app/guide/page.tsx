@@ -1,5 +1,6 @@
+import styles from "@/components/public-pages.module.css";
 import Link from "next/link";
-import { BookOpen, ArrowRight, ChevronRight } from "lucide-react";
+import { ArrowRight, ChevronRight } from "lucide-react";
 import { PublicNav } from "@/components/public-nav";
 import { PublicFooter } from "@/components/public-footer";
 import { Metadata } from "next";
@@ -17,49 +18,42 @@ const GUIDE_PAGES = [
     title: "What is a Section 104 Pool?",
     description:
       "How HMRC pools your share purchases into a single cost basis — with worked examples.",
-    colour: "from-blue-500 to-indigo-600",
   },
   {
     href: "/guide/bed-and-breakfast-rule",
     title: "The 30-Day Bed & Breakfast Rule",
     description:
       "Sold and rebought within 30 days? This anti-avoidance rule changes how your gain is calculated.",
-    colour: "from-amber-500 to-orange-600",
   },
   {
     href: "/guide/cgt-rates-2025-26",
     title: "UK CGT Rates 2025-26",
     description:
       "Rates and annual exempt amounts for the 2025–26 tax year, with worked examples.",
-    colour: "from-green-500 to-emerald-600",
   },
   {
     href: "/guide/sa108-how-to-fill-in",
     title: "How to Fill in SA108",
     description:
       "Step-by-step walkthrough of the HMRC SA108 supplementary page for capital gains from shares.",
-    colour: "from-purple-500 to-violet-600",
   },
   {
     href: "/guide/trading-212-cgt",
     title: "Trading 212 CGT Guide",
     description:
       "How to export your Trading 212 transaction history and calculate your capital gains tax.",
-    colour: "from-cyan-500 to-blue-600",
   },
   {
     href: "/guide/hargreaves-lansdown-cgt",
     title: "Hargreaves Lansdown CGT Guide",
     description:
       "Export HL transactions and verify price units and fees with contract notes.",
-    colour: "from-blue-600 to-blue-800",
   },
   {
     href: "/guide/freetrade-cgt",
     title: "Freetrade CGT Guide",
     description:
       "Step-by-step guide to exporting your Freetrade CSV and calculating CGT correctly.",
-    colour: "from-pink-500 to-rose-600",
   },
 ];
 
@@ -84,16 +78,16 @@ export default function GuidePage() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className={styles.page}>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <PublicNav />
 
-      <main id="main" className="max-w-5xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
+      <main id="main" tabIndex={-1} className={styles.frame}>
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-1.5 text-sm text-gray-500 mb-8">
+        <nav aria-label="Breadcrumb" className={styles.breadcrumb}>
           <Link href="/" className="hover:text-gray-900 transition-colors">
             Home
           </Link>
@@ -101,44 +95,29 @@ export default function GuidePage() {
           <span className="text-gray-900 font-medium">CGT Guide</span>
         </nav>
 
-        <div className="flex items-center mb-3">
-          <BookOpen className="w-8 h-8 text-blue-600 mr-3" />
-          <h1 className="text-4xl font-extrabold text-gray-900">
-            UK Capital Gains Tax Guide
-          </h1>
-        </div>
-        <p className="text-lg text-gray-600 mb-4 max-w-3xl">
+        <h1 className={styles.taskHeading}>
+          UK Capital Gains Tax Guide
+        </h1>
+        <p className={styles.intro}>
           A plain-English guide to CGT for UK self-directed investors. Click any
           topic below for worked examples, or <Link className="text-blue-700 underline" href="/supported-brokers">find the export instructions for your broker</Link>.
         </p>
-        <p className="text-sm text-gray-500 mb-12">Last updated: April 2026</p>
+        <p className={styles.edition}>Last updated: April 2026</p>
 
-        {/* Guide grid */}
-        <div className="grid sm:grid-cols-2 gap-6 mb-20">
+        <ul className={styles.index} aria-label="Guide topics">
           {GUIDE_PAGES.map((page) => (
-            <Link
-              key={page.href}
-              href={page.href}
-              className="group relative bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-xl hover:-translate-y-0.5 transition-all overflow-hidden"
-            >
-              <div
-                className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${page.colour}`}
-              />
-              <h2 className="text-lg font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors">
-                {page.title}
-              </h2>
-              <p className="text-sm text-gray-600 mb-4 leading-relaxed">
-                {page.description}
-              </p>
-              <span className="text-sm font-semibold text-blue-600 flex items-center gap-1 group-hover:gap-2 transition-all">
-                Read guide <ArrowRight className="w-4 h-4" />
-              </span>
-            </Link>
+            <li key={page.href}>
+              <Link href={page.href}>
+                <h2>{page.title}</h2>
+                <p>{page.description}</p>
+                <span>Read guide <ArrowRight size={16} aria-hidden="true" /></span>
+              </Link>
+            </li>
           ))}
-        </div>
+        </ul>
 
         {/* CTA */}
-        <section className="bg-blue-50 rounded-2xl p-8 text-center">
+        <section className={styles.callToAction}>
           <h2 className="text-2xl font-bold text-gray-900 mb-3">
             Ready to calculate your CGT?
           </h2>
@@ -147,7 +126,7 @@ export default function GuidePage() {
           </p>
           <Link
             href="/signup"
-            className="inline-block bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-medium hover:bg-blue-700 transition-colors"
+            className={styles.action}
           >
             Create a free account
           </Link>

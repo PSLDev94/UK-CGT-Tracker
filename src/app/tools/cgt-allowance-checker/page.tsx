@@ -8,12 +8,13 @@ import { money } from "@/ui/format";
 import { CheckCircle, AlertTriangle, XCircle } from "lucide-react";
 import { CalculatorUploadLink } from "@/components/calculator-upload-link";
 import { PublicNav } from "@/components/public-nav";
+import publicStyles from "@/components/public-pages.module.css";
+import styles from "@/components/calculator.module.css";
 import { CalculatorFields } from "@/components/calculator-fields";
 import { CgtReportingGuidance } from "@/components/cgt-reporting-guidance";
 import { PublicFooter } from "@/components/public-footer";
 
 type Period = "mixed" | "early" | "late";
-const fieldStyle = "w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none";
 
 export default function CGTAllowanceCheckerPage() {
   const [taxYear, setTaxYear] = useState<TaxYear>("2025-26");
@@ -64,47 +65,38 @@ export default function CGTAllowanceCheckerPage() {
   const lightConfig = {
     green: {
       icon: CheckCircle,
-      bg: "bg-green-50",
-      border: "border-green-200",
       text: "text-green-700",
       iconColor: "text-green-700",
       label: netGain.lte(0) ? "No allowance used" : "Well within your allowance",
-      gradient: "from-green-400 to-emerald-500",
     },
     amber: {
       icon: AlertTriangle,
-      bg: "bg-amber-50",
-      border: "border-amber-200",
       text: "text-amber-700",
       iconColor: "text-amber-600",
       label: netGain.eq(exemptAmount) ? "Allowance fully used" : "Approaching allowance limit",
-      gradient: "from-amber-400 to-orange-500",
     },
     red: {
       icon: XCircle,
-      bg: "bg-red-50",
-      border: "border-red-200",
       text: "text-red-700",
       iconColor: "text-red-600",
       label: "Over allowance — review your tax position",
-      gradient: "from-red-400 to-rose-500",
     },
   };
   const lc = lightConfig[light];
   const Icon = lc.icon;
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className={publicStyles.page}>
       <PublicNav />
 
-      <main id="main" tabIndex={-1} className="wrap-anywhere max-w-3xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-4">
+      <main id="main" tabIndex={-1} className={`${publicStyles.frame} ${publicStyles.reading} ${styles.page}`}>
+        <h1 className={publicStyles.taskHeading}>
           UK CGT Allowance Checker
         </h1>
-        <p className="text-lg text-gray-600 mb-2 max-w-3xl leading-relaxed">
+        <p className={publicStyles.intro}>
           Estimate tax on ordinary share gains for {yearLabel}. This checker assumes you qualify for the standard individual <strong>£{exemptionLabel} annual exempt amount</strong>.
         </p>
-        <p className="text-gray-600 mb-8 max-w-3xl leading-relaxed">
+        <p className={publicStyles.referenceBox}>
           {taxYear >= "2025-26"
             ? "If you claimed the foreign income and gains regime or Overseas Workday Relief for this year, you have no annual exempt amount and this estimate does not apply."
             : "A remittance basis claim can affect your annual exemption. If your entitlement differs from the standard allowance, check your position before using the figures."}{" "}
@@ -114,17 +106,11 @@ export default function CGTAllowanceCheckerPage() {
         </p>
 
         {/* Calculator */}
-        <CalculatorFields
-          label="Allowance calculation"
-          className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-8"
-        >
-          <div
-            className={`h-1.5 bg-gradient-to-r ${hasInput ? lc.gradient : "from-green-400 to-emerald-500"}`}
-          />
-          <div className="p-6 sm:p-8 space-y-6">
+        <CalculatorFields label="Allowance calculation">
+          <div className={styles.fieldsStack}>
             <div>
               <label htmlFor="allowance-year" className="block text-sm font-semibold text-gray-700 mb-1">Tax year</label>
-              <select id="allowance-year" className={fieldStyle} value={taxYear} aria-describedby="year-hint"
+              <select id="allowance-year" className={styles.input} value={taxYear} aria-describedby="year-hint"
                 onChange={(event) => {
                   setTaxYear(event.target.value as TaxYear);
                   setPeriod("mixed");
@@ -152,7 +138,7 @@ export default function CGTAllowanceCheckerPage() {
                 placeholder="e.g. 5000"
                 value={gains}
                 onChange={(e) => setGains(e.target.value)}
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                className={styles.input}
               />
             </div>
             <div>
@@ -171,7 +157,7 @@ export default function CGTAllowanceCheckerPage() {
                 placeholder="e.g. 1000"
                 value={losses}
                 onChange={(e) => setLosses(e.target.value)}
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                className={styles.input}
               />
             </div>
           </div>
@@ -179,7 +165,7 @@ export default function CGTAllowanceCheckerPage() {
           {splitYear && taxable && (
             <div className="px-6 pb-6">
               <label htmlFor="disposal-period" className="block text-sm font-semibold text-gray-700 mb-1">When did you dispose of the shares?</label>
-              <select id="disposal-period" className={fieldStyle} value={period} onChange={e => setPeriod(e.target.value as Period)}>
+              <select id="disposal-period" className={styles.input} value={period} onChange={e => setPeriod(e.target.value as Period)}>
                 <option value="mixed">Both periods, or unsure</option>
                 <option value="early">All before 30 October 2024</option>
                 <option value="late">All on or after 30 October 2024</option>
@@ -202,7 +188,7 @@ export default function CGTAllowanceCheckerPage() {
                 aria-describedby={incomeInvalid ? "income-hint allowance-input-error" : "income-hint"}
                 value={taxableIncome}
                 onChange={(e) => setTaxableIncome(e.target.value)}
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm"
+                className={styles.input}
               />
               <p id="income-hint" className="text-sm text-gray-600 mt-2">
                 Use income after your Personal Allowance, including if you pay Scottish Income Tax.
@@ -218,46 +204,46 @@ export default function CGTAllowanceCheckerPage() {
           )}
           {/* Results */}
           {hasInput && (
-            <div className="bg-gray-50 border-t p-6 sm:p-8">
+            <div className={styles.result}>
               {/* Traffic light */}
               <div
-                className={`flex items-center gap-3 p-4 rounded-xl border mb-6 ${lc.bg} ${lc.border}`}
+                className={styles.allowanceStatus}
               >
                 <Icon aria-hidden="true" className={`w-6 h-6 ${lc.iconColor} flex-shrink-0`} />
                 <span className={`font-semibold ${lc.text}`}>{lc.label}</span>
               </div>
 
               <div className="grid sm:grid-cols-2 gap-4 tabular-nums [overflow-wrap:anywhere]">
-                <div className="bg-white rounded-xl p-4 border text-center">
-                  <p className="text-xs text-gray-500 uppercase mb-1">
+                <div className={styles.amount}>
+                  <p className={styles.caption}>
                     {netGain.lt(0) ? "Net loss" : netGain.gt(0) ? "Net gain" : "Break-even"}
                   </p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className={styles.value}>
                     {money(netGain.toString())}
                   </p>
                 </div>
-                <div className="bg-white rounded-xl p-4 border text-center">
-                  <p className="text-xs text-gray-500 uppercase mb-1">
+                <div className={styles.amount}>
+                  <p className={styles.caption}>
                     Exemption Remaining
                   </p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className={styles.value}>
                     {money(exemptionRemaining.toString())}
                   </p>
                 </div>
-                <div className="bg-white rounded-xl p-4 border text-center">
-                  <p className="text-xs text-gray-500 uppercase mb-1">
+                <div className={styles.amount}>
+                  <p className={styles.caption}>
                     Taxable Gain
                   </p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className={styles.value}>
                     {money(taxableGain.toString())}
                   </p>
                 </div>
-                <div className="bg-white rounded-xl p-4 border text-center">
-                  <p className="text-xs text-gray-500 uppercase mb-1">
+                <div className={styles.amount}>
+                  <p className={styles.caption}>
                     Estimated Tax Owed
                   </p>
                   {taxOwed ? (
-                    <p className={`text-2xl font-bold ${taxOwed.gt(0) ? "text-red-700" : "text-green-700"}`}>
+                    <p className={`${styles.value} ${taxOwed.gt(0) ? "text-red-700" : "text-green-700"}`}>
                       {money(taxOwed.toString())}
                     </p>
                   ) : (
@@ -285,9 +271,9 @@ export default function CGTAllowanceCheckerPage() {
                   <span>£0</span>
                   <span>£{exemptionLabel} exempt</span>
                 </div>
-                <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+                <div className={styles.allowanceTrack}>
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${light === "green" ? "bg-green-500" : light === "amber" ? "bg-amber-500" : "bg-red-500"}`}
+                    className={`h-full ${light === "green" ? "bg-green-500" : light === "amber" ? "bg-amber-500" : "bg-red-500"}`}
                     style={{ width: `${pctUsed}%` }}
                   />
                 </div>
@@ -300,7 +286,7 @@ export default function CGTAllowanceCheckerPage() {
         </CalculatorFields>
 
         {/* Explanatory content */}
-        <div className="guide-article mb-12">
+        <div className={`guide-article ${styles.notes}`}>
           <h2>About the Annual Exempt Amount</h2>
           <p>
             The exemption belongs to each eligible person for that tax year.
@@ -322,7 +308,7 @@ export default function CGTAllowanceCheckerPage() {
         </div>
 
         {/* CTA */}
-        <section className="bg-blue-50 rounded-2xl p-8 text-center">
+        <section className={publicStyles.callToAction}>
           <h2 className="text-xl font-bold text-gray-900 mb-3">
             Review the disposals behind your gains
           </h2>

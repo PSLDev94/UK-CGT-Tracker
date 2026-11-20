@@ -1,4 +1,5 @@
 "use client";
+import styles from "./workspace-records.module.css";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ImportDetailsForm } from "./import-details-form";
@@ -127,19 +128,19 @@ export function ImportReviewPanel({
             {review.counts.needsReview === 1 ? "needs" : "need"} attention.
             Nothing from this preview has been saved as transactions.
           </p>
-          <div className="metrics">
+          <dl className={styles.recordTotals}>
             {[
               [review.counts.accepted, "Included"],
               [review.counts.excluded, "Excluded"],
               [review.counts.duplicate, "Duplicate"],
               [review.counts.needsReview, "Needs review"],
             ].map(([count, label]) => (
-              <div className="metric" key={label}>
-                <strong>{count}</strong>
-                <span>{label}</span>
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{count}</dd>
               </div>
             ))}
-          </div>
+          </dl>
           {saved !== null && (
             <Notice>
               Details checked for record {saved}.{" "}

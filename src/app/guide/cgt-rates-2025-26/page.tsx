@@ -1,3 +1,4 @@
+import styles from "@/components/public-pages.module.css";
 import Link from "next/link";
 import { Metadata } from "next";
 import { adjustment2024Url } from "@/domain/reports/filing-guidance";
@@ -261,7 +262,7 @@ export default function CGTRatesPage() {
         using the allowance checker, which assumes the standard band.
       </p>
 
-      <div className="bg-green-50 border-l-4 border-green-600 p-4 rounded-r-lg my-8 not-prose">
+      <div className={`${styles.referenceBox} my-8 not-prose`}>
         <p className="text-sm text-green-900">
           <strong>Know your position:</strong> Use our free{" "}
           <Link

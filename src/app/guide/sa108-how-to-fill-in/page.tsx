@@ -1,3 +1,4 @@
+import styles from "@/components/public-pages.module.css";
 import Link from "next/link";
 import { Metadata } from "next";
 import { sa108Edition } from "@/domain/reports/filing-guidance";
@@ -45,7 +46,7 @@ export default function SA108GuidePage() {
 
       <h2>When Must You Report?</h2>
       <CgtReportingGuidance />
-      <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-lg my-6 not-prose">
+      <div className={`${styles.referenceBox} my-6 not-prose`}>
         <p className="text-sm text-amber-900">
           This guide describes the 2025–26 form. Use the form and notes for the
           year you are filing. Different assets, reliefs and residence rules can
@@ -100,7 +101,7 @@ export default function SA108GuidePage() {
         with additional penalties for continued delays.
       </p>
 
-      <div className="bg-blue-50 border-l-4 border-blue-600 p-4 rounded-r-lg my-6 not-prose">
+      <div className={`${styles.referenceBox} my-6 not-prose`}>
         <p className="text-sm text-blue-900">
           <strong>Paper vs Online:</strong> If you file by paper, the deadline
           is earlier — 31 October following the end of the tax year. For

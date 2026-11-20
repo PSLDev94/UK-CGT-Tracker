@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { WorkspaceMasthead } from "./workspace-masthead";
+import styles from "./workspace-records.module.css";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
@@ -206,28 +208,27 @@ export function BillingPanel({
     !status.needsReview &&
     ["none", "canceled", "incomplete_expired"].includes(status.status);
   return (
-    <div className="max-w-2xl space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Your subscription</h1>
-        <p className="mt-2 text-gray-600">
-          Download PDF summaries and matching evidence with CGT Tracker annual
-          reports.
+    <div className={styles.page}>
+      <WorkspaceMasthead title="Your subscription">
+        Download PDF summaries and matching evidence with CGT Tracker annual reports.
+      </WorkspaceMasthead>
+      <div className={styles.plan}>
+        <p className={styles.price}>
+          {ANNUAL_REPORT_PRICE} <span>per year</span>
         </p>
+        <div>
+          <p>
+            Imports, calculations and CSV evidence are free. The subscription
+            renews annually until cancelled. Manage renewal in Billing.
+            PDF access does not include a tax adviser’s review.{" "}
+            <Link className="text-blue-700 underline" href="/terms">Service terms and support</Link>.
+          </p>
+          <p className="caption">
+            Staging uses Stripe test payments. No real money is charged.
+          </p>
+        </div>
       </div>
-      <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 sm:p-7">
-        <p className="text-2xl font-bold tabular-nums">
-          {ANNUAL_REPORT_PRICE}{" "}
-          <span className="text-base font-normal">per year</span>
-        </p>
-        <p>
-          Imports, calculations and CSV evidence are free. The subscription
-          renews annually until cancelled. Manage renewal in Billing.
-          PDF access does not include a tax adviser’s review.{" "}
-          <Link className="text-blue-700 underline" href="/terms">Service terms and support</Link>.
-        </p>
-        <p className="text-sm text-gray-600">
-          Staging uses Stripe test payments. No real money is charged.
-        </p>
+      <section aria-label="Subscription status" className={styles.billingStatus}>
         {destination && (
           <p className="font-medium">
             {destination.year} ·{" "}
@@ -287,7 +288,7 @@ export function BillingPanel({
         {busy === "status" && <Notice>Checking your subscription…</Notice>}
         {status && (
           <>
-            <h2 className="text-lg font-semibold">
+            <h2 className={styles.ledgerTitle}>
               {awaiting
                 ? "Awaiting payment confirmation"
                 : (labels[status.status] ?? "Subscription status unavailable")}

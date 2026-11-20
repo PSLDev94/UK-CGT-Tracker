@@ -4,7 +4,9 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePublicAccount } from "@/ui/public-account";
 import { usePathname } from "next/navigation";
-import { PieChart, ChevronDown, Menu, X } from "lucide-react";
+import { ChevronDown } from "lucide-react";
+import { Brand } from "@/ui/brand";
+import styles from "./public-chrome.module.css";
 
 const TOOLS = [
   {
@@ -26,6 +28,7 @@ const TOOLS = [
 
 const NAV_LINKS = [
   { href: "/supported-brokers", label: "Broker support" },
+  { href: "/sample-calculation", label: "Sample statement" },
   { href: "/pricing", label: "Pricing" },
   { href: "/guide", label: "CGT Guide" },
   { href: "/contact", label: "Contact" },
@@ -68,206 +71,94 @@ export function PublicNav({ backToUpload }: { backToUpload?: string } = {}) {
   }, [open, mobileOpen]);
   const isToolsActive = pathname.startsWith("/tools/");
 
+  const accountLabel = signedIn
+    ? backToUpload
+      ? "Back to upload"
+      : "My workspace"
+    : "Sign up free";
+  function navLinks() {
+    return NAV_LINKS.map((link) => (
+      <Link
+        key={link.href}
+        href={link.href}
+        aria-current={pathname === link.href ? "page" : undefined}
+        onClick={() => setMobileOpen(false)}
+      >
+        {link.label}
+      </Link>
+    ));
+  }
+  function toolLinks() {
+    return TOOLS.map((tool) => (
+      <Link
+        key={tool.href}
+        href={tool.href}
+        aria-current={pathname === tool.href ? "page" : undefined}
+        onClick={() => {
+          setOpen(false);
+          setMobileOpen(false);
+        }}
+      >
+        <span>{tool.label}</span>
+        <small>{tool.subtitle}</small>
+      </Link>
+    ));
+  }
   return (
-    <nav
-      aria-label="Main navigation"
-      className="border-b sticky top-0 bg-white/80 backdrop-blur-md z-50 transition-all"
-    >
-      <div className="max-w-7xl mx-auto px-[16px] sm:px-6 lg:px-8">
-        <div className="flex min-h-16 flex-wrap items-center justify-between gap-y-1 py-1">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-[10px]">
-            <div className="bg-blue-600 p-[6px] rounded-lg shadow-sm shadow-blue-200">
-              <PieChart className="w-[20px] h-[20px] text-white" strokeWidth={2.5} />
-            </div>
-            <div className="text-xl font-bold tracking-tight text-gray-900">
-              CGT<span className="text-blue-600">Tracker</span>
-            </div>
-          </Link>
-
-          <div className="ml-auto flex min-w-0 max-w-full items-center gap-1 sm:gap-4">
-            {/* Free Tools Dropdown — desktop only (hover + click) */}
-            <div ref={dropdownRef} className="relative hidden lg:block">
+    <nav className={styles.mast} aria-label="Main navigation">
+      <div className={styles.mastInner}>
+        <Brand />
+        <div className={styles.actions}>
+          <div className={styles.desktopLinks}>
+            <div ref={dropdownRef} className={styles.dropdown}>
               <button
                 type="button"
-                aria-expanded={open}
                 ref={toolsButton}
                 aria-controls="public-tools"
+                aria-expanded={open}
+                data-active={isToolsActive}
                 onClick={() => setOpen((v) => !v)}
-                className={`text-sm font-medium px-3 py-2 transition-colors flex items-center gap-1 ${
-                  isToolsActive
-                    ? "text-blue-600"
-                    : "text-gray-600 hover:text-gray-900"
-                }`}
               >
-                Free Tools
-                <ChevronDown
-                  className={`w-3.5 h-3.5 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-                />
+                Free Tools <ChevronDown aria-hidden="true" size={14} />
               </button>
-
-              {/* Dropdown panel */}
-              <div
-                id="public-tools"
-                hidden={!open}
-                className={`absolute top-full left-0 mt-1 w-64 bg-white rounded-xl shadow-lg border border-gray-200 py-2 transition-all duration-150 ${
-                  open
-                    ? "opacity-100 translate-y-0 pointer-events-auto"
-                    : "opacity-0 -translate-y-1 pointer-events-none"
-                }`}
-              >
-                {TOOLS.map((tool) => (
-                  <Link
-                    key={tool.href}
-                    href={tool.href}
-                    aria-current={pathname === tool.href ? "page" : undefined}
-                    onClick={() => setOpen(false)}
-                    className={`block px-4 py-2.5 transition-colors ${
-                      pathname === tool.href
-                        ? "bg-blue-50 text-blue-700"
-                        : "hover:bg-gray-50 text-gray-900"
-                    }`}
-                  >
-                    <span className="text-sm font-medium block">
-                      {tool.label}
-                    </span>
-                    <span className="text-xs text-gray-500 block mt-0.5">
-                      {tool.subtitle}
-                    </span>
-                  </Link>
-                ))}
+              <div id="public-tools" className={styles.toolList} hidden={!open}>
+                {toolLinks()}
               </div>
             </div>
-
-            {/* Desktop nav links */}
-            {NAV_LINKS.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                aria-current={pathname === link.href ? "page" : undefined}
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 aria-[current=page]:text-blue-700 px-3 py-2 hidden lg:inline transition-colors"
-              >
-                {link.label}
-              </Link>
-            ))}
-
+            {navLinks()}
+            {!signedIn && <Link href="/login">Log in</Link>}
+          </div>
+          <Link
+            className={styles.account}
+            href={signedIn ? (backToUpload ?? "/dashboard") : "/signup"}
+          >
+            {accountLabel}
+          </Link>
+          <button
+            className={styles.menuToggle}
+            type="button"
+            aria-expanded={mobileOpen}
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-controls="public-mobile"
+            ref={mobileButton}
+            onClick={() => setMobileOpen((v) => !v)}
+          >
+            {mobileOpen ? "Close" : "Menu"}
+          </button>
+        </div>
+        {mobileOpen && (
+          <div id="public-mobile" className={styles.mobileList}>
+            {navLinks()}
+            <p>Free Tools</p>
+            {toolLinks()}
             {!signedIn && (
-              <Link
-                href="/login"
-                className="text-sm font-medium text-gray-600 hover:text-gray-900 px-3 py-2 transition-colors hidden lg:inline"
-              >
+              <Link href="/login" onClick={() => setMobileOpen(false)}>
                 Log in
               </Link>
             )}
-
-            {/* Sign up free — always visible */}
-            <Link
-              href={signedIn ? (backToUpload ?? "/dashboard") : "/signup"}
-              className="min-h-11 min-w-0 inline-flex items-center text-center text-sm bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-medium transition-all shadow-sm hover:shadow active:scale-95"
-            >
-              {signedIn
-                ? backToUpload
-                  ? "Back to upload"
-                  : "My workspace"
-                : "Sign up free"}
-            </Link>
-
-            {/* Mobile hamburger button — rightmost on mobile */}
-            <button
-              type="button"
-              aria-expanded={mobileOpen}
-              ref={mobileButton}
-              aria-controls="public-mobile"
-              onClick={() => setMobileOpen((v) => !v)}
-              className="lg:hidden min-h-11 min-w-11 shrink-0 inline-flex items-center justify-center p-2 text-gray-600 hover:text-gray-900 transition-colors"
-              aria-label={mobileOpen ? "Close menu" : "Open menu"}
-            >
-              {mobileOpen ? (
-                <X className="w-6 h-6" />
-              ) : (
-                <Menu className="w-6 h-6" />
-              )}
-            </button>
           </div>
-        </div>
+        )}
       </div>
-
-      {/* Mobile menu panel */}
-      {mobileOpen && (
-        <>
-          {/* Panel */}
-          <div
-            id="public-mobile"
-            className="absolute max-h-[calc(100dvh-100%)] overflow-y-auto left-0 right-0 top-full bg-white border-b shadow-lg z-50 lg:hidden animate-slide-down"
-          >
-            <div className="max-w-7xl mx-auto px-4 py-3">
-              {/* Main nav links */}
-              {NAV_LINKS.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  aria-current={pathname === link.href ? "page" : undefined}
-                  onClick={() => setMobileOpen(false)}
-                  className={`block px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
-                    pathname === link.href
-                      ? "bg-blue-50 text-blue-700"
-                      : "text-gray-900 hover:bg-gray-50"
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              ))}
-
-              {/* Free Tools — expanded by default */}
-              <div className="mb-1">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider px-3 py-2">
-                  Free Tools
-                </p>
-                {TOOLS.map((tool) => (
-                  <Link
-                    key={tool.href}
-                    href={tool.href}
-                    aria-current={pathname === tool.href ? "page" : undefined}
-                    onClick={() => setMobileOpen(false)}
-                    className={`flex flex-col px-3 py-3 pl-6 rounded-lg transition-colors ${
-                      pathname === tool.href
-                        ? "bg-blue-50 text-blue-700"
-                        : "text-gray-900 hover:bg-gray-50"
-                    }`}
-                  >
-                    <span className="text-sm font-medium">{tool.label}</span>
-                    <span className="text-xs text-gray-500 mt-0.5">
-                      {tool.subtitle}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-
-              {!signedIn && (
-                <>
-                  <div className="border-t border-gray-200 my-3" />
-                  <Link
-                    href="/login"
-                    className={`block px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
-                      pathname === "/login"
-                        ? "bg-blue-50 text-blue-700"
-                        : "text-gray-900 hover:bg-gray-50"
-                    }`}
-                  >
-                    Log in
-                  </Link>
-                  <Link
-                    href="/signup"
-                    className="block mt-2 text-center bg-blue-600 text-white px-4 py-3 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-                  >
-                    Sign up free
-                  </Link>
-                </>
-              )}
-            </div>
-          </div>
-        </>
-      )}
     </nav>
   );
 }

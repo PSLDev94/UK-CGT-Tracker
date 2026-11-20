@@ -1,3 +1,4 @@
+import styles from "@/components/public-pages.module.css";
 import Link from "next/link";
 import { Metadata } from "next";
 import { GuideLayout } from "@/components/guide-layout";
@@ -102,7 +103,7 @@ export default function Section104PoolPage() {
         capital gain or loss when you sell.
       </p>
 
-      <div className="bg-blue-50 border-l-4 border-blue-600 p-4 rounded-r-lg my-6 not-prose">
+      <div className={`${styles.referenceBox} my-6 not-prose`}>
         <p className="text-sm text-blue-900">
           <strong>Important:</strong> The Section 104 pool is the <em>third</em>{" "}
           matching rule HMRC applies. Before using the pool, HMRC first checks
@@ -341,7 +342,7 @@ export default function Section104PoolPage() {
         marginally reduces your gain on disposal.
       </p>
 
-      <div className="bg-green-50 border-l-4 border-green-600 p-4 rounded-r-lg my-8 not-prose">
+      <div className={`${styles.referenceBox} my-8 not-prose`}>
         <p className="text-sm text-green-900">
           <strong>Try it yourself:</strong> Use our free{" "}
           <Link

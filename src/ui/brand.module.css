@@ -1,0 +1,23 @@
+.brand {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  align-items: center;
+  gap: .48rem;
+  color: var(--chrome-ink, var(--color-ink));
+  text-decoration: none;
+  font: 720 1.25rem/1.2 var(--font-body);
+  letter-spacing: -.062em;
+}
+.brand img {
+  flex: none;
+  width: 30px;
+  height: 30px;
+}
+.brand > span { min-width: 0; overflow-wrap: anywhere; }
+.brand > span > span { color: var(--logo-blue, var(--color-primary)); }
+@media (max-width: 45rem) {
+  .brand { font-size: 1.125rem; }
+  .brand img { width: 26px; height: 26px; }
+}

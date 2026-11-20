@@ -1,3 +1,4 @@
+import styles from "@/components/public-pages.module.css";
 import Link from "next/link";
 import { Metadata } from "next";
 import { GuideLayout } from "@/components/guide-layout";
@@ -90,7 +91,7 @@ export default function BedAndBreakfastRulePage() {
         typically eliminates the artificial loss.
       </p>
 
-      <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-lg my-6 not-prose">
+      <div className={`${styles.referenceBox} my-6 not-prose`}>
         <p className="text-sm text-amber-900">
           <strong>Key point:</strong> The 30-day window starts from the day{" "}
           <em>after</em> the sale. If you sell on 1 June, the rule applies to
@@ -228,7 +229,7 @@ export default function BedAndBreakfastRulePage() {
         get advice before arranging a transaction.
       </p>
 
-      <div className="bg-blue-50 border-l-4 border-blue-600 p-4 rounded-r-lg my-6 not-prose">
+      <div className={`${styles.referenceBox} my-6 not-prose`}>
         <p className="text-sm text-blue-900">
           <strong>Want to check if the B&amp;B rule applies?</strong> Use our
           free{" "}

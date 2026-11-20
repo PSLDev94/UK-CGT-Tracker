@@ -16,9 +16,11 @@ import {
   MessageSquare,
   WalletCards,
   History,
-  PieChart,
   CreditCard,
 } from "lucide-react";
+
+import { Brand } from "@/ui/brand";
+import styles from "./dashboard-sidebar.module.css";
 
 export type WorkspaceView =
   "overview" | "accounts" | "imports" | "calculations" | "history";
@@ -60,6 +62,7 @@ export function DashboardSidebar({
   const menuButton = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const currentPath = pathname === "/workspace" ? "/dashboard/accounts" : pathname;
   useEffect(() => {
     if (!open) return;
     function closeMenu(event: KeyboardEvent) {
@@ -71,89 +74,57 @@ export function DashboardSidebar({
     return () => document.removeEventListener("keydown", closeMenu);
   }, [open]);
   return (
-    <aside
-      aria-label="Workspace navigation"
-      className="bg-white border-r border-gray-200 flex flex-col"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-y-2 border-b border-gray-100 p-[16px] min-[801px]:p-6">
-        <Link
-          href="/dashboard"
-          className="flex min-w-0 max-w-full items-center gap-[8px] text-xl font-bold text-gray-900"
-        >
-          <span className="shrink-0 rounded-lg bg-blue-600 p-[6px]">
-            <PieChart size={18} className="text-white" aria-hidden="true" />
-          </span>
-          <span className="min-w-0 [overflow-wrap:anywhere]">
-            CGT<wbr /><span className="text-blue-600">Tracker</span>
-          </span>
-        </Link>
-        <button
-          type="button"
-          ref={menuButton}
-          onClick={() => setOpen(!open)}
-          aria-expanded={open}
-          aria-controls="dashboard-navigation"
-          aria-label={open ? "Close sidebar menu" : "Open sidebar menu"}
-          className="ms-auto inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md p-[8px] text-gray-600 hover:bg-gray-100 min-[801px]:hidden"
-        >
-          {open ? <X size={22} /> : <Menu size={22} />}
-        </button>
-      </div>
-      <div
-        id="dashboard-navigation"
-        className={`${open ? "flex" : "hidden"} min-[801px]:flex flex-col flex-1`}
-      >
-        <nav className="flex-1 p-4" aria-label="Dashboard">
-          {groups.map((group, index) => (
-            <div
-              key={group[0].href}
-              className={index ? "mt-3 pt-3 border-t border-gray-100" : ""}
-            >
-              {group.map(({ name, href, icon: Icon }) => {
-                const active =
-                  pathname === href ||
-                  (pathname === "/workspace" && href === "/dashboard/accounts");
-                return (
-                  <Link
-                    key={href}
-                    href={selectedYear && (href === "/dashboard/calculations" || href === "/dashboard/reports")
-                      ? href + "?year=" + encodeURIComponent(selectedYear)
-                      : href}
-                    aria-disabled={busy || undefined}
-                    onClick={(event) => {
-                      if (busy) event.preventDefault();
-                      else setOpen(false);
-                    }}
-                    aria-current={active ? "page" : undefined}
-                    className={`flex w-full items-center px-4 py-2.5 text-sm font-medium rounded-md ${active ? "bg-blue-50 text-blue-700" : "text-gray-700 hover:bg-gray-50"}`}
-                  >
-                    <Icon aria-hidden="true" className="w-5 h-5 mr-3" />
-                    {name}
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
-          <Link
-            href={brokerSupportHref}
-            className="block px-4 py-3 text-sm text-gray-600 hover:bg-gray-50 rounded-md"
-          >
-            Broker support
-          </Link>
-        </nav>
-        <div className="p-4 border-t border-gray-100 mt-auto">
-          <div className="text-sm font-medium text-gray-900 px-4 mb-2 break-all">
-            {userEmail || "Private workspace"}
-          </div>
+    <aside aria-label="Workspace navigation" className={styles.sidebar}>
+      <div className={styles.rail}>
+        <div className={styles.mast}>
+          <Brand href="/dashboard" />
           <button
             type="button"
-            disabled={busy}
-            onClick={onSignOut}
-            className="flex w-full items-center px-4 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 rounded-md"
+            ref={menuButton}
+            onClick={() => setOpen(!open)}
+            aria-expanded={open}
+            aria-controls="dashboard-navigation"
+            aria-label={open ? "Close sidebar menu" : "Open sidebar menu"}
+            className={styles.toggle}
           >
-            <LogOut aria-hidden="true" className="w-5 h-5 mr-3" />
-            Sign out
+            {open ? <X size={18} aria-hidden="true" /> : <Menu size={18} aria-hidden="true" />}
+            {open ? "Close" : "Menu"}
           </button>
+        </div>
+        <div id="dashboard-navigation" data-open={open} className={styles.navigation}>
+          <nav className={styles.links} aria-label="Dashboard">
+            {groups.map((group) => (
+              <ul className={styles.group} key={group[0].href}>
+                {group.map(({ name, href, icon: Icon }) => (
+                  <li key={href}>
+                    <Link
+                      href={selectedYear && (href === "/dashboard/calculations" || href === "/dashboard/reports")
+                        ? href + "?year=" + encodeURIComponent(selectedYear)
+                        : href}
+                      aria-disabled={busy || undefined}
+                      onClick={(event) => {
+                        if (busy) event.preventDefault();
+                        else setOpen(false);
+                      }}
+                      aria-current={currentPath === href ? "page" : undefined}
+                      className={styles.link}
+                    >
+                      <Icon aria-hidden="true" size={18} />
+                      <span>{name}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ))}
+            <Link href={brokerSupportHref} className={styles.support}>Broker support</Link>
+          </nav>
+          <div className={styles.identity}>
+            <div className={styles.user}>{userEmail || "Private workspace"}</div>
+            <button type="button" disabled={busy} onClick={onSignOut} className={styles.signOut}>
+              <LogOut aria-hidden="true" size={17} />
+              Sign out
+            </button>
+          </div>
         </div>
       </div>
     </aside>

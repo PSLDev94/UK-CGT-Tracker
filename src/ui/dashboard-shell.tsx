@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { WorkspaceEntry } from "./workspace-entry";
+import { AuthFrame } from "./auth-frame";
 import { useRouter } from "next/navigation";
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { authApi, readWorkspaceSession } from "./api";
@@ -63,9 +64,9 @@ export function DashboardShell({
       );
     }
     return (
-      <main id="main" className="classic-auth">
+      <AuthFrame>
         {error ? (
-          <section className="auth-wrap panel">
+          <section>
             <h1>Your workspace couldn’t be loaded</h1>
             <Notice tone="error">{error}</Notice>
             <Button onClick={load}>Try again</Button>
@@ -73,7 +74,7 @@ export function DashboardShell({
         ) : (
           <Notice>{sessionWait || "Loading your workspace…"}</Notice>
         )}
-      </main>
+      </AuthFrame>
     );
   }
   return (

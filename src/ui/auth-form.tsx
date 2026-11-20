@@ -175,7 +175,7 @@ export function AuthForm({
 
   if (mode === "sign-up" && submittedAddress) {
     return (
-      <section className="auth-wrap panel">
+      <section data-verification-sent>
         <h1 tabIndex={-1} ref={confirmationHeading}>
           Check your inbox
         </h1>
@@ -235,13 +235,7 @@ export function AuthForm({
     );
   }
   return (
-    <section className="auth-wrap panel">
-      <Link
-        href="/"
-        className="text-sm text-blue-600 font-medium inline-block mb-4"
-      >
-        ← Back to home
-      </Link>
+    <section>
       <h1>{copy[mode].title}</h1>
       <p className="muted">
         {annualBilling && (mode === "sign-in" || mode === "sign-up")

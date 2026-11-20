@@ -1,3 +1,4 @@
+import styles from "@/components/public-pages.module.css";
 import Link from "next/link";
 import { PublicFooter } from "@/components/public-footer";
 import { safeReturnPath } from "@/ui/return-path";
@@ -91,17 +92,17 @@ export default async function BrokerSupport({
   }
 
   return (
-    <>
+    <div className={styles.page}>
       <Header backToUpload={backToUpload} />
-      <main id="main" tabIndex={-1} className="public-main broker-directory">
-        <section className="principles">
-          <h1>Find your broker’s CSV export</h1>
-          <p className="lead">
+      <main id="main" tabIndex={-1} className={`broker-directory ${styles.frame}`}>
+        <div>
+          <h1 className={styles.taskHeading}>Find your broker’s CSV export</h1>
+          <p className={styles.intro}>
             Choose your broker for export instructions and the records you need.
           </p>
           <nav
             aria-label="Jump to broker"
-            className="mb-6 flex flex-wrap gap-x-5 gap-y-1"
+            className={styles.jumpLinks}
           >
             {BROKERS.map((broker) => (
               <a
@@ -121,39 +122,43 @@ export default async function BrokerSupport({
             formats may need contract notes. The examples use synthetic trades.
             Unknown records block saving. ISA and pension accounts are outside scope.
           </p>
-          <p className="mb-6 text-sm">CSV layouts checked on 19 November 2026. Open each broker’s accepted layouts and limits for the tested format.</p>
-          <div className="broker-grid">
+          <p className={styles.edition}>CSV layouts checked on 19 November 2026. Open each broker’s accepted layouts and limits for the tested format.</p>
+          <div className={`broker-grid ${styles.brokerList}`}>
             {BROKERS.map((b) => (
-              <article id={b.id} className="panel scroll-mt-20" key={b.id}>
-                <h2>{b.name}</h2>
-                <span className="tag">{IMPORT_PATH_LABEL[b.id]}</span>
-                <h3 className="mt-4 font-semibold">
-                  {FILE_EXAMPLES[b.id].name}
-                </h3>
-                <p>{FILE_EXAMPLES[b.id].download}</p>
-                <details>
-                  <summary>Accepted layouts and limits</summary>
-                  <p>{FILE_EXAMPLES[b.id].check}</p>
-                  <p>{NATIVE_GUIDANCE[b.id]}</p>
-                  <p>
-                    <strong>Example review.</strong>{" "}
-                    {FILE_EXAMPLES[b.id].example}
-                  </p>
-                  {b.id === "ibkr" && (
-                    <a href="#flex-fields" className="underline">
-                      View required Flex fields
-                    </a>
-                  )}
-                </details>
-                <Link className="inline-block py-2 font-medium text-blue-700 underline"
-                  href={uploadFor(b.id)}>
-                  Upload a {b.name} CSV
-                </Link>
+              <article id={b.id} className={styles.broker} key={b.id}>
+                <header>
+                  <h2 className={styles.brokerName}>{b.name}</h2>
+                  <p className={styles.brokerTag}>{IMPORT_PATH_LABEL[b.id]}</p>
+                </header>
+                <div>
+                  <h3 className="mt-4 font-semibold">
+                    {FILE_EXAMPLES[b.id].name}
+                  </h3>
+                  <p>{FILE_EXAMPLES[b.id].download}</p>
+                  <details>
+                    <summary>Accepted layouts and limits</summary>
+                    <p>{FILE_EXAMPLES[b.id].check}</p>
+                    <p>{NATIVE_GUIDANCE[b.id]}</p>
+                    <p>
+                      <strong>Example review.</strong>{" "}
+                      {FILE_EXAMPLES[b.id].example}
+                    </p>
+                    {b.id === "ibkr" && (
+                      <a href="#flex-fields" className="underline">
+                        View required Flex fields
+                      </a>
+                    )}
+                  </details>
+                  <Link className={styles.brokerLink}
+                    href={uploadFor(b.id)}>
+                    Upload a {b.name} CSV
+                  </Link>
+                </div>
               </article>
             ))}
           </div>
-          <section id="flex-fields" className="panel mt-8 scroll-mt-20">
-            <h2>Interactive Brokers Flex setup</h2>
+          <section id="flex-fields" className={styles.brokerReference}>
+            <h2 className={styles.subheading}>Interactive Brokers Flex setup</h2>
             <p>
               Use a Trades Activity Flex Query for one GBP-base taxable account.
               Select individual stock executions and CSV output. Choose the
@@ -168,8 +173,8 @@ export default async function BrokerSupport({
               export cannot establish complete acquisition history by itself.
             </p>
           </section>
-          <section id="template" className="panel mt-8 scroll-mt-20">
-            <h2>CGT Tracker CSV template</h2>
+          <section id="template" className={styles.brokerReference}>
+            <h2 className={styles.subheading}>CGT Tracker CSV template</h2>
             <p>
               For ordinary shares in taxable general investment accounts.
               Provide stable transaction IDs, valid ISINs, execution dates,
@@ -178,7 +183,7 @@ export default async function BrokerSupport({
               For an IBKR template, use ClientAccountID:TradeID from the statement.
             </p>
             <Link
-              className="button secondary"
+              className={styles.actionSecondary}
               href="/templates/cgt-trades.csv"
               download
             >
@@ -210,9 +215,9 @@ export default async function BrokerSupport({
               </p>
             </details>
           </section>
-        </section>
+        </div>
       </main>
       <PublicFooter />
-    </>
+    </div>
   );
 }

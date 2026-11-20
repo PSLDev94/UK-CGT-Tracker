@@ -1,9 +1,9 @@
 .page {
   width: min(100%, 72rem);
   min-width: 0;
-  color: #192630;
-  --statement-line: #c5cdd2;
-  --statement-muted: #425460;
+  color: var(--color-ink);
+  --statement-line: var(--color-border);
+  --statement-muted: var(--color-muted);
 }
 .page > * + * { margin-block-start: 1.2rem; }
 .masthead {
@@ -34,7 +34,7 @@
 }
 .balance {
   container-type: inline-size;
-  background: #edf1f2;
+  background: var(--color-sheet);
   border-block: 1px solid var(--statement-line);
   padding: clamp(1rem, 3.3vw, 2.5rem);
   display: grid;
@@ -76,7 +76,7 @@
   font-size: .875rem;
   line-height: 1.5;
 }
-.scope p:first-child { color: #192630; font-weight: 590; }
+.scope p:first-child { color: var(--color-ink); font-weight: 590; }
 .scope a { display: inline-block; padding-block: .35rem; }
 .downloads {
   display: flex;
@@ -118,7 +118,7 @@
 .arithmetic dl {
   margin: 0;
   display: block;
-  color: #192630;
+  color: var(--color-ink);
   font-size: .875rem;
 }
 .arithmetic dl > div {

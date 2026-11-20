@@ -1,3 +1,4 @@
+import styles from "@/components/public-pages.module.css";
 import Link from "next/link";
 import { Metadata } from "next";
 import { GuideLayout } from "@/components/guide-layout";
@@ -213,7 +214,7 @@ export default function FreetradeCGTPage() {
         </li>
       </ul>
 
-      <div className="bg-green-50 border-l-4 border-green-600 p-4 rounded-r-lg my-8 not-prose">
+      <div className={`${styles.referenceBox} my-8 not-prose`}>
         <p className="text-sm text-green-900">
           <strong>Make it easy:</strong> Selected Freetrade GBP ordinary-share
           layouts are available for preview testing. Unsupported rows block

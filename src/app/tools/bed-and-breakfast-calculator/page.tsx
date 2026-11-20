@@ -5,9 +5,11 @@ import type Decimal from "decimal.js";
 import { Money } from "@/domain/values";
 import { componentRoundingNotes } from "@/domain/reports/rounding";
 import Link from "next/link";
-import { Calculator, AlertCircle, CheckCircle } from "lucide-react";
+import { AlertCircle, CheckCircle } from "lucide-react";
 import { CalculatorUploadLink } from "@/components/calculator-upload-link";
 import { PublicNav } from "@/components/public-nav";
+import publicStyles from "@/components/public-pages.module.css";
+import styles from "@/components/calculator.module.css";
 import { CalculatorFields } from "@/components/calculator-fields";
 import { PublicFooter } from "@/components/public-footer";
 import { money } from "@/ui/format";
@@ -118,28 +120,24 @@ export default function BedAndBreakfastCalculatorPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className={publicStyles.page}>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqLd) }}
       />
       <PublicNav />
 
-      <main id="main" className="max-w-4xl mx-auto px-4 py-8 sm:py-16 sm:px-6 lg:px-8">
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-4">
+      <main id="main" tabIndex={-1} className={`${publicStyles.frame} ${publicStyles.reading} ${styles.page}`}>
+        <h1 className={publicStyles.taskHeading}>
           Bed &amp; Breakfast Rule Calculator
         </h1>
-        <p className="text-lg text-gray-600 mb-6 max-w-prose leading-relaxed">
+        <p className={publicStyles.intro}>
           Enter one sale and one repurchase of the same ordinary shares.
           See the gain or loss before fees on the shares they match.
         </p>
 
         {/* Calculator */}
-        <CalculatorFields
-          label="30-day share matching"
-          className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-12"
-        >
-          <div className="h-1.5 bg-gradient-to-r from-amber-400 to-orange-500" />
+        <CalculatorFields label="30-day share matching">
           <form
             noValidate
             onSubmit={calculate}
@@ -155,17 +153,12 @@ export default function BedAndBreakfastCalculatorPage() {
                   return remaining;
                 });
             }}
-            className="p-6 sm:p-8 overflow-hidden"
+            className={styles.fieldsBody}
           >
             <div className="grid sm:grid-cols-2 gap-8">
               {/* Sell side */}
               <div className="min-w-0">
-                <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <span className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center text-sm font-bold text-red-700">
-                    S
-                  </span>
-                  Sale Details
-                </h3>
+                <h2 className={styles.sectionHeading}>Sale Details</h2>
                 <div className="space-y-4">
                   <div>
                     <label
@@ -184,7 +177,7 @@ export default function BedAndBreakfastCalculatorPage() {
                       required
                       value={sellDate}
                       onChange={(e) => setSellDate(e.target.value)}
-                      className="w-full min-w-0 box-border border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                      className={styles.input}
                     />
                     {errors["sell-date"] && (
                       <p
@@ -215,7 +208,7 @@ export default function BedAndBreakfastCalculatorPage() {
                       value={sellQty}
                       onChange={(e) => setSellQty(e.target.value)}
                       placeholder="e.g. 100"
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                      className={styles.input}
                     />
                     {errors["sell-qty"] && (
                       <p
@@ -246,7 +239,7 @@ export default function BedAndBreakfastCalculatorPage() {
                       value={sellPrice}
                       onChange={(e) => setSellPrice(e.target.value)}
                       placeholder="e.g. 2.50"
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                      className={styles.input}
                     />
                     {errors["sell-price"] && (
                       <p
@@ -262,12 +255,7 @@ export default function BedAndBreakfastCalculatorPage() {
 
               {/* Buy side */}
               <div className="min-w-0">
-                <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <span className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center text-sm font-bold text-green-700">
-                    B
-                  </span>
-                  Repurchase Details
-                </h3>
+                <h2 className={styles.sectionHeading}>Repurchase Details</h2>
                 <div className="space-y-4">
                   <div>
                     <label
@@ -286,7 +274,7 @@ export default function BedAndBreakfastCalculatorPage() {
                       required
                       value={buyDate}
                       onChange={(e) => setBuyDate(e.target.value)}
-                      className="w-full min-w-0 box-border border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                      className={styles.input}
                     />
                     {errors["buy-date"] && (
                       <p
@@ -317,7 +305,7 @@ export default function BedAndBreakfastCalculatorPage() {
                       value={buyQty}
                       onChange={(e) => setBuyQty(e.target.value)}
                       placeholder="e.g. 100"
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                      className={styles.input}
                     />
                     {errors["buy-qty"] && (
                       <p
@@ -348,7 +336,7 @@ export default function BedAndBreakfastCalculatorPage() {
                       value={buyPrice}
                       onChange={(e) => setBuyPrice(e.target.value)}
                       placeholder="e.g. 2.60"
-                      className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none"
+                      className={styles.input}
                     />
                     {errors["buy-price"] && (
                       <p
@@ -365,9 +353,9 @@ export default function BedAndBreakfastCalculatorPage() {
 
             <button
               type="submit"
-              className="mt-8 w-full bg-amber-700 text-white py-3.5 rounded-xl font-bold text-base hover:bg-amber-800 transition-transform active:scale-[0.99] flex items-center justify-center gap-2 shadow-sm"
+              className={`${publicStyles.action} ${styles.submit}`}
             >
-              <Calculator className="w-5 h-5" /> Check B&amp;B Rule
+              Check B&amp;B Rule
             </button>
           </form>
 
@@ -384,7 +372,7 @@ export default function BedAndBreakfastCalculatorPage() {
           {/* Result */}
           {result && (
             <div
-              className={`p-6 sm:p-8 border-t ${result.isMatch ? "bg-amber-50" : "bg-green-50"}`}
+              className={styles.result}
             >
               <div className="flex items-start gap-3 mb-4">
                 {result.isMatch ? (
@@ -393,7 +381,7 @@ export default function BedAndBreakfastCalculatorPage() {
                   <CheckCircle className="w-6 h-6 text-green-700 flex-shrink-0 mt-0.5" />
                 )}
                 <div>
-                  <h3 className="font-bold text-gray-900 text-lg">
+                  <h2 className={styles.sectionHeading}>
                     {result.isMatch
                       ? `B&B Rule Triggered — ${result.daysBetween} ${result.daysBetween === 1 ? "day" : "days"} between transactions`
                       : result.daysBetween === 0
@@ -401,7 +389,7 @@ export default function BedAndBreakfastCalculatorPage() {
                         : result.daysBetween < 0
                           ? "Purchase is before the sale, outside the 30-day window"
                           : `No B&B Match — ${result.daysBetween} days apart (outside 30-day window)`}
-                  </h3>
+                  </h2>
                   <p className="mt-1 text-sm text-gray-700">
                     {result.isMatch
                       ? "This illustration assumes these shares are available to match after any same-day trades."
@@ -411,39 +399,39 @@ export default function BedAndBreakfastCalculatorPage() {
               </div>
               {result.isMatch && (
                 <div className="grid sm:grid-cols-2 gap-4 mt-4">
-                  <div className="bg-white rounded-xl p-4 border">
-                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+                  <div className={styles.amount}>
+                    <p className={styles.caption}>
                       Matched Quantity
                     </p>
-                    <p className="text-xl font-bold text-gray-900">
+                    <p className={styles.value}>
                       {result.matchedQty.toFixed()} {result.matchedQty.eq(1) ? "share" : "shares"}
                     </p>
                     <p className="mt-1 text-sm text-gray-700">
                       {result.remainingSaleQty.toFixed()} still to match
                     </p>
                   </div>
-                  <div className="bg-white rounded-xl p-4 border">
-                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+                  <div className={styles.amount}>
+                    <p className={styles.caption}>
                       Proceeds on matched shares
                     </p>
-                    <p className="text-xl font-bold text-gray-900">
+                    <p className={styles.value}>
                       £{result.proceeds.toFixed(2)}
                     </p>
                   </div>
-                  <div className="bg-white rounded-xl p-4 border">
-                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+                  <div className={styles.amount}>
+                    <p className={styles.caption}>
                       Matched purchase cost before fees
                     </p>
-                    <p className="text-xl font-bold text-gray-900">
+                    <p className={styles.value}>
                       £{result.cost.toFixed(2)}
                     </p>
                   </div>
-                  <div className="bg-white rounded-xl p-4 border">
-                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+                  <div className={styles.amount}>
+                    <p className={styles.caption}>
                       {result.gainLoss.isZero() ? "Break-even" : result.gainLoss.gt(0) ? "Gain" : "Loss"} on matched shares before fees
                     </p>
                     <p
-                      className={`text-xl font-bold ${result.gainLoss.isZero() ? "text-gray-900" : result.gainLoss.gt(0) ? "text-green-700" : "text-red-600"}`}
+                      className={`${styles.value} ${result.gainLoss.isZero() ? "text-gray-900" : result.gainLoss.gt(0) ? "text-green-700" : "text-red-600"}`}
                     >
                       {result.gainLoss.gt(0) ? "+" : ""}
                       {money(result.gainLoss.toString())}
@@ -467,7 +455,7 @@ export default function BedAndBreakfastCalculatorPage() {
         </CalculatorFields>
 
         {/* Explanatory content */}
-        <div className="guide-article">
+        <div className={`guide-article ${styles.notes}`}>
           <h2>How to Interpret the Result</h2>
           <p>
             This illustration assumes you were UK resident when you repurchased
@@ -528,7 +516,7 @@ export default function BedAndBreakfastCalculatorPage() {
         </div>
 
         {/* CTA */}
-        <section className="mt-12 bg-blue-50 rounded-2xl p-8 text-center">
+        <section className={publicStyles.callToAction}>
           <h2 className="text-2xl font-bold text-gray-900 mb-3">
             Tracking an entire portfolio?
           </h2>

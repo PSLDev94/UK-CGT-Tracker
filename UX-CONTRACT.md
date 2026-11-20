@@ -39,7 +39,7 @@ Target WCAG 2.2 AA. All forms use noValidate, field-level text errors, labelled 
 
 `tests/ui.spec.ts` covers the new browser flows with controlled API responses, including interrupted requests, pending actions and guarded navigation. These complement the actual auth/PostgreSQL tests; they do not replace hosted end-to-end checks, real mail delivery, native CSV certification or Stripe lifecycle tests. Staging remains explicitly labelled a preview until the release gates in the implementation plan pass.
 
-## Original interface restoration — 17 November 2026
+## Original interface restoration — 17 November 2026 (historical)
 
 The user requested the original website and all its pages, with every new screen following the existing UI/UX. Revision `9ded8c0` is the visual source. Original public markup, pie-chart logo, Inter typography, blue/white/gray palette, pricing, guide articles, calculators and sidebar navigation are restored. Original gradients and guide callouts are intentional user-approved design, not new decoration. New accounts, import review, history, broker support and sandbox billing use the same controls and card styling.
 
@@ -49,10 +49,14 @@ Settings uses authenticated Better Auth profile and password endpoints and retai
 
 Public educational calculators retain their original layouts with Decimal arithmetic and explicit bounded input checks. The allowance example models the standard basic-rate band rather than treating all gains of a basic-rate taxpayer as 18%. Oversells produce no pool result; same-day purchases are distinguished from 30-day matches. Tax articles link to official year-specific HMRC sources. Mobile menus support keyboard Escape and restore focus. Original source content does not override validated product support or current financial facts.
 
-## Import/report review increment — 17 November 2026
+## Import/report review increment — 17 November 2026 (historical)
 
 Recognised native trade rows can expose `ImportDetailsForm`, extending the canonical Field/SelectField/Button/Notice controls. Original source fields remain visible beside verified ISIN, currency, units, fees and contract-note reference. Unsaved details prevent page changes/commit and participate in the shared navigation guard. Server review-version conflicts require reopening the preview. Neither UI nor API offers a skip-unknown-row action.
 
 Reports retain the original card layout. A single tax-year selector governs summary PDF, evidence PDF and CSV; downloads have bounded waits, persistent failures and explicit subscription links. Reports always use server-owned snapshots; client-side state cannot grant paid access. Source: `src/server/reports-api.ts` and `docs/relaunch/REVIEW_READY.md`.
 
 Contact now submits through the server mail service, preserving failed input and its idempotency reference on retry. Success means provider acceptance, not confirmed inbox delivery. Account deletion remains a verified support request, with no misleading disabled delete button. Production retention decisions remain open. Business identity is PSL Digital; the owner confirmed no VAT registration and requested no published contact address in this review version.
+
+## Site-wide presentation — 20 November 2026
+
+The approved Trade records and Annual statement treatments apply across public pages, authentication and the personal workspace. DESIGN.md describes the current typography, surfaces and navigation. The route, validation, export, entitlement and recovery contracts above continue to apply.

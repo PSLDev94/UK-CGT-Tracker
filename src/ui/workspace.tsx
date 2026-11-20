@@ -5,6 +5,9 @@ import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { WorkspaceEntry } from "./workspace-entry";
+import { AuthFrame } from "./auth-frame";
+import { WorkspaceMasthead } from "./workspace-masthead";
+import styles from "./workspace-records.module.css";
 import { safeReturnPath } from "./return-path";
 import { latestCalculation } from "./latest-calculation";
 import { decodeBrokerCsv } from "../domain/imports/decode-csv";
@@ -482,15 +485,15 @@ function WorkspaceBody({
   }
   if (userName === null) {
     return (
-      <main id="main" className="classic-auth">
+      <AuthFrame>
         {loading ? <Notice>{sessionWait || "Loading your workspace…"}</Notice> : (
-          <section className="auth-wrap panel">
+          <section>
             <h1>Your workspace couldn’t be loaded</h1>
             {error && <Notice tone="error">{error}</Notice>}
             <Button onClick={retryWorkspace}>Try again</Button>
           </section>
         )}
-      </main>
+      </AuthFrame>
     );
   }
 
@@ -503,28 +506,54 @@ function WorkspaceBody({
         busy={busy}
         onSignOut={() => navigation.request(signOut)}
       />
-      <main id="main" className="workspace-main">
-        <div className="workspace-topbar">
-          <span>Personal portfolio</span>
-          <span className="tag">Relaunch preview</span>
-        </div>
-        <div className="page-intro">
-          <span className="eyebrow">Your portfolio, in focus</span>
-          <h1>
-            {
-              {
-                accounts: "Broker accounts",
-                imports: requestedDraft ? "Review your import" : "Upload CSV",
-                calculations: "Calculations",
-                overview: "Overview",
-                history: "Import history",
-              }[view]
-            }
-          </h1>
-          <p className="muted">
-            Ordinary shares · Taxable accounts · One personal portfolio
-          </p>
-        </div>
+      <main id="main" className={`workspace-main ${styles.flow}`}>
+        <WorkspaceMasthead
+          title={{
+            accounts: "Broker accounts",
+            imports: requestedDraft ? "Review your import" : "Upload CSV",
+            calculations: "Calculations",
+            overview: "Overview",
+            history: "Import history",
+          }[view]}
+          controls={view === "calculations" && data && !loading && (
+            <SelectField
+              id="taxYear"
+              name="taxYear"
+              label="Tax year"
+              value={taxYear}
+              disabled={busy}
+              onChange={(e) => {
+                setErrors({});
+                setError("");
+                setMessage("");
+                window.history.pushState(
+                  null,
+                  "",
+                  "/dashboard/calculations?year=" +
+                    encodeURIComponent(e.target.value),
+                );
+              }}
+            >
+              {Object.keys(TAX_YEARS)
+                .reverse()
+                .map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+            </SelectField>
+          )}
+        >
+          {{
+            overview: "Ordinary shares across your taxable broker accounts.",
+            accounts: "Identify the taxable accounts included in your share matching.",
+            imports: requestedDraft
+              ? "Check the source rows against your broker statement before saving."
+              : "Preview the source rows from a taxable broker account.",
+            history: "Trace saved transactions and corrections back to each broker file.",
+            calculations: "Match disposals against purchases across your taxable accounts.",
+          }[view]}
+        </WorkspaceMasthead>
         <div ref={messageRef} tabIndex={-1}>
           {error && <Notice tone="error">{error}</Notice>}
           {message && <Notice tone="success">{message}</Notice>}
@@ -549,32 +578,24 @@ function WorkspaceBody({
             {view === "accounts" && (
               <section>
                 {data.accounts.length > 0 && (
-                  <div
-                    className="portfolio-summary"
-                    role="group"
-                    aria-label="Portfolio summary"
-                  >
-                    <div>
-                      <span>Taxable accounts</span>
-                      <strong>
-                        {data.accounts.length.toLocaleString("en-GB")}
-                      </strong>
-                      <small>Combined for share matching</small>
-                    </div>
-                    <div>
-                      <span>Import records</span>
-                      <strong>
-                        {(data.importCount ?? data.imports.length).toLocaleString("en-GB")}
-                      </strong>
-                      <small>Including reversed imports</small>
-                    </div>
-                    <div>
-                      <span>Saved previews</span>
-                      <strong>
-                        {data.drafts.length.toLocaleString("en-GB")}
-                      </strong>
-                      <small>Awaiting your review</small>
-                    </div>
+                  <div role="group" aria-label="Portfolio summary">
+                    <dl className={styles.index}>
+                      <div>
+                        <dt>Taxable accounts</dt>
+                        <dd>{data.accounts.length.toLocaleString("en-GB")}</dd>
+                        <dd className={styles.indexNote}>Combined for share matching</dd>
+                      </div>
+                      <div>
+                        <dt>Import records</dt>
+                        <dd>{(data.importCount ?? data.imports.length).toLocaleString("en-GB")}</dd>
+                        <dd className={styles.indexNote}>Including reversed imports</dd>
+                      </div>
+                      <div>
+                        <dt>Saved previews</dt>
+                        <dd>{data.drafts.length.toLocaleString("en-GB")}</dd>
+                        <dd className={styles.indexNote}>Awaiting your review</dd>
+                      </div>
+                    </dl>
                   </div>
                 )}
                 <div className="accounts-layout">
@@ -1016,34 +1037,6 @@ function WorkspaceBody({
             {view === "calculations" && (
               <section>
                 <div className="calculation-layout">
-                  <div className="calculation-year">
-                    <SelectField
-                      id="taxYear"
-                      name="taxYear"
-                      label="Tax year"
-                      value={taxYear}
-                      disabled={busy}
-                      onChange={(e) => {
-                        setErrors({});
-                        setError("");
-                        setMessage("");
-                        window.history.pushState(
-                          null,
-                          "",
-                          "/dashboard/calculations?year=" +
-                            encodeURIComponent(e.target.value),
-                        );
-                      }}
-                    >
-                      {Object.keys(TAX_YEARS)
-                        .reverse()
-                        .map((year) => (
-                          <option key={year} value={year}>
-                            {year}
-                          </option>
-                        ))}
-                    </SelectField>
-                  </div>
                   {currentCalculation && (
                     <CalculationResult
                       runId={currentCalculation.id}
@@ -1070,7 +1063,7 @@ function WorkspaceBody({
                       className="form-stack"
                     >
                       {previousInputs && (
-                        <section aria-label="Previous calculation settings" className="space-y-2 rounded-lg border p-4">
+                        <section aria-label="Previous calculation settings" className={styles.savedSettings}>
                           <h3>Previous calculation settings</h3>
                           <p>History through <strong>{displayDate(previousInputs.historyThrough)}</strong>.</p>
                           {previousInputs.confirmedAccountIds.length ? (

@@ -1,9 +1,10 @@
 "use client";
 
+import styles from "@/components/public-pages.module.css";
+
 import { usePublicAccount } from "@/ui/public-account";
 import { authHref } from "@/ui/return-path";
 import Link from "next/link";
-import { CheckCircle } from "lucide-react";
 import {
   ANNUAL_REPORT_PRICE,
   FREE_FEATURES,
@@ -17,7 +18,7 @@ export function ReportPricing({
 }) {
   const signedIn = usePublicAccount();
   return (
-    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 text-left [overflow-wrap:anywhere]">
+    <div className={styles.offers}>
       {[
         {
           paid: false,
@@ -38,30 +39,16 @@ export function ReportPricing({
             : "Create an account for annual reports",
         },
       ].map((plan) => (
-        <div
-          key={plan.name}
-          className="flex min-w-0 flex-col rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8"
-        >
-          <Heading className="mb-3 text-lg font-semibold text-gray-900">
-            {plan.name}
-          </Heading>
-          <p className="mb-5 text-4xl font-extrabold text-gray-900">
+        <section key={plan.name} className={styles.offer}>
+          <Heading className={styles.subheading}>{plan.name}</Heading>
+          <p className={styles.offerPrice}>
             {plan.amount}
-            {plan.paid && (
-              <span className="text-base font-normal text-gray-600">
-                {" "}
-                / year
-              </span>
-            )}
+            {plan.paid && <span> / year</span>}
           </p>
-          <ul className="mb-6 space-y-3 text-gray-700">
+          <ul>
             {plan.features.map((item) => (
-              <li className="flex gap-3" key={item}>
-                <CheckCircle
-                  aria-hidden
-                  className="mt-0.5 h-5 w-5 shrink-0 text-green-700"
-                />
-                <span className="min-w-0">{item}</span>
+              <li key={item}>
+                <span>{item}</span>
               </li>
             ))}
           </ul>
@@ -85,24 +72,20 @@ export function ReportPricing({
             </div>
           )}
           <Link
-            className={
-              plan.paid
-                ? "mt-auto rounded-lg bg-blue-600 px-4 py-3 text-center font-semibold text-white hover:bg-blue-700"
-                : "mt-auto rounded-lg border border-gray-300 px-4 py-3 text-center font-semibold text-blue-700 hover:bg-blue-50"
-            }
+            className={plan.paid ? styles.action : styles.actionSecondary}
             href={plan.href}
           >
             {plan.action}
           </Link>
           {plan.paid && !signedIn && (
             <Link
-              className="mt-2 py-2 text-center text-sm text-blue-700 underline"
+              className="mt-2 self-start py-2 text-sm text-blue-700 underline"
               href={authHref("/login", "/billing")}
             >
               Already have an account? Sign in
             </Link>
           )}
-        </div>
+        </section>
       ))}
     </div>
   );

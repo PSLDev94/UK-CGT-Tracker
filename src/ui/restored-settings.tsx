@@ -7,7 +7,8 @@ import {
   type RefObject,
 } from "react";
 import Link from "next/link";
-import { User, Key, CreditCard, AlertTriangle } from "lucide-react";
+import { WorkspaceMasthead } from "./workspace-masthead";
+import styles from "./workspace-records.module.css";
 import { authApi } from "./api";
 import { DashboardShell } from "./dashboard-shell";
 import { LeaveDialog, useNavigationGuard } from "./navigation-guard";
@@ -145,20 +146,14 @@ function SettingsEditor({
     }
   }
   return (
-    <div className="max-w-3xl space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
-        <p className="text-gray-600 mt-1">
-          Manage your account, password, and subscription.
-        </p>
-      </div>
+    <div className={styles.page}>
+      <WorkspaceMasthead title="Settings">
+        Manage your account, password, and subscription.
+      </WorkspaceMasthead>
       {error && <Notice tone="error">{error}</Notice>}
       {message && <Notice tone="success">{message}</Notice>}
-      <section className="bg-white rounded-xl shadow-sm border p-6">
-        <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-          <User size={20} className="text-blue-600" aria-hidden="true" />
-          Profile
-        </h2>
+      <section className={styles.settingsSection}>
+        <h2>Profile</h2>
         <form
           noValidate
           className="form-stack"
@@ -186,11 +181,8 @@ function SettingsEditor({
           </Button>
         </form>
       </section>
-      <section className="bg-white rounded-xl shadow-sm border p-6">
-        <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-          <Key size={20} className="text-blue-600" aria-hidden="true" />
-          Change Password
-        </h2>
+      <section className={styles.settingsSection}>
+        <h2>Change Password</h2>
         <form
           noValidate
           className="form-stack"
@@ -234,21 +226,15 @@ function SettingsEditor({
           </Button>
         </form>
       </section>
-      <section className="bg-white rounded-xl shadow-sm border p-6">
-        <h2 className="text-lg font-semibold flex items-center gap-2 mb-4">
-          <CreditCard size={20} className="text-blue-600" aria-hidden="true" />
-          Subscription
-        </h2>
+      <section className={styles.settingsSection}>
+        <h2>Subscription</h2>
         <p>View your plan, checkout status and Stripe customer portal.</p>
         <Link href="/billing" className="button primary">
           Manage subscription
         </Link>
       </section>
-      <section className="bg-white rounded-xl shadow-sm border border-red-200 p-6">
-        <h2 className="text-lg font-semibold text-red-700 flex items-center gap-2 mb-4">
-          <AlertTriangle size={20} aria-hidden="true" />
-          Account data and deletion
-        </h2>
+      <section className={styles.settingsSection}>
+        <h2>Account data and deletion</h2>
         <p>
           Reverse individual imports from Import history. Permanent data
           deletion requests are handled by support after verifying account

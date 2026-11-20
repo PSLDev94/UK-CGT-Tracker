@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Image from "next/image";
+import { Brand } from "@/ui/brand";
 import Link from "next/link";
 import { PublicFooter } from "@/components/public-footer";
 import { BROKERS, IMPORT_PATH_LABEL } from "@/domain/imports/brokers";
@@ -46,16 +46,13 @@ export default async function LandingPage() {
       />
       <header className={styles.mast}>
         <div className={`${styles.frame} ${styles.mastInner}`}>
-          <Link href="/" className={styles.brand}>
-            <Image src="/logo.svg" width={30} height={30} alt="" />
-            <span>
-              CGT<span>Tracker</span>
-            </span>
-          </Link>
+          <Brand />
           <nav aria-label="Main navigation" className={styles.mainNav}>
             <div className={styles.desktopLinks}>
               <a href="#brokers">Brokers</a>
               <a href="/samples/cgt-evidence.pdf">Sample report</a>
+              <Link href="/guide">CGT guide</Link>
+              <Link href="/pricing">Pricing</Link>
             </div>
             <Link
               href={signedIn ? "/dashboard" : "/login"}

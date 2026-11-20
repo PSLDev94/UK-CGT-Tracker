@@ -12,20 +12,29 @@
 }
 @layer components {
   :root {
-    --color-ink: #111827;
+    --color-ink: #192630;
     --color-primary: #2563eb;
-    --color-background: #f9fafb;
+    --color-background: #f8f9f8;
     --color-surface: #ffffff;
-    --color-muted: #4b5563;
-    --color-border: #e5e7eb;
+    --color-muted: #425460;
+    --color-border: #c5cdd2;
+    --color-control-border: #76858c;
+    --color-paper: #f3f1eb;
+    --color-sheet: #edf1f2;
+    --color-charcoal: #182127;
+    --color-on-charcoal: #f4f5f2;
+    --color-on-charcoal-muted: #b8c1c6;
+    --color-on-charcoal-link: #b7ceff;
+    --color-logo-light: #afc9ff;
+    --color-charcoal-rule: #4c575d;
     --color-danger: #a12d2b;
     --color-warning: #805300;
     --font-statement: "STIX Two Text", Georgia, serif;
     --font-display: "Inter Variable", system-ui, sans-serif;
     --font-body: "Inter Variable", system-ui, sans-serif;
     --font-mono: ui-monospace, "SFMono-Regular", monospace;
-    --radius-control: 0.5rem;
-    --radius-panel: 0.75rem;
+    --radius-control: 0.25rem;
+    --radius-panel: 0;
     --space-unit: 0.5rem;
     --space-page-max: 76rem;
     color-scheme: light;
@@ -86,6 +95,7 @@
   button:focus-visible,
   a:focus-visible,
   input:focus-visible,
+  textarea:focus-visible,
   select:focus-visible,
   summary:focus-visible,
   [tabindex]:focus-visible {
@@ -173,7 +183,7 @@
   }
   .button.secondary {
     background: var(--color-surface);
-    border-color: var(--color-border);
+    border-color: var(--color-control-border);
     color: var(--color-ink);
   }
   .button.danger {
@@ -296,6 +306,7 @@
     gap: 1.25rem;
   }
   .field {
+    min-width: 0;
     display: grid;
     gap: 0.4rem;
   }
@@ -308,7 +319,7 @@
     min-width: 0;
     width: 100%;
     padding: 0.7rem 0.8rem;
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--color-control-border);
     border-radius: var(--radius-control);
     background: var(--color-surface);
     color: var(--color-ink);
@@ -359,7 +370,7 @@
     color: var(--color-warning);
   }
   .notice.success {
-    color: var(--color-primary);
+    color: #275848;
   }
   .workspace {
     width: 100%;
@@ -912,8 +923,8 @@
     border-color: #edcfcc;
   }
   .notice.success {
-    background: #eff6ff;
-    border-color: #ded9fa;
+    background: #f0f6f2;
+    border-color: #aabfb3;
   }
   .tag {
     background: var(--color-background);
@@ -1099,9 +1110,6 @@
   }
   .calculation-cutoff {
     max-width: 32rem;
-  }
-  .panel {
-    box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
   }
   .auth-wrap {
     max-width: 28rem;

@@ -1,3 +1,4 @@
+import styles from "@/components/public-pages.module.css";
 import Link from "next/link";
 import { PublicNav } from "@/components/public-nav";
 import { PublicFooter } from "@/components/public-footer";
@@ -5,13 +6,14 @@ export const metadata = { title: "Privacy and your data" };
 
 export default function Privacy() {
   return (
-    <>
+    <div className={styles.page}>
       <PublicNav />
       <main
         id="main"
-        className="max-w-3xl mx-auto px-4 py-16 space-y-6 text-gray-700"
+        tabIndex={-1}
+        className={`${styles.frame} ${styles.legal}`}
       >
-        <h1 className="text-3xl font-bold text-gray-900">
+        <h1 className={styles.articleTitle}>
           Privacy &amp; your data
         </h1>
         <p>
@@ -24,7 +26,7 @@ export default function Privacy() {
           </a>{" "}
           about your account or personal information.
         </p>
-        <div className="rounded-xl border bg-blue-50 p-5">
+        <div className={styles.referenceBox}>
           <strong>Relaunch preview</strong>
           <p>
             This page describes the review version. The full production privacy
@@ -104,6 +106,6 @@ export default function Privacy() {
         </p>
       </main>
       <PublicFooter />
-    </>
+    </div>
   );
 }

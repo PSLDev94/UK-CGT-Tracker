@@ -2,13 +2,15 @@
 
 import { useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { BarChart3, Plus, Trash2, Calculator } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import type Decimal from "decimal.js";
 import { Money } from "@/domain/values";
 import { money, unitPrice } from "@/ui/format";
 import { SaleAmounts } from "@/ui/sale-amounts";
 import { CalculatorUploadLink } from "@/components/calculator-upload-link";
 import { PublicNav } from "@/components/public-nav";
+import publicStyles from "@/components/public-pages.module.css";
+import styles from "@/components/calculator.module.css";
 import { CalculatorFields } from "@/components/calculator-fields";
 import { PublicFooter } from "@/components/public-footer";
 
@@ -160,28 +162,22 @@ export default function Section104CalculatorPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className={publicStyles.page}>
       <PublicNav />
 
-      <main id="main" className="max-w-4xl mx-auto px-4 py-8 sm:py-16 sm:px-6 lg:px-8">
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-4">
+      <main id="main" tabIndex={-1} className={`${publicStyles.frame} ${publicStyles.reading} ${styles.page}`}>
+        <h1 className={publicStyles.taskHeading}>
           Section 104 Pool Calculator
         </h1>
-        <p className="text-lg text-gray-600 mb-6 max-w-prose leading-relaxed">
+        <p className={publicStyles.intro}>
           Enter purchases of the same ordinary share to see your average cost.
           Then try a sale matched entirely to the pool.
         </p>
 
         {/* Purchase rows */}
-        <CalculatorFields
-          label="Share purchases"
-          className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-8"
-        >
-          <div className="h-1.5 bg-gradient-to-r from-blue-500 to-indigo-600" />
-          <div className="p-6 sm:p-8">
-            <h2 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-blue-600" /> Purchases
-            </h2>
+        <CalculatorFields label="Share purchases">
+          <div className={styles.fieldsBody}>
+            <h2 className={styles.sectionHeading}>Purchases</h2>
 
             <div className="space-y-4">
               {rows.map((row, index) => (
@@ -200,7 +196,7 @@ export default function Section104CalculatorPage() {
                       onChange={(e) =>
                         updateRow(row.id, "date", e.target.value)
                       }
-                      className="w-full min-w-0 box-border border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      className={styles.input}
                     />
                   </div>
                   <div className="sm:col-span-2">
@@ -222,7 +218,7 @@ export default function Section104CalculatorPage() {
                       onChange={(e) =>
                         updateRow(row.id, "quantity", e.target.value)
                       }
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      className={styles.input}
                     />
                   </div>
                   <div className="sm:col-span-3">
@@ -238,7 +234,7 @@ export default function Section104CalculatorPage() {
                       onChange={(e) =>
                         updateRow(row.id, "pricePerShare", e.target.value)
                       }
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      className={styles.input}
                     />
                   </div>
                   <div className="sm:col-span-3">
@@ -254,7 +250,7 @@ export default function Section104CalculatorPage() {
                       onChange={(e) =>
                         updateRow(row.id, "fees", e.target.value)
                       }
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      className={styles.input}
                     />
                   </div>
                   <div className="sm:col-span-1 flex sm:justify-center">
@@ -262,7 +258,7 @@ export default function Section104CalculatorPage() {
                       <button
                         type="button"
                         onClick={() => removeRow(row.id)}
-                        className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                        className={styles.remove}
                         aria-label={`Remove purchase ${index + 1}`}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -287,7 +283,7 @@ export default function Section104CalculatorPage() {
             <button
               type="button"
               onClick={addRow}
-              className="mt-4 flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+              className={styles.add}
             >
               <Plus className="w-4 h-4" /> Add purchase
             </button>
@@ -295,8 +291,8 @@ export default function Section104CalculatorPage() {
 
           {/* Pool summary */}
           {poolState.length > 0 && (
-            <div className="bg-blue-50 border-t p-6 sm:p-8">
-              <h3 className="font-bold text-gray-900 mb-4">Pool Summary</h3>
+            <div className={styles.result}>
+              <h3 className={styles.sectionHeading}>Pool Summary</h3>
               {poolRows.some((row) => !row.date) && (
                 <p className="mb-3 text-sm text-gray-700">
                   Undated purchases appear last, in the order you entered them.
@@ -306,9 +302,9 @@ export default function Section104CalculatorPage() {
                 role="region"
                 aria-label="Purchase history and running pool balance"
                 tabIndex={0}
-                className="overflow-x-auto mb-6 not-prose rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-700"
+                className={styles.tableScroll}
               >
-                <table className="w-full text-sm border bg-white rounded-lg overflow-hidden">
+                <table className={styles.ledger}>
                   <thead>
                     <tr className="bg-gray-50 border-b">
                       <th className="text-left px-3 py-2 font-semibold text-gray-700">
@@ -356,27 +352,27 @@ export default function Section104CalculatorPage() {
                 </table>
               </div>
               <div className="grid sm:grid-cols-3 gap-4 tabular-nums">
-                <div className="bg-white rounded-xl p-4 border text-center">
-                  <p className="text-xs text-gray-500 uppercase mb-1">
+                <div className={styles.amount}>
+                  <p className={styles.caption}>
                     Total Shares
                   </p>
-                  <p className="text-xl font-bold text-gray-900">
+                  <p className={styles.value}>
                     {totalPoolShares.toFixed()}
                   </p>
                 </div>
-                <div className="bg-white rounded-xl p-4 border text-center">
-                  <p className="text-xs text-gray-500 uppercase mb-1">
+                <div className={styles.amount}>
+                  <p className={styles.caption}>
                     Total Cost
                   </p>
-                  <p className="text-xl font-bold text-gray-900">
+                  <p className={styles.value}>
                     £{totalPoolCost.toFixed(2)}
                   </p>
                 </div>
-                <div className="bg-white rounded-xl p-4 border text-center">
-                  <p className="text-xs text-gray-500 uppercase mb-1">
+                <div className={styles.amount}>
+                  <p className={styles.caption}>
                     Avg Cost/Share
                   </p>
-                  <p className="text-xl font-bold text-gray-900">
+                  <p className={styles.value}>
                     {unitPrice(avgCostPerShare.toString())}
                   </p>
                 </div>
@@ -386,14 +382,9 @@ export default function Section104CalculatorPage() {
         </CalculatorFields>
 
         {/* Disposal section */}
-        <CalculatorFields
-          label="Share disposal"
-          className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-12"
-        >
-          <div className="p-6 sm:p-8">
-            <h2 className="text-lg font-bold text-gray-900 mb-6 flex items-center gap-2">
-              <Calculator className="w-5 h-5 text-red-600" /> Disposal
-            </h2>
+        <CalculatorFields label="Share disposal">
+          <div className={styles.fieldsBody}>
+            <h2 className={styles.sectionHeading}>Disposal</h2>
             <div className="grid sm:grid-cols-3 gap-4">
               <div>
                 <label
@@ -411,7 +402,7 @@ export default function Section104CalculatorPage() {
                   aria-describedby={quantityError ? "sell-holding sell-qty-error" : "sell-holding"}
                   value={sellQty}
                   onChange={(e) => setSellQty(e.target.value)}
-                  className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-600 focus:border-blue-600 aria-invalid:border-red-700 aria-invalid:focus:ring-red-700 outline-none"
+                  className={styles.input}
                 />
                 <p id="sell-holding" className="mt-1 text-sm text-gray-600">
                   {totalPoolShares.gt(0)
@@ -438,7 +429,7 @@ export default function Section104CalculatorPage() {
                   aria-describedby={priceError ? "sell-price-hint sell-price-error" : "sell-price-hint"}
                   value={sellPrice}
                   onChange={(e) => setSellPrice(e.target.value)}
-                  className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-600 focus:border-blue-600 aria-invalid:border-red-700 aria-invalid:focus:ring-red-700 outline-none"
+                  className={styles.input}
                 />
                 <p id="sell-price-hint" className="mt-1 text-sm text-gray-600">
                   Use the price before selling fees.
@@ -460,7 +451,7 @@ export default function Section104CalculatorPage() {
                   onChange={(e) => setSellingFees(e.target.value)}
                   aria-invalid={Boolean(feeError)}
                   aria-describedby={feeError ? "sell-fees-error" : undefined}
-                  className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-600 focus:border-blue-600 aria-invalid:border-red-700 aria-invalid:focus:ring-red-700 outline-none"
+                  className={styles.input}
                 />
                 <p id="sell-fees-error" aria-live="polite" className="text-sm text-red-700">
                   {feeError}
@@ -470,9 +461,9 @@ export default function Section104CalculatorPage() {
           </div>
 
           {disposalResult && (
-            <div className="bg-gray-50 border-t p-6 sm:p-8 [overflow-wrap:anywhere]">
-              <h3 className="font-bold text-gray-900 mb-4">Disposal Result</h3>
-              <div className="bg-white rounded-xl p-4 border mb-4">
+            <div className={styles.result}>
+              <h3 className={styles.sectionHeading}>Disposal Result</h3>
+              <div className={styles.breakdown}>
                 <SaleAmounts
                   breakdown={disposalResult.breakdown}
                   net={disposalResult.net}
@@ -481,19 +472,19 @@ export default function Section104CalculatorPage() {
                 />
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
-                <div className="bg-white rounded-xl p-4 border">
-                  <p className="text-xs text-gray-500 uppercase mb-1">
+                <div className={styles.amount}>
+                  <p className={styles.caption}>
                     {disposalResult.gainLoss.gt(0) ? "Gain" : disposalResult.gainLoss.lt(0) ? "Loss" : "Break-even"}
                   </p>
-                  <p className={`text-xl font-bold tabular-nums ${disposalResult.gainLoss.gt(0) ? "text-green-700" : disposalResult.gainLoss.lt(0) ? "text-red-700" : "text-gray-900"}`}>
+                  <p className={`${styles.value} ${disposalResult.gainLoss.gt(0) ? "text-green-700" : disposalResult.gainLoss.lt(0) ? "text-red-700" : "text-gray-900"}`}>
                     {disposalResult.gainLoss.gt(0) ? "+" : ""}{money(disposalResult.gainLoss.toString())}
                   </p>
                 </div>
-                <div className="bg-white rounded-xl p-4 border">
-                  <p className="text-xs text-gray-500 uppercase mb-1">
+                <div className={styles.amount}>
+                  <p className={styles.caption}>
                     Pool After Sale
                   </p>
-                  <p className="text-lg font-bold text-gray-900">
+                  <p className={styles.value}>
                     {disposalResult.remainingShares.toFixed()} {disposalResult.remainingShares.eq(1) ? "share" : "shares"}
                   </p>
                   <p className="text-sm text-gray-500">
@@ -506,7 +497,7 @@ export default function Section104CalculatorPage() {
         </CalculatorFields>
 
         {/* Explanatory content */}
-        <div className="guide-article mb-12">
+        <div className={`guide-article ${styles.notes}`}>
           <h2>How the Section 104 Pool Calculator Works</h2>
           <p>
             This calculator uses <strong>precise decimal arithmetic</strong>{" "}
@@ -545,7 +536,7 @@ export default function Section104CalculatorPage() {
         </div>
 
         {/* CTA */}
-        <section className="bg-blue-50 rounded-2xl p-8 text-center">
+        <section className={publicStyles.callToAction}>
           <h2 className="text-2xl font-bold text-gray-900 mb-3">
             Tracking multiple securities?
           </h2>

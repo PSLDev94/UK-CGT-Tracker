@@ -1,12 +1,12 @@
 .trades {
-  --chrome-bg: #182127;
-  --chrome-ink: #f4f5f2;
+  --chrome-bg: var(--color-charcoal);
+  --chrome-ink: var(--color-on-charcoal);
   --chrome-line: #39434a;
-  --logo-blue: #afc9ff;
-  --trade-ink: #182127;
-  --trade-muted: #b8c1c6;
-  --trade-rule: #4c575d;
-  --trade-blue: #b7ceff;
+  --logo-blue: var(--color-logo-light);
+  --trade-ink: var(--color-charcoal);
+  --trade-muted: var(--color-on-charcoal-muted);
+  --trade-rule: var(--color-charcoal-rule);
+  --trade-blue: var(--color-on-charcoal-link);
   --trade-pad: clamp(1rem, 4.6vw, 4.5rem);
   margin: 0;
   font-variant-numeric: tabular-nums;
@@ -531,23 +531,6 @@
 .mast a {
   color: inherit;
 }
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.48rem;
-  min-height: 44px;
-  text-decoration: none;
-  font-size: 1.25rem;
-  font-weight: 720;
-  line-height: 1.2;
-  letter-spacing: -0.062em;
-}
-.brand img {
-  flex: none;
-}
-.brand span span {
-  color: var(--logo-blue);
-}
 .mainNav,
 .desktopLinks {
   display: flex;
@@ -673,13 +656,6 @@
   .mastInner {
     min-height: 3.5rem;
     gap: 0.1rem 0.75rem;
-  }
-  .brand {
-    font-size: 1.125rem;
-  }
-  .brand img {
-    width: 26px;
-    height: 26px;
   }
   .desktopLinks {
     display: none;

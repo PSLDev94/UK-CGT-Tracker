@@ -5,17 +5,12 @@ import Link from "next/link";
 import { api } from "@/ui/api";
 import { useHydrated } from "@/ui/use-hydrated";
 import {
-  Send,
-  CheckCircle,
   AlertCircle,
   ArrowLeft,
-  Mail,
-  User,
-  MessageSquare,
 } from "lucide-react";
 import { contactTopics, isContactTopic } from "@/ui/contact-topics";
-import { PublicFooter } from "@/components/public-footer";
-import { PublicNav } from "@/components/public-nav";
+import { WorkspaceMasthead } from "@/ui/workspace-masthead";
+import styles from "./public-pages.module.css";
 import { billingUrl, type ReportDestination } from "@/domain/reports/destination";
 
 export function ContactForm({
@@ -105,66 +100,52 @@ export function ContactForm({
     }
   };
 
+  const intro = (
+    <>
+      Have a question, feedback, or need help with your CGT calculations?
+      Contact PSL Digital at <a href="mailto:support@cgttracker.com">support@cgttracker.com</a>, or use this form.
+    </>
+  );
   return (
-    <div
-      className={
-        dashboard
-          ? "font-sans text-gray-900"
-          : "bg-white font-sans text-gray-900"
-      }
-    >
-      {/* Navigation */}
-      {!dashboard && <PublicNav />}
-
-      <div className={dashboard ? "max-w-2xl" : "max-w-2xl mx-auto py-16 px-4"}>
-        {/* Back link */}
-        <Link
-          href={backHref}
-          className="inline-flex items-center text-sm text-gray-500 hover:text-gray-900 mb-8 transition-colors group"
-        >
-          <ArrowLeft className="w-4 h-4 mr-1.5 group-hover:-translate-x-0.5 transition-transform" />
-          {backLabel}
+    <div className={dashboard ? styles.workspaceContact : styles.publicContact}>
+      <div>
+        <Link href={backHref} className={styles.backLink}>
+          <ArrowLeft size={16} aria-hidden="true" /> {backLabel}
         </Link>
-
-        {/* Header */}
-        <div className="mb-10">
-          <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-3">
-            Contact Us
-          </h1>
-          <p className="text-lg text-gray-600 leading-relaxed">
-            Have a question, feedback, or need help with your CGT calculations?
-            Contact PSL Digital at support@cgttracker.com, or use this form.
-          </p>
-        </div>
-
+        {dashboard ? (
+          <WorkspaceMasthead title="Contact Us">{intro}</WorkspaceMasthead>
+        ) : (
+          <>
+            <h1 className={styles.taskHeading}>Contact Us</h1>
+            <p className={styles.intro}>{intro}</p>
+          </>
+        )}
+      </div>
+      <div className={styles.formSheet}>
         {/* Success State */}
         {status === "success" ? (
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
-            <div className="h-1.5 bg-gradient-to-r from-green-400 to-emerald-500"></div>
-            <div role="status" className="p-8 sm:p-12 text-center">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <CheckCircle className="w-8 h-8 text-green-600" />
-              </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-3">
+          <div>
+            <div role="status" className={styles.accepted}>
+              <h2 className={styles.subheading}>
                 Message Accepted
               </h2>
-              <p className="text-gray-600 mb-8 max-w-md mx-auto">
+              <p className={styles.intro}>
                 Your message has been accepted by our email service. The support
                 team will reply to the email address you provided.
               </p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <div className="flex flex-wrap gap-3">
                 <button
                   onClick={() => {
                     setMessage("");
                     setStatus("idle");
                   }}
-                  className="px-6 py-2.5 border border-gray-300 rounded-xl font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                  className={styles.actionSecondary}
                 >
                   Write another message
                 </button>
                 <Link
                   href={backHref}
-                  className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors text-center"
+                  className={styles.action}
                 >
                   {backLabel}
                 </Link>
@@ -173,20 +154,19 @@ export function ContactForm({
           </div>
         ) : (
           /* Form */
-          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
-            <div className="h-1.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500"></div>
+          <div>
             <form
               noValidate
               onSubmit={handleSubmit}
               aria-busy={!ready || status === "sending"}
-              className="p-6 sm:p-8 space-y-6"
+              className={styles.contactFields}
             >
               {/* Error Banner */}
               {status === "error" && errorMsg && (
                 <div
                   id="contact-error"
                   role="alert"
-                  className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl"
+                  className="flex items-start gap-3 p-3 bg-red-50 border border-red-200"
                 >
                   <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-red-700">{errorMsg}</p>
@@ -197,9 +177,7 @@ export function ContactForm({
               <div>
                 <label
                   htmlFor="contact-name"
-                  className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2"
                 >
-                  <User className="w-4 h-4 text-gray-400" />
                   Full Name
                 </label>
                 <input
@@ -220,7 +198,6 @@ export function ContactForm({
                   }}
                   autoComplete="name"
                   placeholder="Your full name"
-                  className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow placeholder:text-gray-400"
                 />
               </div>
 
@@ -228,9 +205,7 @@ export function ContactForm({
               <div>
                 <label
                   htmlFor="contact-email"
-                  className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2"
                 >
-                  <Mail className="w-4 h-4 text-gray-400" />
                   Email Address
                 </label>
                 <input
@@ -251,7 +226,6 @@ export function ContactForm({
                   }}
                   autoComplete="email"
                   placeholder="you@example.com"
-                  className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow placeholder:text-gray-400"
                 />
               </div>
 
@@ -278,9 +252,7 @@ export function ContactForm({
               <div>
                 <label
                   htmlFor="contact-message"
-                  className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2"
                 >
-                  <MessageSquare className="w-4 h-4 text-gray-400" />
                   Message
                 </label>
                 <textarea
@@ -301,7 +273,7 @@ export function ContactForm({
                     requestId.current = null;
                   }}
                   placeholder="How can we help you?"
-                  className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-shadow resize-y placeholder:text-gray-400"
+                  className="resize-none sm:resize-y"
                 />
               </div>
 
@@ -310,7 +282,7 @@ export function ContactForm({
               <button
                 type="submit"
                 disabled={!ready || status === "sending"}
-                className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold text-base hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors active:scale-[0.99] flex items-center justify-center gap-2 shadow-sm"
+                className={styles.action}
               >
                 {status === "sending" ? (
                   <>
@@ -319,13 +291,12 @@ export function ContactForm({
                   </>
                 ) : (
                   <>
-                    <Send className="w-5 h-5" />
                     Send message
                   </>
                 )}
               </button>
 
-              <p className="text-xs text-gray-500 text-center">
+              <p className={styles.meta}>
                 If you have a CGT Tracker calculation or import reference, include it here. Do not
                 attach passwords or financial exports.
               </p>
@@ -334,7 +305,6 @@ export function ContactForm({
         )}
       </div>
 
-      {!dashboard && <PublicFooter />}
     </div>
   );
 }

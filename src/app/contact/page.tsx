@@ -1,3 +1,6 @@
+import styles from "@/components/public-pages.module.css";
+import { PublicNav } from "@/components/public-nav";
+import { PublicFooter } from "@/components/public-footer";
 import { ContactForm } from "@/components/contact-form";
 export const metadata = { title: "Contact Us" };
 export default async function Page({
@@ -7,8 +10,12 @@ export default async function Page({
 }) {
   const { topic } = await searchParams;
   return (
-    <main id="main">
-      <ContactForm initialTopic={topic} />
-    </main>
+    <div className={styles.page}>
+      <PublicNav />
+      <main id="main" tabIndex={-1} className={styles.frame}>
+        <ContactForm initialTopic={topic} />
+      </main>
+      <PublicFooter />
+    </div>
   );
 }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AuthFrame } from "./auth-frame";
 import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
 import { authHref, safeReturnPath } from "./return-path";
 
@@ -12,14 +13,8 @@ export function WorkspaceEntry({
   const destination = safeReturnPath(next);
   const annualBilling = destination.split("?")[0] === "/billing";
   return (
-    <main id="main" className="classic-auth">
-      <section className="auth-wrap panel">
-        <Link
-          href={annualBilling ? "/pricing" : "/"}
-          className="inline-block mb-4 text-sm text-blue-700"
-        >
-          {annualBilling ? "← Back to pricing" : "← Back to home"}
-        </Link>
+    <AuthFrame pricingReturn={annualBilling}>
+      <section>
         <h1>
           {annualBilling ? "Annual PDF reports" : "Sign in to your workspace."}
         </h1>
@@ -44,6 +39,6 @@ export function WorkspaceEntry({
           </Link>
         </div>
       </section>
-    </main>
+    </AuthFrame>
   );
 }

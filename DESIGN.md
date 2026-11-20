@@ -3,12 +3,21 @@ version: alpha
 name: CGT Tracker
 description: A clear working ledger for UK investors checking share gains across brokers.
 colors:
-  ink: "#111827"
+  ink: "#192630"
   primary: "#2563eb"
-  background: "#f9fafb"
+  background: "#f8f9f8"
   surface: "#ffffff"
-  muted: "#4b5563"
-  border: "#e5e7eb"
+  muted: "#425460"
+  border: "#c5cdd2"
+  control-border: "#76858c"
+  paper: "#f3f1eb"
+  sheet: "#edf1f2"
+  charcoal: "#182127"
+  on-charcoal: "#f4f5f2"
+  on-charcoal-muted: "#b8c1c6"
+  on-charcoal-link: "#b7ceff"
+  logo-light: "#afc9ff"
+  charcoal-rule: "#4c575d"
   danger: "#a12d2b"
   warning: "#805300"
 typography:
@@ -23,8 +32,8 @@ typography:
   mono:
     fontFamily: 'ui-monospace, "SFMono-Regular", monospace'
 rounded:
-  control: "0.5rem"
-  panel: "0.75rem"
+  control: "0.25rem"
+  panel: "0"
 spacing:
   unit: "0.5rem"
   page-max: "76rem"
@@ -39,23 +48,23 @@ components:
 
 ## Overview
 
-Git revision `9ded8c0` supplies the original pie-chart mark, wordmark and application branding. The approved Trade records homepage and Annual statement report treatments apply to those specific surfaces. The guides, tools, pricing, account and dashboard retain their original navigation and visual conventions.
+The original blue pie-chart mark and CGT Tracker wordmark identify every part of the service. The approved Trade records homepage and Annual statement report establish the design across discovery, account access, the workspace and print.
 
 ## Colors
 
-Original Tailwind blue/white/gray palette with green/red financial values. Public gradient sections, coloured guide callouts and original broker initial tiles are intentional user-authorised original design. Do not replace them with a new aesthetic.
+Charcoal anchors navigation. Ink on paper is the default for public reading pages. The workspace uses white working surfaces, pale statement sections and fine grey rules between records. Blue identifies interactive controls. Amounts carry a sign or a gain/loss label. Warnings and errors include an explanation and a recovery action where available.
 
 ## Typography
 
-Inter, as on the original site, is self-hosted through Fontsource. Original Tailwind text sizes, weights and spacing remain canonical. New forms and pages inherit Inter and the original visual hierarchy. Financial arithmetic uses Decimal and renders decimal strings.
+Self-hosted Inter sets navigation, public task titles, form labels and body copy. STIX Two Text gives statements, section titles and financial totals a clear hierarchy. Figures align with tabular numerals. Reference numbers and dates may use monospace. Financial arithmetic is independent of its typographic treatment.
 
 ## Layout
 
-The homepage opens with a charcoal field pairing the investor’s question with an interactive sale and its dated source records. Original 16rem desktop sidebar and narrow-screen menu. Dashboard content uses white bordered cards on gray-50; new account and import review screens use the same controls and card language. Document scrolling with labelled horizontal table regions.
+The homepage pairs an investor’s question with dated trade records. Guides give text a comfortable reading measure. Interactive tools place inputs together with their assumptions and results. Within the workspace, a shared navigation rail becomes a menu on small screens. Records, balances and their source documents stay connected across screen sizes.
 
 ## Elevation & Depth
 
-Retain original shadows, gradients and borders. New screens use matching small card shadows.
+Use surface changes and rules to distinguish sections. Elevation is reserved for floating controls such as an open navigation menu.
 
 ## Homepage and reports
 
@@ -65,17 +74,17 @@ Annual statements use serif headings and a prominent annual result, fine rules a
 
 ## Shapes
 
-Original rounded-md/lg/xl controls and panels. Shared workflow controls use the mirrored runtime radii.
+Use compact corners on controls and squared edges on financial statements and tables. Keep form fields outlined, large enough for touch, and visibly focused.
 
 ## Components
 
 `src/components/public-nav.tsx`, `public-footer.tsx` and `dashboard-sidebar.tsx` own navigation. `src/ui/primitives.tsx` owns validated fields, notices and buttons used by the rebuilt workflow. Recovered educational calculators retain native date/select controls; financial history dates remain explicitly typed YYYY-MM-DD. Mobile disclosures have labelled buttons and Escape support. No financial information is written to browser storage.
 
-Token ownership remains Model B: globals.css is canonical for named workflow tokens mirrored in frontmatter. Original Tailwind v4 utilities remain canonical for recovered page styling and override the components layer. The project check verifies all explicit named runtime tokens, including the Tailwind font adapter.
+Token ownership remains Model B: globals.css is canonical for named workflow tokens mirrored in frontmatter. Scoped style modules implement each page family. Shared control styles and the runtime tokens provide the common foundation. The project check verifies all explicit named runtime tokens, including the Tailwind font adapter.
 
 ## Do's and Don'ts
 
-- Match new screens to the original site, never introduce a parallel design language.
+- Use Trade records for public navigation and discovery, and Annual statement for records, calculations and reports.
 - Preserve every original page URL and product navigation entry.
 - Amend unverified broker, trial, tax-report and security claims to the actual current behaviour.
 - Retain auth verification, decimal calculations, all-or-nothing import validation and audit history.
