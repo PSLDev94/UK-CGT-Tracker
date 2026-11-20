@@ -1,0 +1,160 @@
+.frame {
+  min-height: 100dvh;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+}
+.mast {
+  --chrome-ink: var(--color-on-charcoal);
+  --logo-blue: var(--color-logo-light);
+  background: var(--color-charcoal);
+  color: var(--chrome-ink);
+  border-bottom: 1px solid var(--color-charcoal-rule);
+}
+.mastInner {
+  width: min(100%, 82rem);
+  margin-inline: auto;
+  padding: .5rem clamp(1rem, 4.6vw, 4.5rem);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .2rem 1rem;
+  flex-wrap: wrap;
+  min-height: 4.5rem;
+}
+.back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  gap: .38rem;
+  font-size: .88rem;
+  font-weight: 530;
+  color: var(--chrome-ink);
+  text-decoration: underline;
+  text-underline-offset: .24em;
+}
+.mast :focus-visible {
+  outline: 3px solid var(--color-on-charcoal-link);
+  outline-offset: 2px;
+}
+.main, .withAside {
+  width: min(100%, 72rem);
+  margin-inline: auto;
+  padding: clamp(2rem, 6vw, 5.5rem) clamp(1rem, 5vw, 4rem);
+}
+.main { max-width: 36rem; }
+.withAside {
+  padding-top: clamp(2rem, 4.5vw, 4.25rem);
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr);
+  align-items: start;
+  column-gap: clamp(3rem, 8vw, 8rem);
+  row-gap: 2.5rem;
+}
+.formRegion { min-width: 0; }
+.formRegion h1 {
+  color: var(--color-ink);
+  font: 490 clamp(2.25rem, 4.2vw, 3.8rem)/1.04 var(--font-statement);
+  letter-spacing: -.044em;
+  margin: 0 0 .9rem;
+}
+.formRegion h1 + p { color: var(--color-muted); line-height: 1.55; }
+.formRegion :global(.form-stack) {
+  padding-top: 1.3rem;
+  margin-top: 1.3rem;
+  border-top: 1px solid var(--color-border);
+  gap: 1rem;
+}
+.withAside :global(.form-stack) { gap: .85rem; }
+.formRegion :global(.field) label { font-weight: 620; }
+.formRegion :global(.field) input {
+  background: var(--color-surface);
+  font-size: 1rem;
+}
+.formRegion :global(.actions) {
+  margin-top: 1rem;
+  column-gap: 1.25rem;
+}
+.formRegion :global(.caption) { color: var(--color-muted); }
+.formRegion :global(.caption) a, .formRegion :global(.actions) > a:not(:global(.button)) {
+  text-decoration: underline;
+  text-underline-offset: .2em;
+}
+.sample {
+  container-type: inline-size;
+  min-width: 0;
+  padding: clamp(1.25rem, 3.2vw, 2.5rem);
+  color: var(--color-on-charcoal);
+  background: var(--color-charcoal);
+  align-self: start;
+}
+.sampleHeading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem .85rem;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1px solid var(--color-charcoal-rule);
+  padding-bottom: .85rem;
+}
+.sampleHeading h2 {
+  margin: 0;
+  color: inherit;
+  font: 575 1rem/1.4 var(--font-body);
+}
+.sampleHeading span {
+  color: var(--color-on-charcoal-muted);
+  font: .78rem/1.45 var(--font-mono);
+}
+.sample dl { margin: 1rem 0; }
+.sampleRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto);
+  gap: .35rem .85rem;
+  align-items: baseline;
+  border-bottom: 1px solid var(--color-charcoal-rule);
+  padding: .75rem 0;
+}
+.sampleRow dt { font-size: .95rem; }
+.sampleRow dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.sampleResult dt { color: var(--color-on-charcoal-muted); }
+.sampleResult dd {
+  margin: .25rem 0 1rem;
+  font: 455 clamp(2.25rem, 4vw, 3.7rem)/1.08 var(--font-statement);
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: -.045em;
+}
+.sample a {
+  color: var(--color-on-charcoal-link);
+  text-decoration: underline;
+  text-underline-offset: .25em;
+  line-height: 1.5;
+}
+.sample a:focus-visible {
+  outline: 2px solid var(--color-on-charcoal-link);
+  outline-offset: 3px;
+}
+.sample p { margin: 1rem 0 0; }
+@media (max-width: 800px) {
+  .withAside { grid-template-columns: minmax(0, 1fr); max-width: 36rem; }
+  .mastInner { min-height: 3.5rem; }
+}
+
+.withAside:has([data-verification-sent]) {
+  display: block;
+  max-width: 36rem;
+}
+.withAside:has([data-verification-sent]) .sample { display: none; }
+@media (max-width: 480px) {
+  .main, .withAside { padding-inline: 16px; }
+  .sample { padding-inline: 16px; }
+}
+@container (max-width: 13rem) {
+  .sampleRow { grid-template-columns: minmax(0, 1fr); }
+  .sampleRow dd { text-align: left; }
+  .sampleResult dd { font-size: 1.7rem; }
+}

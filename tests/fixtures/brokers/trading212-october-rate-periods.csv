@@ -1,0 +1,7 @@
+Action,Time,ISIN,Ticker,Name,No. of shares,Price / share,Currency (Price / share),Exchange rate,Result,Currency (Result),Total,Currency (Total),Withholding tax,Currency (Withholding tax),Transaction fee,Notes,ID,Currency conversion fee,Currency (Currency conversion fee),Currency (Transaction fee)
+Market buy,2024-01-10 12:00:00,GB0031348658,TESTA,Synthetic ordinary share A,3,3.333333333333,GBP,1,,,10.00,GBP,,,,,CGT-RATE-BOUNDARY-B01,,,
+Market buy,2024-02-12 12:00:00,GB0005405286,TESTB,Synthetic ordinary share B,2,1.005,GBP,1,,,2.01,GBP,,,,,CGT-RATE-BOUNDARY-B02,,,
+Market sell,2024-10-29 12:00:00,GB0031348658,TESTA,Synthetic ordinary share A,1,5,GBP,1,,,5.00,GBP,,,,,CGT-RATE-BOUNDARY-S01,,,
+Market sell,2024-10-29 12:00:00,GB0005405286,TESTB,Synthetic ordinary share B,1,1.01,GBP,1,,,1.01,GBP,,,,,CGT-RATE-BOUNDARY-S02,,,
+Market sell,2024-10-30 12:00:00,GB0031348658,TESTA,Synthetic ordinary share A,1,5,GBP,1,,,5.00,GBP,,,,,CGT-RATE-BOUNDARY-S03,,,
+Market sell,2025-04-05 12:00:00,GB0031348658,TESTA,Synthetic ordinary share A,1,1,GBP,1,,,1.00,GBP,,,,,CGT-RATE-BOUNDARY-S04,,,

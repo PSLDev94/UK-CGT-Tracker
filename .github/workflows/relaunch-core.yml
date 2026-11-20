@@ -1,0 +1,157 @@
+name: Relaunch core
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'codex/**']
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: Application, financial and browser contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run check:core
+      - run: npx tsc --noEmit --incremental false
+      - run: npm run lint
+      - run: npm run check:design
+      - run: npm run db:generate-auth
+      - run: git diff --exit-code -- db/migrations/0003_auth.generated.sql
+      - name: Audit locked runtime dependencies
+        run: |
+          node scripts/prepare-runtime-manifest.mjs "$RUNNER_TEMP/cgt-runtime"
+          cd "$RUNNER_TEMP/cgt-runtime"
+          npm audit --audit-level=high
+      - run: npm run build
+      - name: Check the shipped standalone files against the full dependency audit
+        run: |
+          status=0
+          npm audit --include=dev --json > "$RUNNER_TEMP/full-audit.json" || status=$?
+          node scripts/check-standalone-audit.mjs "$RUNNER_TEMP/full-audit.json"
+          if [ "$status" != 0 ]; then
+            echo "::warning::The full dependency audit has findings. Review the full-audit artifact for development dependencies."
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: full-npm-audit
+          path: ${{ runner.temp }}/full-audit.json
+          if-no-files-found: ignore
+      - run: node scripts/check-job-bundle.mjs
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run test:ui
+
+  container:
+    name: Portable container smoke check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --tag cgt-tracker:test .
+      - name: Run as an unprivileged service without build-time secrets
+        run: |
+          test "$(docker run --rm --entrypoint id cgt-tracker:test -u)" = "1000"
+          docker run --detach --name cgt-smoke --publish 127.0.0.1:3300:3000 cgt-tracker:test
+          trap 'docker rm --force cgt-smoke >/dev/null' EXIT
+          curl --fail --retry 20 --retry-all-errors --retry-delay 1 --max-time 3 http://127.0.0.1:3300/api/health
+          curl --fail http://127.0.0.1:3300/ --output /tmp/cgt-home.html
+          node -e 'if (!require("node:fs").readFileSync("/tmp/cgt-home.html", "utf8").includes("Which purchase counts")) process.exit(1)'
+          test "$(curl --silent --output /tmp/cgt-setup.json --write-out '%{http_code}' http://127.0.0.1:3300/api/v2/auth/get-session)" = "503"
+          test "$(curl --silent --output /tmp/cgt-ready.json --write-out '%{http_code}' http://127.0.0.1:3300/api/ready)" = "503"
+          for path in design-preview design-preview/calculations design-preview/report.pdf; do
+            test "$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:3300/$path")" = "404"
+          done
+
+  postgres:
+    name: PostgreSQL 18 migrations, roles and concurrency
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: disposable-ci-owner-password
+          POSTGRES_DB: cgt_qualification
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres -d cgt_qualification"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run test:postgres
+        env:
+          POSTGRES_TEST_DATABASE_URL: postgresql://postgres:disposable-ci-owner-password@localhost:5432/cgt_qualification
+      - name: Build isolated backup worker
+        run: |
+          docker build --file Dockerfile.backup --tag cgt-backup:test .
+          test "$(docker run --rm --entrypoint id cgt-backup:test -u)" != "0"
+          docker run --rm cgt-backup:test 2>/tmp/cgt-backup-config-error && exit 1 || test "$?" = "1"
+          grep -q '"success":false' /tmp/cgt-backup-config-error
+          docker run --rm cgt-backup:test scripts/check-backups.mjs 2>/tmp/cgt-backup-monitor-config-error && exit 1 || test "$?" = "1"
+          grep -q '"event":"database_backup_health","success":false' /tmp/cgt-backup-monitor-config-error
+      - name: Provision and check dedicated backup reader
+        env:
+          MIGRATION_DATABASE_URL: postgresql://postgres:disposable-ci-owner-password@localhost:5432/cgt_qualification
+          BACKUP_DATABASE_URL: postgresql://cgt_runtime_backup:disposable-ci-backup-password-123456@localhost:5432/cgt_qualification
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          node scripts/provision-backup-login.ts
+          node scripts/provision-backup-login.ts
+          if docker exec "$PG_CONTAINER" psql -U postgres -d cgt_qualification -v ON_ERROR_STOP=1 -c "SET ROLE cgt_backup; DELETE FROM cgt.transactions WHERE false;"; then exit 1; fi
+      - name: Rehearse PostgreSQL 18 encrypted backup restoration
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -o pipefail
+          mkdir /tmp/cgt-archive
+          chmod 777 /tmp/cgt-archive
+          export BACKUP_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+          docker exec -e PGPASSWORD=disposable-ci-backup-password-123456 "$PG_CONTAINER" pg_dump -h 127.0.0.1 -U cgt_runtime_backup --role=cgt_backup --no-owner -Fc cgt_qualification | docker run --rm -i -e BACKUP_ENCRYPTION_KEY -v /tmp/cgt-archive:/archive cgt-backup:test --input-type=module -e 'import { encryptArchive, backupKey } from "./src/server/backup/archive.ts"; await encryptArchive(process.stdin, "/archive/backup.cgtenc", backupKey(process.env.BACKUP_ENCRYPTION_KEY));'
+          docker run --rm -e BACKUP_ENCRYPTION_KEY -v /tmp/cgt-archive:/archive cgt-backup:test scripts/decrypt-backup.mjs /archive/backup.cgtenc /archive/restored.dump
+          docker run --rm --entrypoint cat -v /tmp/cgt-archive:/archive cgt-backup:test /archive/restored.dump > /tmp/cgt-qualification.dump
+          docker run --detach --name cgt-isolated-restore -e POSTGRES_PASSWORD=disposable-restore-password -e POSTGRES_DB=cgt_restore_qualification postgres:18
+          trap 'docker rm --force cgt-isolated-restore >/dev/null' EXIT
+          # The image briefly starts a socket-only server during initialization.
+          # TCP becomes available once the final PostgreSQL process takes over.
+          for attempt in $(seq 1 30); do
+            if docker exec cgt-isolated-restore pg_isready -h 127.0.0.1 -U postgres -d cgt_restore_qualification; then break; fi
+            if [ "$attempt" -eq 30 ]; then exit 1; fi
+            sleep 1
+          done
+          docker exec cgt-isolated-restore psql -U postgres -d cgt_restore_qualification -v ON_ERROR_STOP=1 -c 'CREATE ROLE cgt_app NOLOGIN; CREATE ROLE cgt_auth NOLOGIN; CREATE ROLE cgt_billing NOLOGIN; CREATE ROLE cgt_maintenance NOLOGIN;'
+          docker exec -i cgt-isolated-restore pg_restore -U postgres --exit-on-error --single-transaction --no-owner -d cgt_restore_qualification < /tmp/cgt-qualification.dump
+          for database in cgt_qualification cgt_restore_qualification; do
+            database_container="$PG_CONTAINER"
+            if [ "$database" = cgt_restore_qualification ]; then database_container=cgt-isolated-restore; fi
+            docker exec -i "$database_container" psql -X -qAt -U postgres -d "$database" -v ON_ERROR_STOP=1 < qualification/restore-audit.sql > "/tmp/$database-check.txt"
+          done
+          diff /tmp/cgt_qualification-check.txt /tmp/cgt_restore_qualification-check.txt
+          test "$(docker exec cgt-isolated-restore psql -U postgres -d cgt_restore_qualification -At -c 'SET ROLE cgt_app; SELECT count(*) FROM cgt.transactions;' | tail -1)" = "0"
+          # Prove the audit catches billing corruption and lost tenant policies,
+          # rather than only comparing the four original record tables.
+          docker exec cgt-isolated-restore psql -U postgres -d cgt_restore_qualification -v ON_ERROR_STOP=1 -c "UPDATE cgt.billing_accounts SET stripe_customer_id = stripe_customer_id || '_restore_damage' WHERE stripe_customer_id IS NOT NULL;" >/dev/null
+          docker exec -i cgt-isolated-restore psql -X -qAt -U postgres -d cgt_restore_qualification -v ON_ERROR_STOP=1 < qualification/restore-audit.sql > /tmp/cgt-damaged-billing.txt
+          if cmp -s /tmp/cgt_qualification-check.txt /tmp/cgt-damaged-billing.txt; then exit 1; fi
+          docker exec cgt-isolated-restore psql -U postgres -d cgt_restore_qualification -v ON_ERROR_STOP=1 -c "UPDATE cgt.billing_accounts SET stripe_customer_id = regexp_replace(stripe_customer_id, '_restore_damage$', '') WHERE stripe_customer_id LIKE '%_restore_damage';" >/dev/null
+          docker exec -i cgt-isolated-restore psql -X -qAt -U postgres -d cgt_restore_qualification -v ON_ERROR_STOP=1 < qualification/restore-audit.sql > /tmp/cgt-repaired-billing.txt
+          cmp /tmp/cgt_qualification-check.txt /tmp/cgt-repaired-billing.txt
+          docker exec cgt-isolated-restore psql -U postgres -d cgt_restore_qualification -v ON_ERROR_STOP=1 -c 'ALTER TABLE cgt.transactions DISABLE ROW LEVEL SECURITY;' >/dev/null
+          docker exec -i cgt-isolated-restore psql -X -qAt -U postgres -d cgt_restore_qualification -v ON_ERROR_STOP=1 < qualification/restore-audit.sql > /tmp/cgt-damaged-policy.txt
+          if cmp -s /tmp/cgt_qualification-check.txt /tmp/cgt-damaged-policy.txt; then exit 1; fi
+          rm /tmp/cgt-qualification.dump
+          docker run --rm --entrypoint rm -v /tmp/cgt-archive:/archive cgt-backup:test /archive/restored.dump /archive/backup.cgtenc

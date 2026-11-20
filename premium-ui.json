@@ -1,0 +1,38 @@
+{
+  "profile": "product-admin",
+  "sourceRoots": [
+    "src/ui",
+    "src/app",
+    "src/components"
+  ],
+  "locale": "en-GB",
+  "canonicalMap": "UX-CONTRACT.md",
+  "requiredCapabilities": [
+    "Form",
+    "Select/Listbox",
+    "Date",
+    "Scrollbar",
+    "Toast",
+    "CRUD"
+  ],
+  "ownership": {
+    "Select/Listbox": "native",
+    "Date": "native"
+  },
+  "requiredCommands": [
+    "unit",
+    "e2e",
+    "build",
+    "lint"
+  ],
+  "commands": {
+    "unit": "npm run check:core",
+    "e2e": "npm run test:ui",
+    "build": "npm run build",
+    "lint": "npm run lint"
+  },
+  "evidence": {
+    "crudFullFlow": "tests/ui.spec.ts",
+    "failurePaths": "tests/ui.spec.ts"
+  }
+}

@@ -1,0 +1,694 @@
+import { describe, expect, it, vi } from "vitest";
+import { PDFDocument } from "pdf-lib";
+import Papa from "papaparse";
+import Decimal from "decimal.js";
+import { reportPageText } from "./helpers/pdf-text";
+import { CURRENT_SCOPE_DECLARATION } from "../src/domain/cgt/types";
+import { calculateGains } from "../src/domain/cgt/calculate";
+import {
+  reportCsv,
+  reportStatus,
+  type ReportSnapshot,
+} from "../src/domain/reports/report";
+import { evidenceIssue, purchaseIssue } from "../src/domain/reports/eligibility";
+import { reportPdf } from "../src/domain/reports/pdf";
+import { createReportHandler } from "../src/server/reports-api";
+import { AppError } from "../src/server/errors";
+const snapshot: ReportSnapshot = {
+  id: "00000000-0000-4000-8000-000000000001",
+  input_digest: "abc123",
+  created_at: "2026-11-17T12:00:00Z",
+  coverage_confirmed: true,
+  result: calculateGains(
+    [
+      {
+        id: "buy",
+        securityId: "GB0008706128",
+        date: "2024-01-01",
+        side: "BUY",
+        quantity: "10",
+        considerationGBP: "100",
+        feesGBP: "5",
+      },
+      {
+        id: "sell",
+        securityId: "GB0008706128",
+        date: "2024-07-01",
+        side: "SELL",
+        quantity: "5",
+        considerationGBP: "100",
+        feesGBP: "2",
+      },
+    ],
+    { taxYear: "2024-25", historyThrough: "2025-05-05" },
+  ),
+};
+const session = async () => ({
+  user: { id: "owner", emailVerified: true },
+  session: { expiresAt: new Date(Date.now() + 3600000) },
+});
+const request = (kind = "csv", extra = {}) =>
+  new Request("https://cgt.test/api/v2/reports", {
+    method: "POST",
+    headers: { origin: "https://cgt.test", "content-type": "application/json" },
+    body: JSON.stringify({ kind, runId: snapshot.id, ...extra }),
+  });
+describe("auditable report exports", () => {
+  it("gives accountants the sale breakdown, fee rounding, import ID and all covered accounts", () => {
+    const csv = reportCsv({
+      ...snapshot,
+      accounts: [
+        { label: "First", broker: "ibkr", confirmed: true },
+        { label: "Second with no trades", broker: "ajbell", confirmed: true },
+      ],
+      sources: [{ key: "sell", label: "First", broker: "ibkr", record: 2, instrument: null, reference: "S-5", importReference: "import-A" }],
+    });
+    const rows = Papa.parse<string[]>(csv, { delimiter: "," }).data;
+    expect(rows).toContainEqual(["Gross disposal proceeds", "100.00"]);
+    expect(rows).toContainEqual(["Selling costs", "2.00"]);
+    expect(rows).toContainEqual(["Net sale proceeds", "98.00"]);
+    expect(rows).toContainEqual(["Matched acquisition cost", "52.50"]);
+    expect(rows).toContainEqual(["Total allowable costs", "54.50"]);
+    expect(rows).toContainEqual(["Net sale proceeds rounding adjustment", "0.00"]);
+    expect(rows).toContainEqual(["Second with no trades", "ajbell", "Yes"]);
+    expect(rows).toContainEqual(["sell", "ibkr", "First", "2", "S-5", "", "import-A"]);
+    const disposal = rows[rows.findIndex((r) => r[0] === "Date") + 1]!;
+    expect(disposal.slice(8)).toEqual(["100.00", "2.00", "54.50", "0.00"]);
+    const legacy = structuredClone(snapshot);
+    delete legacy.result.saleBreakdown;
+    for (const disposal of legacy.result.disposals) delete disposal.saleBreakdown;
+    const legacyCsv = reportCsv(legacy);
+    expect(legacyCsv).toContain('"Selling costs","UNAVAILABLE"');
+    expect(legacyCsv).toContain('"Matched acquisition cost","52.50"');
+    expect(legacyCsv).toContain("Recalculate this year");
+  });
+  it("identifies a year without disposals in the CSV and both PDFs", async () => {
+    const saved = {
+      ...snapshot,
+      result: calculateGains([], { taxYear: "2024-25", historyThrough: "2025-05-05" }),
+    };
+    expect(reportCsv(saved)).toContain("No disposals in this tax year");
+    for (const evidence of [false, true]) {
+      const text = reportPageText(await PDFDocument.load(await reportPdf(saved, evidence)));
+      expect(text).toContain("No disposals in this tax year");
+      expect(text).not.toContain("Break-even");
+    }
+  });
+  it("retains the original reviewed opening cost and case evidence in every format", async () => {
+    const pool = { securityId: "GB0008706128", asOf: "2024-04-05", quantity: "100.5", costGBP: "198.765",
+      caseReference: "CASE-238", sourceReference: "STATEMENT-10" };
+    const result = calculateGains([
+      { id: "verified-basis-sale", securityId: pool.securityId, date: "2024-07-01", side: "SELL",
+        quantity: "5", considerationGBP: "100", feesGBP: "0" },
+    ], { taxYear: "2024-25", historyThrough: "2025-05-05", openingPools: [pool] });
+    expect(result.summary?.netGainGBP).toBe("90.11");
+    const saved = { ...snapshot, result: { ...result, reviewedOpeningPools: [pool] } };
+    const csv = Papa.parse<string[]>(reportCsv(saved), { delimiter: "," }).data;
+    expect(csv).toContainEqual([pool.asOf, pool.securityId, pool.quantity, pool.costGBP, pool.caseReference, pool.sourceReference]);
+    for (const evidence of [false, true]) {
+      const content = reportPageText(await PDFDocument.load(await reportPdf(saved, evidence)));
+      expect(content).toContain("Reviewed opening positions");
+      expect(content).toContain("5 April 2024 · 100.5 shares · verified cost £198.765");
+      expect(content).toContain("Review case: CASE-238");
+      expect(content).toContain("Supporting evidence: STATEMENT-10");
+    }
+  });
+  it("records the saved residence, ownership and ordinary-market declaration in all exports", async () => {
+    const saved: ReportSnapshot = { ...snapshot, result: { ...snapshot.result, scopeDeclaration: CURRENT_SCOPE_DECLARATION } };
+    for (const content of [reportCsv(saved), ...await Promise.all([false, true].map(async evidence =>
+      reportPageText(await PDFDocument.load(await reportPdf(saved, evidence)))))]) {
+      const text = content.replace(/\s+/g, " ");
+      expect(text).toContain("personal ownership in the same capacity, UK residence throughout the matching history including later repurchases, and ordinary market purchases or sales at arm");
+      expect(text).toContain("require no special valuation, tax relief or election");
+      expect(text).toContain("Reconcile all taxable accounts");
+      expect(text).toContain("SA108 box 51");
+    }
+    const legacy = { ...snapshot, result: { ...snapshot.result, scopeDeclaration: "personal-market-trades-v2" as const } };
+    expect(reportCsv(legacy)).toContain("earlier declaration did not confirm costs, special valuations");
+    expect(reportCsv({ ...saved, result: { ...saved.result, taxYear: "2025-26" } })).not.toContain("SA108 box 51");
+    expect(reportCsv(snapshot)).toContain("no recorded ownership and UK residence declaration");
+  });
+  it("keeps the exact receipt references for Unicode text extraction and distinct printed references", async () => {
+    const account = { label: "取引口座", broker: "ibkr", confirmed: true };
+    const saved = {
+      ...snapshot,
+      accounts: [account],
+      sources: ["buy", "sell"].map((key, i) => ({
+        ...account, key, instrument: "普通株式", record: i + 2,
+        reference: ["東京", "大阪"][i]!, statementReference: String.raw`\u{6771}`,
+      })),
+    };
+    const evidence = await PDFDocument.load(await reportPdf(saved, true));
+    const printed = reportPageText(evidence);
+    const original = reportPageText(evidence, undefined, true);
+    const csv = reportCsv(saved);
+    for (const [value, fallback] of [
+      ["東京", String.raw`\u{6771}\u{4EAC}`],
+      ["大阪", String.raw`\u{5927}\u{962A}`],
+      ["取引口座", String.raw`\u{53D6}\u{5F15}\u{53E3}\u{5EA7}`],
+      [String.raw`\u{6771}`, String.raw`\\u{6771}`],
+    ]) {
+      expect(original).toContain(value);
+      expect(csv).toContain(value);
+      expect(printed).toContain(fallback);
+    }
+    expect(printed).toContain("Printed reference notation");
+    expect(printed).toContain("Trace reference: sell");
+  });
+  it("describes a zero only through its cutoff in CSV and both PDFs", async () => {
+    const result = { ...calculateGains([], { taxYear: "2025-26", historyThrough: "2025-06-30" }), hasLaterSales: true };
+    const saved = { ...snapshot, result };
+    const exports = [
+      reportCsv(saved),
+      ...await Promise.all([false, true].map(async evidence =>
+        reportPageText(await PDFDocument.load(await reportPdf(saved, evidence))))),
+    ];
+    for (const content of exports) {
+      expect(content).toContain("No disposals through 30 June 2025");
+      expect(content).toMatch(/sales later in this tax year/i);
+      expect(content).not.toContain("No disposals in this tax year");
+    }
+    expect(purchaseIssue(result, true)?.code).toBe("REPORT_INCOMPLETE");
+    expect(purchaseIssue(snapshot.result, false)?.code).toBe("REPORT_INCOMPLETE");
+    expect(purchaseIssue(snapshot.result, true)).toBeNull();
+    expect(purchaseIssue(calculateGains([], { taxYear: "2024-25", historyThrough: "2025-05-05" }), true)?.code).toBe("NO_DISPOSALS");
+  });
+  it("carries the historical matching block through CSV and both PDFs", async () => {
+    const trade = { securityId: "GB0008706128", quantity: "100", feesGBP: "0" };
+    const result = calculateGains([
+      { ...trade, id: "buy-2003", date: "2003-01-01", side: "BUY", considerationGBP: "100" },
+      { ...trade, id: "buy-2005", date: "2005-01-01", side: "BUY", considerationGBP: "900" },
+      { ...trade, id: "sell-2007", date: "2007-01-01", side: "SELL", considerationGBP: "1000" },
+      { ...trade, id: "sell-2024", date: "2024-07-01", side: "SELL", considerationGBP: "1000" },
+    ], { taxYear: "2024-25", historyThrough: "2025-05-05" });
+    const saved = { ...snapshot, result };
+    expect(result.summary).toBeNull();
+    expect(purchaseIssue(result, true)?.code).toBe("REPORT_INCOMPLETE");
+    const issue = result.issues.find(i => i.code === "HISTORICAL_SHARE_MATCHING")!;
+    for (const content of [reportCsv(saved), ...await Promise.all([false, true].map(async evidence =>
+      reportPageText(await PDFDocument.load(await reportPdf(saved, evidence)))))]) {
+      expect(content.replace(/\s+/g, " ")).toContain(issue.message);
+      expect(content).not.toContain("Upload the earlier purchases");
+      expect(content).not.toContain("£500.00");
+    }
+  });
+  it("identifies each unresolved tax pool separately from genuinely empty and evidenced pools", async () => {
+    const share = { securityId: "US0378331005", quantity: "1", feesGBP: "0" };
+    const buy = { ...share, id: "first", date: "2024-05-03", side: "BUY", considerationGBP: "10" } as const;
+    const sell = { ...share, id: "sale", date: "2024-09-10", side: "SELL", considerationGBP: "40" } as const;
+    const options = { taxYear: "2024-25", historyThrough: "2025-05-05" } as const;
+    const result = calculateGains([
+      buy,
+      { ...sell, quantity: "2" },
+      { ...buy, id: "later-buy", date: "2024-11-20", quantity: "12", considerationGBP: "120" },
+      { ...buy, id: "separate-share", securityId: "GB0008706128" },
+    ], options);
+    const saved = { ...snapshot, result };
+    const csv = Papa.parse<string[]>(reportCsv(saved)).data;
+    expect(csv).toContainEqual(["2025-04-05", share.securityId, "UNRESOLVED", "UNRESOLVED"]);
+    expect(csv).toContainEqual(["2025-04-05", "GB0008706128", "1", "10"]);
+    const text = reportPageText(await PDFDocument.load(await reportPdf(saved, true)));
+    expect(text).toContain(share.securityId + " · Tax-pool balance unresolved.");
+    expect(text).not.toContain("No remaining pool balances.");
+    const closed = { ...snapshot, result: calculateGains([buy, sell], options) };
+    expect(reportPageText(await PDFDocument.load(await reportPdf(closed, true)))).toContain("No remaining pool balances.");
+    expect(reportCsv(closed)).not.toContain("UNRESOLVED");
+  });
+  it.each([
+    { name: "gain", proceeds: [15], gains: ["5.00"], net: "5.00" },
+    { name: "loss", proceeds: [5], gains: ["-5.00"], net: "-5.00" },
+    { name: "break-even", proceeds: [10], gains: ["0.00"], net: "0.00" },
+    {
+      name: "mixed",
+      proceeds: [15, 2, 10],
+      gains: ["5.00", "-8.00", "0.00"],
+      net: "-3.00",
+    },
+  ])(
+    "exports numeric $name amounts matching the stored result and both PDFs",
+    async ({ proceeds, gains, net }) => {
+      const trade = { securityId: "GB0008706128", quantity: "1", feesGBP: "0" };
+      const result = calculateGains(
+        [
+          {
+            ...trade,
+            id: "purchase",
+            side: "BUY",
+            date: "2024-04-06",
+            quantity: String(proceeds.length),
+            considerationGBP: String(10 * proceeds.length),
+          },
+          ...proceeds.map((amount, i) => ({
+            ...trade,
+            id: `-${i + 1}`,
+            side: "SELL" as const,
+            date: `2024-08-0${i + 1}`,
+            considerationGBP: String(amount),
+          })),
+        ],
+        { taxYear: "2024-25", historyThrough: "2025-05-05" },
+      );
+      const saved = { ...snapshot, result };
+      const { data, errors } = Papa.parse<string[]>(reportCsv(saved), {
+        delimiter: ",",
+      });
+      expect(errors).toEqual([]);
+      const first = data.findIndex((r) => r[0] === "Date") + 1;
+      const disposals = data.slice(first, first + proceeds.length);
+      expect(disposals.map((r) => r[5])).toEqual(gains);
+      expect(disposals.map((r) => r[7])).toEqual(
+        proceeds.map((_, i) => `'-${i + 1}`),
+      );
+      const sum = disposals.reduce(
+        (total, r) => total.add(r[5]!),
+        new Decimal(0),
+      );
+      expect(sum.toFixed(2)).toBe(net);
+      expect(data).toContainEqual(["netGainGBP", net]);
+      expect(result.summary?.netGainGBP).toBe(net);
+      for (const evidence of [false, true]) {
+        const text = reportPageText(
+          await PDFDocument.load(await reportPdf(saved, evidence)),
+        );
+        expect(text).toContain(
+          `${net === "0.00" ? "Break-even" : net.startsWith("-") ? "Net loss" : "Net gain"}\n£${net.replace("-", "")}`,
+        );
+        if (evidence)
+          for (const gain of gains)
+            expect(text).toContain(
+              gain.startsWith("-") ? `-£${gain.slice(1)}` : `£${gain}`,
+            );
+      }
+    },
+  );
+  it("checks both PDF limits inclusively and counts the rendered pool history", () => {
+    const sale = {
+      ...snapshot.result.disposals[0]!,
+      sourceIds: [],
+      matches: [],
+    };
+    const result = {
+      ...snapshot.result,
+      poolMovements: [],
+      disposals: Array(5000).fill(sale),
+    };
+    expect(evidenceIssue(result)).toBeNull();
+    expect(
+      evidenceIssue({ ...result, disposals: [...result.disposals, sale] })
+        ?.code,
+    ).toBe("REPORT_TOO_LARGE");
+    const saleWithRefs = { ...sale, sourceIds: Array(49998).fill("ref") };
+    const movement = {
+      ...snapshot.result.poolMovements![0]!,
+      sourceIds: ["buy"],
+    };
+    const exact = {
+      ...result,
+      disposals: [saleWithRefs],
+      poolMovements: [movement],
+    };
+    expect(evidenceIssue(exact)).toBeNull();
+    expect(
+      evidenceIssue({
+        ...exact,
+        poolMovements: [{ ...movement, sourceIds: ["buy", "buy2"] }],
+      })?.code,
+    ).toBe("REPORT_TOO_LARGE");
+  });
+
+  it("reconstructs partial and closed pools and explains every penny of disposal rounding", async () => {
+    const template = { securityId: "GB0008706128", feesGBP: "0" };
+    const trades = [
+      {
+        ...template,
+        id: "source-buy",
+        date: "2024-01-01",
+        side: "BUY" as const,
+        quantity: "3",
+        considerationGBP: "10",
+      },
+      ...[1, 2, 3].map((i) => ({
+        ...template,
+        id: `source-sell-${i}`,
+        date: `2024-09-0${i}`,
+        side: "SELL" as const,
+        quantity: "1",
+        considerationGBP: "5",
+      })),
+    ];
+    const options = {
+      taxYear: "2024-25",
+      historyThrough: "2025-05-05",
+    } as const;
+    const partial = calculateGains(trades.slice(0, 3), options);
+    expect(partial.poolMovements?.at(-1)?.quantityAfter).toBe("1");
+    expect(partial.pools[0]?.costGBP).toBe(
+      partial.poolMovements?.at(-1)?.costAfterGBP,
+    );
+    const result = calculateGains(trades, options);
+    expect(result.poolMovements?.at(-1)).toMatchObject({
+      quantityAfter: "0",
+      costAfterGBP: "0",
+    });
+    expect(result.summary?.netGainGBP).toBe("5.00");
+    const saved = {
+      ...snapshot,
+      result,
+      sources: [
+        {
+          key: "source-buy",
+          label: "Example",
+          broker: "ibkr",
+          record: 2,
+          instrument: null,
+          reference: "IB-BUY",
+          statementReference: "CN-BUY",
+        },
+      ],
+    };
+    const rows = Papa.parse<string[]>(reportCsv(saved), {
+      delimiter: ",",
+    }).data;
+    expect(rows).toContainEqual([
+      "2024-01-01",
+      template.securityId,
+      "acquisition",
+      "3",
+      "10",
+      "3",
+      "10",
+      "source-buy",
+    ]);
+    expect(rows).toContainEqual(["Matched acquisition cost", "9.99", "0.01", "10.00"]);
+    expect(rows).toContainEqual(["Net gain or loss", "5.01", "-0.01", "5.00"]);
+    const pdf = reportPageText(
+      await PDFDocument.load(await reportPdf(saved, true)),
+    );
+    expect(pdf).toContain("Section 104 pool movements");
+    expect(pdf).toContain("Prior-year history · 1 January 2024");
+    expect(pdf).toContain("Change: -1 share · cost -£3.33");
+    expect(pdf).not.toContain("3.333333");
+    expect(pdf).toContain("Execution reference: IB-BUY");
+    expect(pdf).toContain("Statement reference: CN-BUY");
+    expect(pdf).toContain("Balance: 0 shares · cost £0");
+    expect(pdf).toContain(
+      "Matched acquisition cost: sum of displayed disposals £9.99 · rounding difference £0.01 · reported £10.00",
+    );
+    expect(
+      reportPageText(await PDFDocument.load(await reportPdf(saved, false))),
+    ).toContain("Annual rounding reconciliation");
+
+    // An archived pre-alpha.6 result stored the sum of displayed sale figures
+    // as its reported total and stored the exact annual amount for comparison.
+    const archived = { ...saved, result: {
+      ...result, engineVersion: "2.0.0-alpha.5", scopeDeclaration: "personal-market-trades-v2" as const,
+      ratePeriods: undefined, annualBeforeDisposalRounding: result.summary!,
+      summary: result.displayedDisposalTotals!, displayedDisposalTotals: undefined,
+      saleBreakdown: { ...result.saleBreakdown!, totalAllowableCostsGBP: "9.99" },
+    } };
+    const archivedRows = Papa.parse<string[]>(reportCsv(archived), { delimiter: "," }).data;
+    expect(archivedRows).toContainEqual(["Measure", "Rounded once for the year", "Difference to reported total", "Reported total"]);
+    expect(archivedRows).toContainEqual(["Net gain or loss", "5.00", "0.01", "5.01"]);
+    for (const evidence of [false, true]) {
+      const text = reportPageText(await PDFDocument.load(await reportPdf(archived, evidence))).replace(/\s+/g, " ");
+      expect(text).toContain("This earlier calculation added the displayed disposal amounts.");
+      expect(text).toContain("Net gain or loss: rounded once for the year £5.00 · rounding difference £0.01 · reported £5.01");
+      expect(text).toContain("earlier declaration did not confirm costs, special valuations");
+      expect(text).not.toContain("2024-25 rate periods");
+    }
+  });
+
+  it("explains when subtracting the displayed sale numbers would change the gain by a penny", async () => {
+    const common = { securityId: "GB0008706128", quantity: "1", feesGBP: "0" };
+    const result = calculateGains([
+      { ...common, id: "fraction-buy", side: "BUY", date: "2024-03-01", considerationGBP: "10.004" },
+      { ...common, id: "fraction-sale", side: "SELL", date: "2024-08-01", considerationGBP: "20.006" },
+    ], { taxYear: "2024-25", historyThrough: "2025-05-05" });
+    const saved = { ...snapshot, result };
+    const explanation = "Net sale proceeds less matched cost gives £10.01 from the displayed figures. The underlying amounts rounded once give £10.00.";
+    expect(result.summary?.netGainGBP).toBe("10.00");
+    for (const content of [reportCsv(saved), ...await Promise.all([true, false].map(async evidence =>
+      reportPageText(await PDFDocument.load(await reportPdf(saved, evidence)))))])
+      expect(content.replace(/\s+/g, " ")).toContain(explanation);
+  });
+
+  it("exports confirmed gains and losses on both sides of 30 October 2024 without allocating tax", async () => {
+    const trade = { securityId: "GB0008706128", feesGBP: "0" };
+    const result = calculateGains([
+      { ...trade, id: "buy", side: "BUY", date: "2024-03-01", quantity: "2", considerationGBP: "20" },
+      { ...trade, id: "first", side: "SELL", date: "2024-10-29", quantity: "1", considerationGBP: "25" },
+      { ...trade, id: "second", side: "SELL", date: "2024-10-30", quantity: "1", considerationGBP: "3" },
+    ], { taxYear: "2024-25", historyThrough: "2025-05-05" });
+    const saved = { ...snapshot, result };
+    const csvRows = Papa.parse<string[]>(reportCsv(saved), { delimiter: "," }).data;
+    expect(csvRows).toContainEqual(["2024-04-06", "2024-10-29", "15.00", "0.00", "15.00"]);
+    expect(csvRows).toContainEqual(["2024-10-30", "2025-04-05", "0.00", "7.00", "-7.00"]);
+    expect(calculateGains([], { taxYear: "2024-25", historyThrough: "2025-03-01" }).ratePeriods).toBeUndefined();
+    for (const evidence of [false, true]) {
+      const pdf = reportPageText(await PDFDocument.load(await reportPdf(saved, evidence))).replace(/\s+/g, " ");
+      expect(pdf).toContain("29 October 2024 · gains £15.00 · losses £0.00 · net £15.00");
+      expect(pdf).toContain("5 April 2025 · gains £0.00 · losses £7.00 · net -£7.00");
+      expect(pdf).toContain("SA108 box 51");
+      const draft = { ...saved, coverage_confirmed: false };
+      expect(reportPageText(await PDFDocument.load(await reportPdf(draft, evidence)))).not.toContain("2024-25 rate periods");
+    }
+    expect(reportCsv({ ...saved, coverage_confirmed: false })).not.toContain("2024-25 rate periods");
+  });
+
+  it("exports saved decimal figures, matching details, pools and provenance", () => {
+    const csv = reportCsv(snapshot);
+    expect(snapshot.result.summary?.netGainGBP).toBe("45.50");
+    expect(csv).toContain("45.50");
+    expect(csv).toContain("SECTION_104");
+    expect(csv).toContain("abc123");
+    expect(csv).toContain("52.50");
+    expect(csv).toContain("sell");
+    expect(csv).not.toContain("NaN");
+  });
+  it("labels incomplete coverage and gives current acquisition guidance for saved drafts", async () => {
+    expect(reportStatus({ ...snapshot, coverage_confirmed: false })).toContain(
+      "DRAFT",
+    );
+    const result = calculateGains(
+      [
+        {
+          id: "sell",
+          securityId: "GB0008706128",
+          date: "2024-07-01",
+          side: "SELL",
+          quantity: "5",
+          considerationGBP: "100",
+          feesGBP: "0",
+        },
+      ],
+      { taxYear: "2024-25", historyThrough: "2025-05-05" },
+    );
+    result.issues[0]!.message = "Add an opening pool.";
+    const saved = { ...snapshot, result };
+    const csv = reportCsv(saved);
+    expect(csv).toContain("UNRESOLVED");
+    expect(csv).toContain("DRAFT");
+    expect(csv).toContain("Upload the earlier purchases");
+    for (const evidence of [false, true]) {
+      const text = reportPageText(
+        await PDFDocument.load(await reportPdf(saved, evidence)),
+      );
+      expect(text).toContain("Upload the earlier purchases");
+      expect(text).not.toContain("opening pool");
+    }
+    expect(result.summary).toBeNull();
+  });
+  it("neutralises spreadsheet formulas including leading whitespace", () => {
+    const csv = reportCsv({ ...snapshot, input_digest: '  =HYPERLINK("bad")' });
+    expect(csv).toContain("'  =HYPERLINK");
+  });
+  it("creates readable PDFs and paginates long execution references", async () => {
+    const summary = await PDFDocument.load(await reportPdf(snapshot));
+    expect(summary.getTitle()).toContain("2024-25");
+    expect(summary.getPageCount()).toBeGreaterThan(0);
+    const large = {
+      ...snapshot,
+      result: {
+        ...snapshot.result,
+        disposals: Array.from({ length: 100 }, () => ({
+          ...snapshot.result.disposals[0]!,
+          sourceIds: ["a".repeat(200)],
+        })),
+      },
+    };
+    const evidence = await PDFDocument.load(await reportPdf(large, true));
+    expect(evidence.getPageCount()).toBeGreaterThan(5);
+    expect(evidence.getPages().every((p) => p.getWidth() === 595.28)).toBe(
+      true,
+    );
+  });
+  it("prints a source once and keeps its identity and reference lines on the same page", async () => {
+    const sources = Array.from({length: 30}, (_, i) => ({
+      key: `trace-${i.toString().padStart(2, "0")}`,
+      label: "Investor", broker: "ibkr", record: i + 2, instrument: "Example share",
+      reference: `EXEC-${i.toString().padStart(2, "0")}`, statementReference: `NOTE-${i.toString().padStart(2, "0")}`,
+    }));
+    const sourceIds = sources.map(source => source.key);
+    const disposal = {...snapshot.result.disposals[0]!, sourceIds};
+    const movement = {...snapshot.result.poolMovements!.at(-1)!, sourceIds};
+    const result = {...snapshot.result, disposals:[disposal], poolMovements:[movement]};
+    const pdf = await PDFDocument.load(await reportPdf({...snapshot,result,sources}, true));
+    const pages = pdf.getPages().map((_, i) => reportPageText(pdf, i));
+    expect(pages.length).toBeGreaterThan(2);
+    for (const source of sources) {
+      const execution = `Execution reference: ${source.reference}`;
+      expect(pages.join("\n").split(execution)).toHaveLength(2);
+      const page = pages.find(page => page.includes(execution))!;
+      expect(page).toContain(`file row ${source.record}\n${execution}`);
+      expect(page).toContain(`Statement reference: ${source.statementReference}`);
+      expect(page).toContain(`Trace reference: ${source.key}`);
+    }
+  });
+  it("keeps the filing note on one evidence page and labels single-share trades", async () => {
+    const disposal = snapshot.result.disposals[0]!;
+    for (let accountCount = 1; accountCount <= 8; accountCount++) {
+      const document = await PDFDocument.load(
+        await reportPdf(
+          {
+            ...snapshot,
+            accounts: Array.from({ length: accountCount }, (_, i) => ({
+              label: `Example ${i}`,
+              broker: "hl",
+              confirmed: true,
+            })),
+            result: {
+              ...snapshot.result,
+              disposals: Array.from({ length: 4 }, () => ({
+                ...disposal,
+                quantity: "1",
+                matches: disposal.matches.map((m) => ({ ...m, quantity: "1" })),
+              })),
+            },
+          },
+          true,
+        ),
+      );
+      const pages = document
+        .getPages()
+        .map((_, i) => reportPageText(document, i).replace(/\s+/g, " "));
+      const guidance = pages.find((page) =>
+        page.includes("Before using these figures"),
+      );
+      expect(guidance).toContain(
+        "The CSV retains matching and pool costs.",
+      );
+      expect(pages.join(" ")).toContain("1 share · cost");
+      expect(pages.join(" ")).not.toContain("1 shares");
+    }
+  });
+  it("authenticates before loading data and rejects cross-origin requests", async () => {
+    const load = vi.fn(async () => snapshot);
+    const handler = createReportHandler({
+      readSession: async () => null,
+      origin: "https://cgt.test",
+      snapshot: load,
+      entitled: async () => true,
+      consume: async () => {},
+    });
+    expect((await handler(request())).status).toBe(401);
+    expect(load).not.toHaveBeenCalled();
+    const foreign = request();
+    foreign.headers.set("origin", "https://evil.test");
+    expect((await handler(foreign)).status).toBe(403);
+  });
+  it("keeps CSV available and enforces paid PDF access on the server", async () => {
+    const entitlement = vi.fn(async () => false);
+    const handler = createReportHandler({
+      readSession: session,
+      origin: "https://cgt.test",
+      snapshot: async () => snapshot,
+      entitled: entitlement,
+      consume: async () => {},
+    });
+    const csv = await handler(request());
+    expect(csv.status).toBe(200);
+    expect(csv.headers.get("cache-control")).toBe("private, no-store");
+    expect(entitlement).not.toHaveBeenCalled();
+    expect(
+      (
+        await handler(
+          request("summary", { entitled: true, ownerId: "another" }),
+        )
+      ).status,
+    ).toBe(402);
+    entitlement.mockResolvedValue(true);
+    const pdf = await handler(request("evidence"));
+    expect(pdf.status).toBe(200);
+    expect(pdf.headers.get("content-type")).toBe("application/pdf");
+    expect((await pdf.arrayBuffer()).byteLength).toBeGreaterThan(1000);
+  });
+  it("does not bypass unavailable snapshots or billing outages", async () => {
+    const handler = createReportHandler({
+      readSession: session,
+      origin: "https://cgt.test",
+      snapshot: async () => {
+        throw new AppError(404, "REPORT_UNAVAILABLE", "Recalculate");
+      },
+      entitled: async () => true,
+      consume: async () => {},
+    });
+    expect((await handler(request("summary"))).status).toBe(404);
+    expect((await handler(request("arbitrary"))).status).toBe(400);
+  });
+  it("keeps CSV working during a billing outage without granting PDF access or leaking provider errors", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const entitled = vi.fn(async () => {
+        throw new Error("private provider response and credentials");
+      });
+      const handler = createReportHandler({
+        readSession: session,
+        origin: "https://cgt.test",
+        snapshot: async () => snapshot,
+        entitled,
+        consume: async () => {},
+      });
+      expect((await handler(request("csv"))).status).toBe(200);
+      expect(entitled).not.toHaveBeenCalled();
+      const response = await handler(request("summary"));
+      expect(response.status).toBe(500);
+      expect(await response.text()).not.toContain("private provider");
+      expect(JSON.stringify(errorLog.mock.calls)).not.toContain("credentials");
+    } finally {
+      errorLog.mockRestore();
+    }
+  });
+  it("limits large evidence PDFs while leaving the complete CSV and summary available", async () => {
+    for (const disposals of [
+      Array.from({ length: 5001 }, () => snapshot.result.disposals[0]!),
+      [
+        {
+          ...snapshot.result.disposals[0]!,
+          sourceIds: Array.from({ length: 50001 }, (_, i) => `source-${i}`),
+        },
+      ],
+    ]) {
+      const handler = createReportHandler({
+        readSession: session,
+        origin: "https://cgt.test",
+        snapshot: async () => ({
+          ...snapshot,
+          result: { ...snapshot.result, disposals },
+        }),
+        entitled: async () => true,
+        consume: async () => {},
+      });
+      const blocked = await handler(request("evidence"));
+      expect(blocked.status).toBe(400);
+      expect((await blocked.json()).error.code).toBe("REPORT_TOO_LARGE");
+      const csv = await handler(request("csv"));
+      expect(csv.status).toBe(200);
+      expect(await csv.text()).toContain(disposals.at(-1)!.sourceIds.at(-1)!);
+      const summary = await handler(request("summary"));
+      expect(summary.status).toBe(200);
+      expect(
+        (await PDFDocument.load(await summary.arrayBuffer())).getPageCount(),
+      ).toBeGreaterThan(0);
+    }
+  });
+});

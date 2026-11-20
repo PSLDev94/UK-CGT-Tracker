@@ -1,0 +1,537 @@
+.page {
+  container-type: inline-size;
+  width: min(78rem, calc(100% - clamp(2rem, 9vw, 8rem)));
+  margin: 0 auto;
+  padding: 2.8rem 0 4.5rem;
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.sheet {
+  background: white;
+}
+
+.heading h1 {
+  margin: 0;
+  font-family: var(--font-statement);
+  font-size: clamp(2.75rem, 5.6vw, 5.25rem);
+  line-height: 1.03;
+  font-weight: 500;
+  letter-spacing: -0.049em;
+}
+
+.heading p {
+  margin: 0.45rem 0 0;
+  font-size: 1rem;
+  color: var(--color-muted);
+}
+
+.year {
+  display: grid;
+  grid-template-columns: minmax(0, 1.28fr) minmax(0, 1fr);
+  gap: 2.75rem;
+  margin: 1.9rem 0 2.9rem;
+  padding: 1.8rem 2rem;
+  border-block: 1px solid #b9c2c5;
+  background: #eff2f2;
+}
+
+.outcome h2,
+.coverage h2 {
+  margin: 0;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+  font-weight: 630;
+}
+
+.amount {
+  margin: 0.22rem 0 0;
+  color: #192830;
+  font-family: var(--font-statement);
+  font-size: clamp(3.25rem, 5vw, 4.55rem);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1.13;
+}
+
+.allowance {
+  margin: 0.5rem 0 0;
+  color: #4b5960;
+  font-size: 0.91rem;
+}
+
+.totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2.55rem;
+  margin: 1.4rem 0 0;
+}
+
+.totals div {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.55rem;
+}
+
+.totals dt,
+.coverage dt {
+  color: #4b5960;
+  font-size: 0.87rem;
+}
+
+.totals dd,
+.coverage dd {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 580;
+}
+
+.coverage {
+  padding-left: 2.45rem;
+  border-left: 1px solid #cedced;
+}
+
+.coverage dl {
+  margin: 0.75rem 0 0.95rem;
+}
+
+.coverage dl div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 1.1rem;
+  justify-content: space-between;
+  max-width: 22rem;
+  margin-top: 0.25rem;
+}
+
+.report {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 0.55rem 0.95rem;
+  color: white;
+  background: var(--color-primary);
+  border-radius: 3px;
+  font-weight: 610;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  text-decoration: none;
+}
+
+.report:hover {
+  background: #1d4ed8;
+}
+.report:active {
+  background: #1e40af;
+}
+
+.ledgerHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.ledgerHeading h2 {
+  margin: 0;
+  font-family: var(--font-statement);
+  font-size: 2rem;
+  font-weight: 500;
+}
+
+.ledgerHeading > span,
+.date {
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.table {
+  width: 100%;
+  background: var(--color-surface);
+  border-collapse: collapse;
+  border-block: 1px solid #c7d2df;
+  font-size: 0.93rem;
+}
+
+.table thead th {
+  padding: 0.65rem 0.7rem;
+  border-bottom: 1px solid #dbe2e9;
+  color: var(--color-muted);
+  background: #f6f8fa;
+  font-weight: 550;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.sale {
+  scroll-margin-top: 6rem;
+}
+.sale[data-open="true"] {
+  background: #eef2f3;
+}
+.sale > :is(th, td) {
+  padding: 0.85rem 0.7rem;
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  vertical-align: middle;
+}
+
+.table .qty,
+.table .result,
+.table .action {
+  text-align: right;
+}
+
+.table .qty {
+  white-space: nowrap;
+}
+.asset strong,
+.result strong {
+  font-weight: 650;
+}
+.result strong,
+.asset small {
+  white-space: nowrap;
+}
+
+.sale small {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--color-muted);
+  font-weight: 450;
+  font-size: 0.78rem;
+}
+
+.asset small {
+  font-family: var(--font-mono);
+  letter-spacing: 0.012em;
+}
+
+.action button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.3rem;
+  min-height: 2.75rem;
+  padding-inline: 0.15rem;
+  color: #1c51b5;
+  background: transparent;
+  border: none;
+  font-size: 0.87rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.action button:hover {
+  text-decoration: underline;
+}
+.action button[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.detailRow[hidden] {
+  display: none;
+}
+.detailRow > td {
+  padding: 0;
+}
+.evidence {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3.75rem;
+  padding: 1.65rem 2rem 2rem;
+  background: #f6f7f6;
+  border-bottom: 1px solid #c7d2df;
+}
+.evidence h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 640;
+}
+.explanation {
+  max-width: 47ch;
+  margin: 0.45rem 0 0.9rem;
+  color: #3f5058;
+  font-size: 0.88rem;
+}
+.working {
+  margin: 0;
+}
+.working > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 1rem;
+  padding: 0.18rem 0;
+}
+.working dt {
+  color: #3f5058;
+}
+.working dd {
+  margin: 0;
+  font-weight: 550;
+}
+.working > .subtotal {
+  margin-top: 0.42rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid #b7c5d9;
+}
+.subtotal dt,
+.subtotal dd {
+  color: var(--color-ink);
+  font-weight: 640;
+}
+.sources {
+  padding: 0;
+  margin: 0.3rem 0 0;
+  list-style: none;
+}
+.sources li {
+  padding: 0.6rem 0;
+  color: #3f5058;
+  font-size: 0.84rem;
+}
+.sources li + li {
+  border-top: 1px solid #dce4ef;
+}
+.sourceHeading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0 0.6rem;
+}
+.sourceHeading strong {
+  color: var(--color-ink);
+  font-weight: 620;
+}
+.sources code {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+.evidenceLink,
+.download a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  gap: 0.45rem;
+  color: #1c51b5;
+  font-size: 0.87rem;
+  font-weight: 600;
+}
+.download {
+  text-align: right;
+  padding-top: 0.4rem;
+}
+
+.mobileOnly {
+  display: none;
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 55rem) {
+  .page {
+    width: calc(100% - 3rem);
+  }
+  .year {
+    gap: 1.5rem;
+    padding: 1.5rem;
+  }
+  .coverage {
+    padding-left: 1.5rem;
+  }
+  .evidence {
+    gap: 2rem;
+  }
+  .sale > :is(th, td) {
+    padding-inline: 0.45rem;
+  }
+}
+
+@media (max-width: 46rem) {
+  .page {
+    width: calc(100% - 2.5rem);
+    padding: 1.6rem 0 3rem;
+  }
+}
+
+@container (max-width: 48em) {
+  .heading h1 {
+    font-size: 2.5rem;
+  }
+  .heading p {
+    font-size: 0.9rem;
+  }
+  .year {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.05rem;
+    margin: 1.25rem 0 1.8rem;
+    padding: 1.15rem;
+  }
+  .amount {
+    font-size: 2.65rem;
+  }
+  .allowance {
+    font-size: 0.84rem;
+  }
+  .totals {
+    margin-top: 0.8rem;
+    gap: 0.4rem 1.15rem;
+  }
+  .totals div {
+    gap: 0.1rem 0.35rem;
+  }
+  .totals dt,
+  .coverage dt {
+    font-size: 0.8rem;
+  }
+  .totals dd,
+  .coverage dd {
+    font-size: 0.85rem;
+  }
+  .coverage {
+    border: 0;
+    border-top: 1px solid #cedced;
+    padding: 0.9rem 0 0;
+  }
+  .coverage h2 {
+    font-size: 0.94rem;
+  }
+  .coverage dl {
+    margin: 0.4rem 0 0.7rem;
+  }
+  .coverage dl div {
+    max-width: none;
+  }
+  .ledgerHeading h2 {
+    font-size: 1.65rem;
+  }
+  .ledgerHeading > span {
+    font-size: 0.8rem;
+  }
+  .table,
+  .table tbody,
+  .detailRow,
+  .detailRow > td {
+    display: block;
+  }
+  .table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .sale {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "asset result" "date qty" "rule action";
+    gap: 0.1rem 0.55rem;
+    align-items: baseline;
+    border-bottom: 1px solid #d5dce5;
+    padding: 0.85rem 0.25rem 0.4rem;
+  }
+  .sale[data-open="true"] {
+    padding-inline: 0.55rem;
+  }
+  .sale > :is(th, td) {
+    padding: 0;
+    border: 0;
+  }
+  .sale .asset {
+    grid-area: asset;
+  }
+  .sale .result {
+    grid-area: result;
+  }
+  .sale .date {
+    grid-area: date;
+  }
+  .sale .qty {
+    grid-area: qty;
+  }
+  .sale .rule {
+    grid-area: rule;
+  }
+  .sale .action {
+    grid-area: action;
+  }
+  .asset strong,
+  .result strong {
+    font-size: 1rem;
+  }
+  .sale :is(.qty, .date, .rule) {
+    font-size: 0.81rem;
+    color: var(--color-muted);
+  }
+  .sale .asset small,
+  .sale .result small {
+    font-size: 0.72rem;
+  }
+  .mobileOnly {
+    display: inline;
+  }
+  .action button {
+    min-height: 2.75rem;
+  }
+  .evidence {
+    grid-template-columns: 1fr;
+    gap: 1.4rem;
+    padding: 1.1rem 0.65rem;
+  }
+}
+
+@container (max-width: 19em) {
+  .heading h1 {
+    font-size: min(1.85rem, 19cqi);
+  }
+  .year {
+    padding: min(1rem, 4cqi);
+  }
+  .amount {
+    font-size: min(2.65rem, 17cqi);
+  }
+  .sale {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "asset" "result" "date" "qty" "rule" "action";
+    gap: 0.2rem;
+  }
+  .sale :is(.qty, .result, .action) {
+    text-align: left;
+  }
+  .sale :is(.asset, .result) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.15rem 0.45rem;
+    align-items: baseline;
+  }
+  .working > div {
+    flex-wrap: wrap;
+  }
+  .evidence {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sources li {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 23rem) {
+  .page {
+    width: calc(100% - 1.5rem);
+  }
+  .year {
+    padding: min(0.95rem, 4cqi);
+  }
+}

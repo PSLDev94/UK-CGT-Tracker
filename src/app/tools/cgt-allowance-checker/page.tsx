@@ -1,162 +1,326 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import Link from 'next/link'
-import { ArrowRight, CheckCircle, AlertTriangle, XCircle } from 'lucide-react'
-import { PublicNav } from '@/components/public-nav'
-import { PublicFooter } from '@/components/public-footer'
+import { useState } from "react";
+import Link from "next/link";
+import { Money, TAX_YEARS, type TaxYear } from "@/domain/values";
+import { adjustment2024Url, sa108Collection, sa108Edition } from "@/domain/reports/filing-guidance";
+import { money } from "@/ui/format";
+import { CheckCircle, AlertTriangle, XCircle } from "lucide-react";
+import { CalculatorUploadLink } from "@/components/calculator-upload-link";
+import { PublicNav } from "@/components/public-nav";
+import publicStyles from "@/components/public-pages.module.css";
+import styles from "@/components/calculator.module.css";
+import { CalculatorFields } from "@/components/calculator-fields";
+import { CgtReportingGuidance } from "@/components/cgt-reporting-guidance";
+import { PublicFooter } from "@/components/public-footer";
 
-const EXEMPT_AMOUNT = 3000
-const BASIC_RATE = 0.18
-const HIGHER_RATE = 0.24
+type Period = "mixed" | "early" | "late";
 
 export default function CGTAllowanceCheckerPage() {
-  const [gains, setGains] = useState('')
-  const [losses, setLosses] = useState('')
-  const [taxBand, setTaxBand] = useState<'basic' | 'higher'>('basic')
+  const [taxYear, setTaxYear] = useState<TaxYear>("2025-26");
+  const [period, setPeriod] = useState<Period>("mixed");
+  const yearLabel = taxYear.replace("-", "–");
+  const exemptAmount = new Money(TAX_YEARS[taxYear].annualExemptionGBP);
+  const exemptionLabel = exemptAmount.toNumber().toLocaleString("en-GB");
+  const splitYear = taxYear === "2024-25";
+  const needsDisposalDates = splitYear && period === "mixed";
+  const earlyRates = taxYear < "2024-25" || (splitYear && period === "early");
+  const basicPercent = earlyRates ? 10 : 18;
+  const higherPercent = earlyRates ? 20 : 24;
+  const [gains, setGains] = useState("");
+  const [losses, setLosses] = useState("");
 
-  const totalGains = parseFloat(gains) || 0
-  const totalLosses = parseFloat(losses) || 0
-  const netGain = Math.max(0, totalGains - totalLosses)
-  const exemptionUsed = Math.min(netGain, EXEMPT_AMOUNT)
-  const exemptionRemaining = Math.max(0, EXEMPT_AMOUNT - netGain)
-  const taxableGain = Math.max(0, netGain - EXEMPT_AMOUNT)
-  const rate = taxBand === 'basic' ? BASIC_RATE : HIGHER_RATE
-  const taxOwed = taxableGain * rate
-
-  const hasInput = gains !== '' || losses !== ''
-
-  // Traffic light — thresholds: green <£2,500, amber £2,500–£3,000, red >£3,000
-  const light: 'green' | 'amber' | 'red' =
-    netGain > EXEMPT_AMOUNT ? 'red' : netGain >= 2500 ? 'amber' : 'green'
-  const pctUsed = netGain / EXEMPT_AMOUNT
-
-  const lightConfig = {
-    green: { icon: CheckCircle, bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-700', iconColor: 'text-green-600', label: 'Well within your allowance', gradient: 'from-green-400 to-emerald-500' },
-    amber: { icon: AlertTriangle, bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', iconColor: 'text-amber-600', label: 'Approaching allowance limit', gradient: 'from-amber-400 to-orange-500' },
-    red: { icon: XCircle, bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', iconColor: 'text-red-600', label: 'Over allowance — tax is due', gradient: 'from-red-400 to-rose-500' },
+  const [taxableIncome, setTaxableIncome] = useState("");
+  const valid = (v: string) => /^\d{1,12}(\.\d{1,2})?$/.test(v);
+  const gainsInvalid = gains !== "" && !valid(gains);
+  const lossesInvalid = losses !== "" && !valid(losses);
+  const hasInput =
+    (gains !== "" || losses !== "") && !gainsInvalid && !lossesInvalid;
+  const netGain = new Money(gainsInvalid ? 0 : gains || 0).minus(
+    lossesInvalid ? 0 : losses || 0,
+  );
+  const allowanceUsed = Money.clamp(netGain, 0, exemptAmount);
+  const exemptionRemaining = new Money(exemptAmount).minus(allowanceUsed);
+  const taxableGain = Money.max(0, netGain.minus(exemptAmount));
+  const taxable = hasInput && taxableGain.gt(0);
+  const needIncome = taxable && !needsDisposalDates;
+  const incomeInvalid =
+    needIncome && taxableIncome !== "" && !valid(taxableIncome);
+  let taxOwed = null;
+  if (!taxable || (needIncome && valid(taxableIncome))) {
+    const basicBandRemaining = needIncome
+      ? Money.max(0, new Money(37700).minus(taxableIncome))
+      : 0;
+    const basicPortion = Money.min(taxableGain, basicBandRemaining);
+    taxOwed = basicPortion
+      .mul(basicPercent).div(100)
+      .plus(taxableGain.minus(basicPortion).mul(higherPercent).div(100));
   }
-  const lc = lightConfig[light]
-  const Icon = lc.icon
+  const light: "green" | "amber" | "red" = netGain.gt(exemptAmount)
+    ? "red"
+    : netGain.times(6).gte(exemptAmount.times(5))
+      ? "amber"
+      : "green";
+  const pctUsed = allowanceUsed.div(exemptAmount).times(100).toNumber();
+  const lightConfig = {
+    green: {
+      icon: CheckCircle,
+      text: "text-green-700",
+      iconColor: "text-green-700",
+      label: netGain.lte(0) ? "No allowance used" : "Well within your allowance",
+    },
+    amber: {
+      icon: AlertTriangle,
+      text: "text-amber-700",
+      iconColor: "text-amber-600",
+      label: netGain.eq(exemptAmount) ? "Allowance fully used" : "Approaching allowance limit",
+    },
+    red: {
+      icon: XCircle,
+      text: "text-red-700",
+      iconColor: "text-red-600",
+      label: "Over allowance — review your tax position",
+    },
+  };
+  const lc = lightConfig[light];
+  const Icon = lc.icon;
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className={publicStyles.page}>
       <PublicNav />
 
-      <main className="max-w-3xl mx-auto px-4 py-16 sm:px-6 lg:px-8">
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-4">UK CGT Allowance Checker 2025-26</h1>
-        <p className="text-lg text-gray-600 mb-2 max-w-3xl leading-relaxed">
-          Every UK taxpayer gets a <strong>£3,000 annual exempt amount</strong> for capital gains in 2025-26. This means the first £3,000 of net gains in the tax year is completely tax-free. Use this checker to see where you stand.
+      <main id="main" tabIndex={-1} className={`${publicStyles.frame} ${publicStyles.reading} ${styles.page}`}>
+        <h1 className={publicStyles.taskHeading}>
+          UK CGT Allowance Checker
+        </h1>
+        <p className={publicStyles.intro}>
+          Estimate tax on ordinary share gains for {yearLabel}. This checker assumes you qualify for the standard individual <strong>£{exemptionLabel} annual exempt amount</strong>.
         </p>
-        <p className="text-gray-600 mb-8 max-w-3xl leading-relaxed">
-          Enter your total gains and losses so far this tax year to see how much of your exemption remains and your estimated CGT liability.
+        <p className={publicStyles.referenceBox}>
+          {taxYear >= "2025-26"
+            ? "If you claimed the foreign income and gains regime or Overseas Workday Relief for this year, you have no annual exempt amount and this estimate does not apply."
+            : "A remittance basis claim can affect your annual exemption. If your entitlement differs from the standard allowance, check your position before using the figures."}{" "}
+          <a className="text-blue-700 underline" href="https://www.gov.uk/guidance/capital-gains-tax-rates-and-allowances">
+            Check allowance eligibility with HMRC
+          </a>.
         </p>
 
         {/* Calculator */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden mb-8">
-          <div className={`h-1.5 bg-gradient-to-r ${hasInput ? lc.gradient : 'from-green-400 to-emerald-500'}`} />
-          <div className="p-6 sm:p-8 space-y-6">
+        <CalculatorFields label="Allowance calculation">
+          <div className={styles.fieldsStack}>
             <div>
-              <label htmlFor="gains" className="block text-sm font-semibold text-gray-700 mb-1">Total gains so far this tax year (£)</label>
-              <input id="gains" type="number" step="any" min="0" placeholder="e.g. 5000" value={gains} onChange={(e) => setGains(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" />
+              <label htmlFor="allowance-year" className="block text-sm font-semibold text-gray-700 mb-1">Tax year</label>
+              <select id="allowance-year" className={styles.input} value={taxYear} aria-describedby="year-hint"
+                onChange={(event) => {
+                  setTaxYear(event.target.value as TaxYear);
+                  setPeriod("mixed");
+                  setGains("");
+                  setLosses("");
+                  setTaxableIncome("");
+                }}>
+                {Object.keys(TAX_YEARS).reverse().map(year => <option key={year} value={year}>{year.replace("-", "–")}</option>)}
+              </select>
+              <p id="year-hint" className="mt-2 text-sm text-gray-600">Changing the year clears your figures.{taxYear === "2026-27" && " This tax year is still open. Treat the result as an estimate for the year so far."}</p>
             </div>
             <div>
-              <label htmlFor="losses" className="block text-sm font-semibold text-gray-700 mb-1">Total losses so far this tax year (£)</label>
-              <input id="losses" type="number" step="any" min="0" placeholder="e.g. 1000" value={losses} onChange={(e) => setLosses(e.target.value)} className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none" />
+              <label
+                htmlFor="gains"
+                className="block text-sm font-semibold text-gray-700 mb-1"
+              >
+                Total gains for {yearLabel} (£)
+              </label>
+              <input
+                id="gains"
+                type="text"
+                inputMode="decimal"
+                aria-invalid={gainsInvalid}
+                aria-describedby={gainsInvalid ? "allowance-input-error" : undefined}
+                placeholder="e.g. 5000"
+                value={gains}
+                onChange={(e) => setGains(e.target.value)}
+                className={styles.input}
+              />
             </div>
             <div>
-              <p className="block text-sm font-semibold text-gray-700 mb-2">Are you a basic or higher rate taxpayer?</p>
-              <div className="flex gap-4">
-                <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${taxBand === 'basic' ? 'border-green-500 bg-green-50 text-green-800' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <input type="radio" name="tax-band" value="basic" checked={taxBand === 'basic'} onChange={() => setTaxBand('basic')} className="sr-only" />
-                  <span className="text-sm font-medium">Basic rate (18%)</span>
-                </label>
-                <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all ${taxBand === 'higher' ? 'border-green-500 bg-green-50 text-green-800' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <input type="radio" name="tax-band" value="higher" checked={taxBand === 'higher'} onChange={() => setTaxBand('higher')} className="sr-only" />
-                  <span className="text-sm font-medium">Higher rate (24%)</span>
-                </label>
-              </div>
+              <label
+                htmlFor="losses"
+                className="block text-sm font-semibold text-gray-700 mb-1"
+              >
+                Total allowable losses for {yearLabel} (£)
+              </label>
+              <input
+                id="losses"
+                type="text"
+                inputMode="decimal"
+                aria-invalid={lossesInvalid}
+                aria-describedby={lossesInvalid ? "allowance-input-error" : undefined}
+                placeholder="e.g. 1000"
+                value={losses}
+                onChange={(e) => setLosses(e.target.value)}
+                className={styles.input}
+              />
             </div>
           </div>
 
+          {splitYear && taxable && (
+            <div className="px-6 pb-6">
+              <label htmlFor="disposal-period" className="block text-sm font-semibold text-gray-700 mb-1">When did you dispose of the shares?</label>
+              <select id="disposal-period" className={styles.input} value={period} onChange={e => setPeriod(e.target.value as Period)}>
+                <option value="mixed">Both periods, or unsure</option>
+                <option value="early">All before 30 October 2024</option>
+                <option value="late">All on or after 30 October 2024</option>
+              </select>
+              <p className="mt-2 text-sm text-gray-600">The main rates changed on 30 October. For disposals in both periods, separate your dated gains and losses and check <a className="text-blue-700 underline" href={adjustment2024Url}>HMRC’s 2024–25 adjustment</a>.</p>
+            </div>
+          )}
+          {needIncome && (
+            <div className="px-6 pb-6">
+              <label
+                htmlFor="taxable-income"
+                className="block text-sm font-semibold text-gray-700 mb-1"
+              >
+                Taxable income after your personal allowance (£)
+              </label>
+              <input
+                id="taxable-income"
+                inputMode="decimal"
+                aria-invalid={incomeInvalid}
+                aria-describedby={incomeInvalid ? "income-hint allowance-input-error" : "income-hint"}
+                value={taxableIncome}
+                onChange={(e) => setTaxableIncome(e.target.value)}
+                className={styles.input}
+              />
+              <p id="income-hint" className="text-sm text-gray-600 mt-2">
+                Use income after your Personal Allowance, including if you pay Scottish Income Tax.
+                The standard UK basic-rate band is £37,700 for {yearLabel}. This estimate uses {basicPercent}% on gains within the remaining band and {higherPercent}% above it. It assumes no other gains, reliefs or band extensions.
+              </p>
+            </div>
+          )}
+          {(gainsInvalid || lossesInvalid || incomeInvalid) && (
+            <p id="allowance-input-error" role="alert" className="px-6 pb-6 text-red-700">
+              Enter non-negative amounts in pounds and pence, with up to 12 whole
+              digits and 2 decimal places.
+            </p>
+          )}
           {/* Results */}
           {hasInput && (
-            <div className="bg-gray-50 border-t p-6 sm:p-8">
+            <div className={styles.result}>
               {/* Traffic light */}
-              <div className={`flex items-center gap-3 p-4 rounded-xl border mb-6 ${lc.bg} ${lc.border}`}>
-                <Icon className={`w-6 h-6 ${lc.iconColor} flex-shrink-0`} />
+              <div
+                className={styles.allowanceStatus}
+              >
+                <Icon aria-hidden="true" className={`w-6 h-6 ${lc.iconColor} flex-shrink-0`} />
                 <span className={`font-semibold ${lc.text}`}>{lc.label}</span>
               </div>
 
-              <div className="grid sm:grid-cols-2 gap-4">
-                <div className="bg-white rounded-xl p-4 border text-center">
-                  <p className="text-xs text-gray-500 uppercase mb-1">Net Gain</p>
-                  <p className="text-2xl font-bold text-gray-900">£{netGain.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                </div>
-                <div className="bg-white rounded-xl p-4 border text-center">
-                  <p className="text-xs text-gray-500 uppercase mb-1">Exemption Remaining</p>
-                  <p className="text-2xl font-bold text-gray-900">£{exemptionRemaining.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                </div>
-                <div className="bg-white rounded-xl p-4 border text-center">
-                  <p className="text-xs text-gray-500 uppercase mb-1">Taxable Gain</p>
-                  <p className="text-2xl font-bold text-gray-900">£{taxableGain.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                </div>
-                <div className="bg-white rounded-xl p-4 border text-center">
-                  <p className="text-xs text-gray-500 uppercase mb-1">Estimated Tax Owed</p>
-                  <p className={`text-2xl font-bold ${taxOwed > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                    £{taxOwed.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <div className="grid sm:grid-cols-2 gap-4 tabular-nums [overflow-wrap:anywhere]">
+                <div className={styles.amount}>
+                  <p className={styles.caption}>
+                    {netGain.lt(0) ? "Net loss" : netGain.gt(0) ? "Net gain" : "Break-even"}
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">at {(rate * 100).toFixed(0)}% {taxBand} rate</p>
+                  <p className={styles.value}>
+                    {money(netGain.toString())}
+                  </p>
+                </div>
+                <div className={styles.amount}>
+                  <p className={styles.caption}>
+                    Exemption Remaining
+                  </p>
+                  <p className={styles.value}>
+                    {money(exemptionRemaining.toString())}
+                  </p>
+                </div>
+                <div className={styles.amount}>
+                  <p className={styles.caption}>
+                    Taxable Gain
+                  </p>
+                  <p className={styles.value}>
+                    {money(taxableGain.toString())}
+                  </p>
+                </div>
+                <div className={styles.amount}>
+                  <p className={styles.caption}>
+                    Estimated Tax Owed
+                  </p>
+                  {taxOwed ? (
+                    <p className={`${styles.value} ${taxOwed.gt(0) ? "text-red-700" : "text-green-700"}`}>
+                      {money(taxOwed.toString())}
+                    </p>
+                  ) : (
+                    <p className="text-sm font-medium text-gray-700">{needsDisposalDates ? "An annual total is insufficient to estimate tax across the rate change." : "Enter your taxable income for an estimate."}</p>
+                  )}
+                  {needIncome && taxOwed && (
+                    <p className="text-xs text-gray-600 mt-1">
+                      {basicPercent}% within the remaining UK basic-rate band and {higherPercent}% above it
+                    </p>
+                  )}
                 </div>
               </div>
+              {netGain.lt(0) && (
+                <p className="mt-4 text-sm text-gray-700">
+                  You may be able to carry the unused loss forward if you claim it.{" "}
+                  <a className="text-blue-700 underline" href="https://www.gov.uk/capital-gains-tax/losses">
+                    How to claim an allowable loss
+                  </a>.
+                </p>
+              )}
 
               {/* Progress bar */}
               <div className="mt-6">
                 <div className="flex justify-between text-xs text-gray-500 mb-1.5">
                   <span>£0</span>
-                  <span>£{EXEMPT_AMOUNT.toLocaleString()} exempt</span>
+                  <span>£{exemptionLabel} exempt</span>
                 </div>
-                <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
+                <div className={styles.allowanceTrack}>
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${light === 'green' ? 'bg-green-500' : light === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`}
-                    style={{ width: `${Math.min(100, pctUsed * 100)}%` }}
+                    className={`h-full ${light === "green" ? "bg-green-500" : light === "amber" ? "bg-amber-500" : "bg-red-500"}`}
+                    style={{ width: `${pctUsed}%` }}
                   />
                 </div>
                 <p className="text-xs text-gray-500 mt-1.5 text-right">
-                  {Math.min(100, Math.round(pctUsed * 100))}% of allowance used
+                  {pctUsed > 0 && pctUsed < 1 ? "<1" : Math.floor(pctUsed)}% of allowance used
                 </p>
               </div>
             </div>
           )}
-        </div>
+        </CalculatorFields>
 
         {/* Explanatory content */}
-        <div className="guide-article mb-12">
+        <div className={`guide-article ${styles.notes}`}>
           <h2>About the Annual Exempt Amount</h2>
           <p>
-            Every UK individual receives a Capital Gains Tax annual exempt amount — currently <strong>£3,000 for the 2025-26 tax year</strong> (6 April 2025 to 5 April 2026). This is the amount of net capital gains you can realise each year without paying any CGT. The exemption resets every 6 April and <strong>cannot be carried forward</strong> — if you don&apos;t use it, you lose it.
+            The exemption belongs to each eligible person for that tax year.
+            Any unused allowance expires on 5 April. See the{" "}
+            <Link href="/guide/cgt-rates-2025-26">2025–26 CGT rates guide</Link>{" "}
+            for a worked example of how the income bands apply.
           </p>
-          <p>
-            Each person has their own exemption, so a married couple or civil partners have a combined £6,000 between them. Transferring assets between spouses before sale is a legitimate way to utilise both exemptions. Note that even if your gains fall within the exempt amount and no tax is due, you <strong>must still report to HMRC</strong> if your total disposal proceeds for the year exceed £12,000. Failing to report can result in penalties. For the full breakdown of rates and bands, see our <Link href="/guide/cgt-rates-2025-26">full CGT rates guide</Link>.
-          </p>
+          <h2>When do I report share gains?</h2>
+          <CgtReportingGuidance year={taxYear} />
 
-          <h2>What to Do If You&apos;re Over the Limit</h2>
+          <h2>Checking the figures for your return</h2>
           <p>
-            If your net gains exceed £3,000, there are several strategies to consider before 5 April. <strong>Tax-loss harvesting</strong> involves selling positions currently at a loss to offset your gains — the loss reduces your net gain and can bring you back within the exempt amount. You could also consider a <strong>bed-and-ISA</strong> strategy, where you sell shares in your taxable account and repurchase them within your ISA to shelter future growth — see our guide on <Link href="/guide/bed-and-breakfast-rule">bed and breakfast alternatives</Link>. Another option is to <strong>split disposals across tax years</strong> — sell some shares before 5 April and the rest after, giving you two annual exemptions. Use our <Link href="/tools/section-104-calculator">Section 104 pool calculator</Link> to model different disposal scenarios.
+            Check your sale proceeds, allowable costs and share matching against
+            your broker statements. The estimate uses the gains and losses you
+            enter. Your return may also include other assets, reliefs or losses
+            brought forward. See the{" "}
+            <a href={sa108Edition(taxYear)?.notes ?? sa108Collection}>HMRC capital gains guidance for {yearLabel}</a>.
           </p>
         </div>
 
         {/* CTA */}
-        <section className="bg-blue-50 rounded-2xl p-8 text-center">
-          <h2 className="text-xl font-bold text-gray-900 mb-3">Know your exact position with your full transaction history</h2>
-          <p className="text-gray-600 mb-6">Upload your broker CSV and CGT Tracker will calculate your precise gains, losses, and tax position automatically.</p>
-          <Link href="/signup" className="inline-flex items-center bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-medium hover:bg-blue-700 transition-colors">
-            Upload your CSV free <ArrowRight className="ml-2 w-5 h-5" />
-          </Link>
+        <section className={publicStyles.callToAction}>
+          <h2 className="text-xl font-bold text-gray-900 mb-3">
+            Review the disposals behind your gains
+          </h2>
+          <p className="text-gray-600 mb-6">
+            Import supported broker records to calculate your share gains and
+            losses.
+          </p>
+          <CalculatorUploadLink />
         </section>
       </main>
 
       <PublicFooter />
     </div>
-  )
+  );
 }

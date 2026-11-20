@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
 
 # next.js
 /.next/
@@ -43,4 +45,7 @@ next-env.d.ts
 # Exclude Dev Logs & Temp Dirs
 temp-app
 *.log
+
+# Local broker exports and credentials must never be committed.
+/.private/
 

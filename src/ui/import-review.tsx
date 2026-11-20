@@ -1,0 +1,339 @@
+"use client";
+import styles from "./workspace-records.module.css";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { ImportDetailsForm } from "./import-details-form";
+import { ImportTradeDetails, statementAmount, tradeSummary } from "./import-trade-detail";
+import { useModal } from "./navigation-guard";
+import type { ImportRecord } from "../domain/imports/review";
+import type { SupportingDetails } from "../domain/imports/supporting-details";
+import { Button, Notice } from "./primitives";
+import type { Preview } from "./workspace-types";
+
+const groups = [
+  { key: "needs_review", label: "Needs attention" },
+  { key: "accepted", label: "Included" },
+  { key: "excluded", label: "Excluded" },
+  { key: "duplicate", label: "Duplicate" },
+] as const;
+
+export function ImportReviewPanel({
+  preview,
+  accountLabel,
+  fileLabel,
+  expiry,
+  broker,
+  busy,
+  onPage,
+  onCommit,
+  onDiscard,
+  onDetails,
+  onDirty,
+}: {
+  preview: Preview;
+  accountLabel: string;
+  fileLabel: string;
+  expiry?: string;
+  broker: string;
+  busy: boolean;
+  onPage: (page: number, onLoaded?: () => void) => void;
+  onCommit: () => void;
+  onDiscard: (replacing?: boolean) => void;
+  onDetails: (
+    record: number,
+    details: SupportingDetails,
+  ) => Promise<ImportRecord>;
+  onDirty: (dirty: boolean) => void;
+}) {
+  const { review } = preview;
+  const [editing, setEditing] = useState<number | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [saved, setSaved] = useState<number | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const discardDialog = useRef<HTMLDialogElement>(null);
+  useModal(discardDialog, confirmDiscard);
+  const title = useRef<HTMLHeadingElement>(null);
+  const row = review.records.find((r) => r.record === editing);
+  const pages = Math.max(1, Math.ceil(review.counts.total / review.pageSize));
+  const next = review.nextUnresolved;
+  const unknownFormat = review.status === "unsupported" && review.issues.some((issue) => issue.code === "UNSUPPORTED_FORMAT");
+  const repairable = review.counts.needsReview - review.sourceBlockerCount;
+  useEffect(() => () => onDirty(false), [onDirty]);
+  useEffect(() => {
+    (title.current ?? document.getElementById("workspace-title"))?.focus();
+  }, [row?.record, row?.canSupplyDetails, preview.draftId]);
+  const changeDirty = (value: boolean) => {
+    setDirty(value);
+    onDirty(value);
+  };
+  const edit = (id: number) => {
+    setSaved(null);
+    setEditing(id);
+  };
+  return (
+    <section className="panel" aria-labelledby={row ? "review-title" : "workspace-title"}>
+      {row && <h2 id="review-title" ref={title} tabIndex={-1}>
+        {row.canSupplyDetails ? "Resolve" : "Review"} record {row.record}
+      </h2>}
+      <p className="[overflow-wrap:anywhere]">
+        <strong>{fileLabel}</strong> · {accountLabel}
+      </p>
+      {row ? (
+        <>
+          {row.canSupplyDetails ? (
+            <ImportDetailsForm
+              key={row.record}
+              row={row}
+              broker={broker}
+              busy={busy}
+              onDirty={changeDirty}
+              onSave={async (record, details) => {
+                const updated = await onDetails(record, details);
+                changeDirty(false);
+                if (updated.status === "needs_review") return updated;
+                setSaved(record);
+                setEditing(null);
+              }}
+            />
+          ) : (
+            <>
+              <p>{row.reason}</p>
+              <p>
+                Check record {row.record} against the original statement and the{" "}
+                <Link href={`/supported-brokers#${broker}`}>
+                  broker export instructions
+                </Link>
+                . If the export is incorrect, get a corrected complete file from
+                your broker. If it matches the statement, keep every source row
+                and <Link href="/contact">contact support</Link> about this
+                activity before using this file.
+              </p>
+            </>
+          )}
+          <Button
+            disabled={dirty || busy}
+            variant="secondary"
+            onClick={() => setEditing(null)}
+          >
+            Back to file review
+          </Button>
+        </>
+      ) : (
+        <>
+          <p className={styles.reviewCounts}>
+            {review.counts.total} source {review.counts.total === 1 ? "record" : "records"}
+            {review.counts.accepted > 0 && ` · ${review.counts.accepted} included`}
+            {review.counts.excluded > 0 && ` · ${review.counts.excluded} excluded`}
+            {review.counts.duplicate > 0 && ` · ${review.counts.duplicate} duplicate`}
+            {review.counts.needsReview > 0 && ` · ${review.counts.needsReview} to review`}
+            {" · Unsaved preview"}
+          </p>
+          {saved !== null && (
+            <Notice>
+              Details checked for record {saved}.{" "}
+              {review.counts.needsReview
+                ? review.counts.needsReview === 1
+                  ? "1 record still needs attention."
+                  : `${review.counts.needsReview} records still need attention.`
+                : "All records have an outcome."}
+            </Notice>
+          )}
+          {review.status !== "ready" && (
+            <Notice tone="warning">
+              {review.status !== "unsupported" && review.sourceBlockerCount > 0 && (
+                <p className="font-semibold">
+                  {review.sourceBlockerCount === 1
+                    ? "1 source record prevents this file from being saved."
+                    : `${review.sourceBlockerCount} source records prevent this file from being saved.`}
+                  {repairable > 0 && ` Check ${review.sourceBlockerCount === 1 ? "this record" : "these records"} before adding supporting details for the other ${repairable === 1 ? "record" : repairable + " records"}.`}
+                </p>
+              )}
+              {unknownFormat
+                ? <>This format is not verified. <Link href={`/supported-brokers#${broker}`}>Check the broker export instructions</Link> and choose a replacement CSV.</>
+                : review.counts.duplicate === review.counts.total &&
+                    review.counts.total > 0
+                  ? "Every record in this file was already imported. Discard this preview to keep your existing records."
+                  : next ? `Record ${next.record}: ${next.reason}` : "This file cannot be saved yet. Check the original export and keep all source rows in the file."}
+            </Notice>
+          )}
+          {review.firstIncluded && (
+            <div className={styles.previewTrade} aria-label="First included trade" role="group">
+              <h2>First included trade · record {review.firstIncluded.record}</h2>
+              {review.firstIncluded.name && review.firstIncluded.name !== review.firstIncluded.trade.securityId &&
+                <strong>{review.firstIncluded.name}</strong>}
+              <p>{tradeSummary(review.firstIncluded.trade)}</p>
+              <p>Net cash <strong>{statementAmount(review.firstIncluded.trade.netCash, review.firstIncluded.trade.currency)}</strong></p>
+            </div>
+          )}
+          {review.revalidatesReceiptId && <Notice tone="info">The original file matches your saved receipt. Confirm the check to keep its existing transactions and record the verified rows.</Notice>}
+          {review.status === "ready" && !!preview.affectedReportYears?.length && (
+            <Notice tone="warning">
+              <strong>After saving, recalculate {new Intl.ListFormat("en-GB").format(preview.affectedReportYears)}.</strong>{" "}
+              New trades can change which purchases match a sale. Downloads for these years need an up-to-date calculation.
+            </Notice>
+          )}
+          <div className="actions">
+            {review.status === "ready" && (
+              <Button busy={busy} onClick={onCommit}>
+                {review.revalidatesReceiptId ? "Verify original receipt" :
+                  <>Save {review.counts.accepted.toLocaleString("en-GB")} {review.counts.accepted === 1 ? "transaction" : "transactions"}</>}
+              </Button>
+            )}
+            {next && !unknownFormat && (
+              <Button
+                busy={busy}
+                onClick={() => {
+                  if (next.page === review.page) edit(next.record);
+                  else onPage(next.page, () => edit(next.record));
+                }}
+              >
+                {next.canSupplyDetails ? "Resolve" : "Review"} record{" "}
+                {next.record}
+              </Button>
+            )}
+            <Button
+              busy={busy}
+              variant={unknownFormat ? "primary" : "secondary"}
+              onClick={(event) => {
+                if ((preview.reviewVersion ?? 0) > 0) {
+                  event.currentTarget.focus({ preventScroll: true });
+                  setConfirmDiscard(true);
+                } else onDiscard(unknownFormat);
+              }}
+            >
+              {unknownFormat ? "Replace file" : "Discard preview"}
+            </Button>
+          </div>
+          <dialog
+            ref={discardDialog}
+            aria-labelledby="discard-preview-title"
+            aria-describedby="discard-preview-effect"
+            onCancel={() => setConfirmDiscard(false)}
+          >
+            <h2 id="discard-preview-title">Discard this corrected preview?</h2>
+            <p className="[overflow-wrap:anywhere]">
+              {fileLabel} · {accountLabel}
+            </p>
+            <p id="discard-preview-effect">
+              Discarding removes the supporting details and statement references
+              you entered for this file. To use them again, you would need to
+              upload the file and enter them again.
+            </p>
+            <div className="actions">
+              <Button
+                variant="secondary"
+                data-modal-cancel
+                onClick={() => setConfirmDiscard(false)}
+              >
+                Keep preview
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  setConfirmDiscard(false);
+                  onDiscard(unknownFormat);
+                }}
+              >
+                Discard corrected preview
+              </Button>
+            </div>
+          </dialog>
+          {expiry && (
+            <p className="caption">
+              Preview expires{" "}
+              {new Intl.DateTimeFormat("en-GB", {
+                dateStyle: "medium",
+                timeStyle: "short",
+                timeZone: "Europe/London",
+              }).format(new Date(expiry))}{" "}
+              (London).
+            </p>
+          )}
+          {review.issues.length > 0 && (
+            <details open={!next}>
+              <summary>
+                {review.issueCount} file{" "}
+                {review.issueCount === 1 ? "issue" : "issues"}
+              </summary>
+              <ul>
+                {review.issues.map((issue, i) => (
+                  <li key={i}>
+                    {issue.record ? `Record ${issue.record}: ` : ""}
+                    {issue.message}
+                  </li>
+                ))}
+              </ul>
+              {review.issueCount > review.issues.length && (
+                <p>
+                  Showing the first {review.issues.length} issues. All row
+                  outcomes are available below.
+                </p>
+              )}
+            </details>
+          )}
+          <h2 className={styles.rowHeading}>
+            Record outcomes{pages > 1 && ` · page ${review.page} of ${pages}`}
+          </h2>
+          {groups.map((group) => {
+            const records = review.records.filter(
+              (item) => item.status === group.key,
+            );
+            if (!records.length) return null;
+            return (
+              <details
+                key={group.key}
+                open={review.counts.total <= 5 || (group.key === "needs_review" && review.sourceBlockerCount === 0)}
+              >
+                <summary>
+                  {group.label} ({records.length}
+                  {pages > 1 ? " on this page" : ""})
+                </summary>
+                <ul className="divide-y divide-gray-200">
+                  {records.map((item) => (
+                    <li className="py-2 break-words" key={item.record}>
+                      <strong>Record {item.record}</strong>
+                      <p>{item.reason}</p>
+                      {item.tradeDetail && <ImportTradeDetails record={item.record} trade={item.tradeDetail} />}
+                      {(item.canSupplyDetails ||
+                        item.status === "needs_review") && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          className="text-button"
+                          onClick={() => edit(item.record)}
+                        >
+                          Review details for record {item.record}
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            );
+          })}
+          {pages > 1 && (
+            <div className="pagination">
+              <Button
+                variant="secondary"
+                disabled={busy || review.page === 1}
+                onClick={() => onPage(review.page - 1)}
+              >
+                Previous
+              </Button>
+              <span>
+                Page {review.page} of {pages}
+              </span>
+              <Button
+                variant="secondary"
+                disabled={busy || review.page === pages}
+                onClick={() => onPage(review.page + 1)}
+              >
+                Next
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}

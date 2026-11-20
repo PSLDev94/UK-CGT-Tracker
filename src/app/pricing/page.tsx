@@ -1,59 +1,43 @@
-import { Metadata } from 'next'
-import Link from 'next/link'
-import { CheckCircle } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
-import { PricingButton } from '@/components/pricing-button'
-import { PublicNav } from '@/components/public-nav'
+import styles from "@/components/public-pages.module.css";
+import Link from "next/link";
+import { Metadata } from "next";
+import { ReportPricing } from "@/components/report-pricing";
+import { PublicFooter } from "@/components/public-footer";
+import { PublicNav } from "@/components/public-nav";
+import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
 
 export const metadata: Metadata = {
-  title: 'Pricing | Simple £49/year',
-  description: 'Unlimited transactions and HMRC-compliant CGT computations for one simple annual fee. Try it 14 days free.',
-}
+  title: `Pricing | ${ANNUAL_REPORT_PRICE} per year`,
+  description:
+    "Compare free share-gain calculations and CSV evidence with the £49 annual PDF subscription.",
+};
 
 export default async function PricingPage() {
-  const supabase: any = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className={styles.page}>
       <PublicNav />
-      <div className="flex-1 flex flex-col items-center pt-16 px-4 pb-20">
-      <div className="max-w-3xl mx-auto text-center">
-        <h2 className="text-4xl font-extrabold text-gray-900 mb-6">Simple, transparent pricing</h2>
-        <p className="text-xl text-gray-600 mb-10">Stop paying an accountant £300–£800 a year just to calculate your gains.</p>
-        
-        <div className="bg-white rounded-2xl shadow-sm border p-8 max-w-md mx-auto">
-          <div className="text-5xl font-extrabold text-gray-900 mb-2">£49<span className="text-xl text-gray-500 font-normal">/year</span></div>
-          <p className="text-sm text-gray-500 mb-8">Billed annually. Cancel anytime.</p>
-          
-          <ul className="text-left space-y-4 mb-8">
-            <li className="flex items-start">
-              <CheckCircle className="w-6 h-6 text-green-500 mr-3 flex-shrink-0" /> 
-              <span className="text-gray-700">Calculate total CGT using actual HMRC rules</span>
-            </li>
-            <li className="flex items-start">
-              <CheckCircle className="w-6 h-6 text-green-500 mr-3 flex-shrink-0" /> 
-              <span className="text-gray-700">Unlimited transactions & brokers via CSV upload</span>
-            </li>
-            <li className="flex items-start">
-              <CheckCircle className="w-6 h-6 text-green-500 mr-3 flex-shrink-0" /> 
-              <span className="text-gray-700">Automated smart CSV mapping</span>
-            </li>
-            <li className="flex items-start">
-              <CheckCircle className="w-6 h-6 text-green-500 mr-3 flex-shrink-0" /> 
-              <span className="text-gray-700">Tax-loss harvesting opportunity alerts</span>
-            </li>
-            <li className="flex items-start">
-              <CheckCircle className="w-6 h-6 text-green-500 mr-3 flex-shrink-0" /> 
-              <span className="text-gray-700">Generate Self-Assessment (SA108) ready PDF reports</span>
-            </li>
-          </ul>
-          
-          <PricingButton userExists={!!user} />
-          <p className="mt-4 text-xs text-gray-500">No credit card required for trial.</p>
+      <main
+        id="main"
+        tabIndex={-1}
+        className={styles.frame}
+      >
+        <div className={styles.pricingLead}>
+          <h1 className={styles.taskHeading}>
+            Simple pricing
+          </h1>
+          <p className={styles.intro}>
+            Import and calculate for free. Download PDF reports for {ANNUAL_REPORT_PRICE} per year.
+          </p>
         </div>
-      </div>
-      </div>
+        <ReportPricing />
+        <p className={styles.meta}>
+          The subscription renews annually until cancelled. Checkout uses
+          Stripe test payments in this preview. PDF access covers reports on
+          the records you supply. Arrange independent tax advice separately if you need it.
+          {" "}<Link className="text-blue-700 underline" href="/terms">Read the service terms</Link>.
+        </p>
+      </main>
+      <PublicFooter />
     </div>
-  )
+  );
 }

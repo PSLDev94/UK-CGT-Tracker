@@ -1,0 +1,697 @@
+.trades {
+  --chrome-bg: var(--color-charcoal);
+  --chrome-ink: var(--color-on-charcoal);
+  --chrome-line: #39434a;
+  --logo-blue: var(--color-logo-light);
+  --trade-ink: var(--color-charcoal);
+  --trade-muted: var(--color-on-charcoal-muted);
+  --trade-rule: var(--color-charcoal-rule);
+  --trade-blue: var(--color-on-charcoal-link);
+  --trade-pad: clamp(1rem, 4.6vw, 4.5rem);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.exchange *,
+.yearAccount * {
+  box-sizing: border-box;
+}
+.exchange,
+.yearAccount {
+  overflow-wrap: break-word;
+}
+.exchange {
+  background: var(--trade-ink);
+  color: #f3f4ef;
+}
+.exchangeInside,
+.yearInner {
+  max-width: 82rem;
+  margin-inline: auto;
+  padding-inline: var(--trade-pad);
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: clamp(2rem, 6.7vw, 6.8rem);
+}
+.exchangeInside {
+  padding-block: clamp(4rem, 6.3vw, 6.4rem) clamp(3.5rem, 5.8vw, 6rem);
+}
+.exchange :is(h1, h2, h3, p, ol),
+.yearAccount :is(h2, p, dl, dd) {
+  margin: 0;
+}
+.exchange a,
+.yearAccount a {
+  text-decoration: none;
+}
+.exchange a:focus-visible,
+.exchange button:focus-visible {
+  outline: 2px solid var(--trade-blue);
+  outline-offset: 4px;
+}
+.exchangeIntro {
+  align-self: center;
+}
+.matchHead > span,
+.traceDate,
+.yearLead > p {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-weight: 400;
+  line-height: 1.5;
+}
+.exchange h1 {
+  font-size: clamp(4rem, 6.7vw, 6.2rem);
+  line-height: 0.97;
+  font-weight: 480;
+  letter-spacing: -0.059em;
+  max-width: 9ch;
+}
+.exchange .introCopy {
+  margin: 1.65rem 0 1.9rem;
+  max-width: 34ch;
+  font-size: clamp(1.05rem, 1.36vw, 1.25rem);
+  color: #c7ced0;
+  line-height: 1.55;
+  letter-spacing: -0.013em;
+}
+.openAccount {
+  min-height: 2.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.45rem 1.35rem;
+  padding: 0.75rem 0.95rem;
+  border-radius: 2px;
+  background: #f0f2eb;
+  color: #182127;
+  font-size: 0.94rem;
+  line-height: 1.35;
+  font-weight: 640;
+}
+.exchange .openAccount:hover {
+  color: #10191e;
+  background: #dce7ff;
+}
+.openAccount > span,
+.sourceLink > span,
+.annualLink > span {
+  font-family: inherit;
+  font-size: 1.12em;
+}
+.exchange .introTerms {
+  color: var(--trade-muted);
+  margin-top: 0.72rem;
+  font-size: 0.79rem;
+  line-height: 1.5;
+}
+.match {
+  min-width: 0;
+  border-left: 1px solid var(--trade-rule);
+  padding-left: clamp(1.8rem, 3.7vw, 4rem);
+}
+.matchHead,
+.resultHeading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.8rem;
+}
+.matchHead {
+  border-bottom: 1px solid var(--trade-rule);
+  padding-bottom: 0.95rem;
+}
+.matchHead h2 {
+  color: #f3f4ef;
+  font-weight: 590;
+  font-size: 0.98rem;
+  line-height: 1.4;
+  letter-spacing: -0.018em;
+}
+.matchHead > span {
+  color: var(--trade-muted);
+}
+.matchHead > span > span {
+  padding-inline: 0.2rem;
+  color: #748084;
+}
+.tradeOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.05rem 1.45rem;
+  border-bottom: 1px solid var(--trade-rule);
+}
+.tradeOptions button {
+  border: 0;
+  padding: 0.8rem 0 0.68rem;
+  min-height: 2.8rem;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: transparent;
+  color: var(--trade-muted);
+  line-height: 1.4;
+  font-family: inherit;
+  font-size: 0.91rem;
+  font-weight: 520;
+  cursor: pointer;
+}
+.tradeOptions button[aria-pressed="true"] {
+  color: var(--trade-blue);
+  border-color: var(--trade-blue);
+}
+.tradeOptions button:hover {
+  color: white;
+}
+.resultHeading {
+  margin-top: 2.25rem;
+}
+.resultHeading h3,
+.resultHeading p {
+  font-size: 0.83rem;
+  line-height: 1.5;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+}
+.resultHeading h3 {
+  color: #e2e9e8;
+}
+.resultHeading p {
+  color: var(--trade-blue);
+}
+.exchange .tradeResult {
+  margin-top: 0.5rem;
+  font-size: clamp(3.1rem, 5.3vw, 5rem);
+  line-height: 1.03;
+  font-weight: 390;
+  letter-spacing: -0.068em;
+  overflow-wrap: anywhere;
+}
+.exchange .saleReason {
+  color: #c7ced0;
+  line-height: 1.5;
+  font-size: 0.97rem;
+  margin-top: 0.65rem;
+  max-width: 51ch;
+}
+.exchange .tradeTrace {
+  display: grid;
+  grid-template-columns: repeat(var(--stops, 3), minmax(0, 1fr));
+  list-style: none;
+  padding: 0;
+  margin: 1.95rem 0 0.85rem;
+}
+.tradeTrace li {
+  color: #e5ecef;
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  padding-right: 0.5rem;
+  position: relative;
+}
+.tradeTrace li:last-child {
+  padding-right: 0;
+}
+.tradeTrace li::before {
+  content: "";
+  position: absolute;
+  top: 1.88rem;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #9eb8d7;
+}
+.tradeTrace li.retained::before {
+  background: none;
+  border-top: 1px dashed #748187;
+}
+.tradeTrace li:last-child::before {
+  display: none;
+}
+.traceDate {
+  color: var(--trade-muted);
+}
+.tradeTrace li strong {
+  position: relative;
+  font-size: 0.88rem;
+  font-weight: 590;
+  margin-top: 1.65rem;
+  line-height: 1.4;
+}
+.tradeTrace li strong::before {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--trade-blue);
+  position: absolute;
+  top: -1.13rem;
+  left: 0;
+}
+.tradeTrace li.retained strong::before {
+  background: var(--trade-ink);
+  border: 1px solid #9eabae;
+}
+.tracePrice {
+  color: var(--trade-muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.sourceLink,
+.annualLink {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding-block: 0.55rem;
+  line-height: 1.45;
+  font-size: 0.89rem;
+  font-weight: 610;
+}
+.sourceLink {
+  color: var(--trade-blue);
+}
+.exchange .sourceLink:hover,
+.yearAccount .annualLink:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.25rem;
+}
+.readoutOnly {
+  clip-path: inset(50%);
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+  position: absolute;
+}
+.yearAccount {
+  background: #f2f1ec;
+  color: #20292b;
+}
+.yearInner {
+  padding-block: clamp(3rem, 5.3vw, 5.5rem);
+  align-items: center;
+}
+.yearCopy h2 {
+  font-size: clamp(1.8rem, 2.7vw, 2.65rem);
+  font-weight: 510;
+  line-height: 1.1;
+  letter-spacing: -0.05em;
+  max-width: 16ch;
+}
+.yearCopy > p {
+  font-size: 0.99rem;
+  line-height: 1.55;
+  color: #435053;
+  max-width: 42ch;
+  margin-block: 1rem 0.5rem;
+}
+.annualLink {
+  color: #1246a1;
+}
+.yearResult {
+  display: grid;
+  grid-template-columns: minmax(0, 1.12fr) minmax(0, 0.88fr);
+  gap: 1.25rem;
+  align-items: end;
+}
+.yearLead {
+  display: grid;
+  justify-items: start;
+}
+.yearLead > p {
+  color: #50595a;
+  margin-bottom: 0.9rem;
+}
+.yearLead strong {
+  font-weight: 460;
+  font-size: clamp(1.8rem, 3.15vw, 3.15rem);
+  line-height: 1.12;
+  letter-spacing: -0.06em;
+  overflow-wrap: anywhere;
+}
+.yearLead > span {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin-top: 0.34rem;
+}
+.yearBreakdown {
+  border-top: 1px solid #adafa9;
+}
+.yearBreakdown > div {
+  padding: 0.58rem 0;
+  border-bottom: 1px solid #cccec7;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 0.5rem;
+  font-size: 0.83rem;
+  line-height: 1.45;
+}
+.yearBreakdown dt {
+  color: #50595a;
+}
+.yearBreakdown dd {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 63rem) {
+  .exchangeInside,
+  .yearInner {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    gap: 2rem;
+  }
+  .match {
+    padding-left: 1.5rem;
+  }
+  .exchange h1 {
+    font-size: clamp(3.4rem, 7.2vw, 4.8rem);
+  }
+  .yearResult {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .yearBreakdown {
+    max-width: 20rem;
+  }
+}
+@media (max-width: 48rem) {
+  .exchangeInside,
+  .yearInner {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2.4rem;
+  }
+  .exchangeInside {
+    padding-block: 2.6rem 2rem;
+  }
+  .exchange h1 {
+    font-size: clamp(2.85rem, 9.7vw, 4.65rem);
+    max-width: 15ch;
+  }
+  .exchange .introCopy {
+    margin: 1.1rem 0 1.25rem;
+  }
+  .exchange .introTerms {
+    margin-top: 0.55rem;
+  }
+  .match {
+    border-left: 0;
+    padding: 0;
+  }
+  .matchHead {
+    padding-bottom: 0.65rem;
+  }
+  .resultHeading {
+    margin-top: 1.55rem;
+  }
+  .exchange .tradeResult {
+    font-size: clamp(3.25rem, 11vw, 4.1rem);
+  }
+  .exchange .tradeTrace {
+    margin-top: 1.65rem;
+  }
+  .exchange .saleReason {
+    max-width: 45ch;
+  }
+  .yearResult {
+    gap: 1rem;
+  }
+  .yearInner {
+    gap: 1.6rem;
+  }
+}
+@container chronological (max-width: 21rem) {
+  .exchange .tradeTrace {
+    grid-template-columns: minmax(0, 1fr);
+    margin-block: 1.4rem 0.6rem;
+  }
+  .tradeTrace li {
+    gap: 0.12rem 0.5rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 0 0 0.95rem 1rem;
+  }
+  .tradeTrace li:last-child {
+    padding-bottom: 0;
+  }
+  .tradeTrace li::before {
+    top: 0.55rem;
+    bottom: -0.55rem;
+    left: 0.18rem;
+    right: auto;
+    width: 1px;
+    height: auto;
+  }
+  .tradeTrace li.retained::before {
+    border-top: 0;
+    border-left: 1px dashed #748187;
+  }
+  .tradeTrace li strong {
+    grid-column: 1;
+    margin: 0;
+  }
+  .tradeTrace li strong::before {
+    display: none;
+  }
+  .tradeTrace li::after {
+    content: "";
+    position: absolute;
+    top: 0.45rem;
+    left: 0;
+    width: 0.43rem;
+    height: 0.43rem;
+    border-radius: 50%;
+    background: var(--trade-blue);
+    box-sizing: border-box;
+  }
+  .tradeTrace li.retained::after {
+    border: 1px solid #9eabae;
+    background: var(--trade-ink);
+  }
+  .traceDate {
+    grid-column: 1 / -1;
+  }
+  .tracePrice {
+    align-self: end;
+  }
+}
+.tradeDetail {
+  container: chronological / inline-size;
+  min-width: 0;
+}
+@media (max-width: 27rem) {
+  .resultHeading {
+    align-items: flex-start;
+  }
+  .matchHead > span,
+  .yearLead > p {
+    overflow-wrap: anywhere;
+  }
+  .tradeOptions {
+    gap: 0 1.2rem;
+  }
+}
+@media (max-width: 22rem) {
+  .exchange h1 {
+    font-size: clamp(2.05rem, calc(1.45rem + 4vw), 3rem);
+  }
+  .matchHead > *,
+  .resultHeading > *,
+  .yearBreakdown > div > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .exchange .tradeResult {
+    font-size: clamp(2.35rem, 11vw, 3.25rem);
+  }
+  .tracePrice {
+    font-size: 0.8rem;
+  }
+}
+.frame {
+  width: min(82rem, 100%);
+  padding-inline: var(--trade-pad);
+  margin-inline: auto;
+}
+.mast {
+  position: relative;
+  z-index: 3;
+  background: var(--chrome-bg);
+  color: var(--chrome-ink);
+  border-bottom: 1px solid var(--chrome-line);
+}
+.mastInner {
+  min-height: 4.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem clamp(1rem, 4vw, 3.5rem);
+  padding-block: 0.5rem;
+}
+.mast a {
+  color: inherit;
+}
+.mainNav,
+.desktopLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem clamp(1rem, 2.2vw, 2rem);
+  align-items: center;
+}
+.mainNav {
+  margin-left: auto;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  font-weight: 530;
+}
+.mainNav a,
+.menu summary {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  text-decoration: none;
+}
+.mast a:hover,
+.menu summary:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.22em;
+}
+.mainNav .login {
+  text-decoration: underline;
+  text-underline-offset: 0.27em;
+}
+.mast :focus-visible {
+  outline: 3px solid var(--trade-blue);
+  outline-offset: 3px;
+}
+.menu {
+  display: none;
+  padding: 0;
+  border: 0;
+}
+.menu summary {
+  cursor: pointer;
+  list-style: none;
+}
+.menu summary::-webkit-details-marker {
+  display: none;
+}
+.menuLinks {
+  position: absolute;
+  right: var(--trade-pad);
+  top: calc(100% - 0.25rem);
+  min-width: min(14rem, calc(100vw - 2rem));
+  padding: 0.4rem 1rem;
+  display: grid;
+  border: 1px solid var(--chrome-line);
+  background: var(--chrome-bg);
+}
+.directory {
+  background: #f6f6f3;
+  color: #182128;
+  padding-block: clamp(3rem, 7vw, 6.75rem);
+}
+.directoryGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.25fr);
+  gap: clamp(2rem, 8vw, 8rem);
+}
+.directory h2 {
+  font-size: clamp(1.75rem, 2.7vw, 2.8rem);
+  line-height: 1.08;
+  font-weight: 530;
+  letter-spacing: -0.055em;
+  margin: 0 0 1rem;
+}
+.directory p {
+  font-size: 1rem;
+  line-height: 1.6;
+  max-width: 31ch;
+  margin: 0 0 0.65rem;
+}
+.directory ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid #b7bfc0;
+}
+.directory li {
+  border-bottom: 1px solid #b7bfc0;
+}
+.directory li a {
+  padding-block: 1rem;
+  display: grid;
+  align-items: baseline;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr) auto;
+  gap: 0.24rem 0.75rem;
+  color: inherit;
+  text-decoration: none;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.directory li a:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 0.24em;
+}
+.directory li strong {
+  font-size: 1rem;
+  font-weight: 605;
+}
+.method {
+  font-size: 0.875rem;
+}
+.yearLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.3rem;
+}
+.yearLinks a {
+  text-underline-offset: 0.2em;
+}
+.yearCopy a[href="/pricing"] {
+  color: inherit;
+  text-decoration: underline;
+}
+@media (max-width: 45rem) {
+  .mastInner {
+    min-height: 3.5rem;
+    gap: 0.1rem 0.75rem;
+  }
+  .desktopLinks {
+    display: none;
+  }
+  .menu {
+    display: block;
+  }
+  .directoryGrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.8rem;
+  }
+}
+@media (max-width: 32rem) {
+  .directory li a {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .method {
+    grid-column: 1;
+  }
+  .directoryArrow {
+    grid-column: 2;
+    grid-row: 1/3;
+    align-self: center;
+  }
+}
+.scope {
+  margin-top: 0.65rem;
+  max-width: 35ch;
+}
+.scope summary {
+  font-weight: 530;
+  font-size: 0.875rem;
+  cursor: pointer;
+  padding-block: 0.55rem;
+}
+.scope p {
+  margin: 0.7rem 0;
+  font-size: 0.875rem;
+}
