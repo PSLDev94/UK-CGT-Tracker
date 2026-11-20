@@ -144,12 +144,10 @@ export function focusFirstError(
   form: HTMLFormElement,
   errors: Record<string, string>,
 ) {
-  requestAnimationFrame(() => {
-    const first = Array.from(form.elements).find(
-      (element) =>
-        element instanceof HTMLElement &&
-        !!errors[element.getAttribute("name") ?? ""],
-    );
-    if (first instanceof HTMLElement) first.focus();
-  });
+  const first = Array.from(form.elements).find(
+    (element) =>
+      element instanceof HTMLElement &&
+      !!errors[element.getAttribute("name") ?? ""],
+  );
+  if (first instanceof HTMLElement) first.focus();
 }

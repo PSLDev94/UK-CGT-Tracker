@@ -281,3 +281,21 @@ test("a signed-out broker upload names the broker through registration and sign-
   await expect(page.getByText("Sign in to continue to your Freetrade CSV upload.")).toBeVisible();
   expect(new URL(page.url()).searchParams.get("next")).toBe(next);
 });
+
+test("invalid signup never redirects subsequent password typing into the name field", async ({ page }) => {
+  await page.goto("/signup");
+  await expect(page.getByRole("button", { name: "Create account", exact: true })).toBeEnabled();
+  const focus = await page.locator("form").evaluate(async form => {
+    if (!(form instanceof HTMLFormElement)) throw new Error("Expected the signup form");
+    form.requestSubmit();
+    const first = document.activeElement?.id;
+    // Move on to another correction before the next paint.
+    (form.elements.namedItem("password") as HTMLInputElement).focus();
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    return { first, next: document.activeElement?.id };
+  });
+  await page.keyboard.type("synthetic field check");
+  await expect(page.getByLabel("Your name")).toHaveValue("");
+  await expect(page.getByLabel("Password", { exact: true })).toHaveValue("synthetic field check");
+  expect(focus).toEqual({ first: "name", next: "password" });
+});
