@@ -103,7 +103,7 @@ export function createWorkspaceHandler(
             identity, input.surface === "accounts",
             input.surface === "reports" || input.surface === "calculations",
             input.surface === "imports" && input.receiptId ? text("receiptId") : undefined,
-            input.surface === "scenarios",
+            input.surface === "reports" ? "statement-sales" : input.surface === "scenarios",
           );
           if (input.surface === "reports") recordJourney("reports_opened");
           return privateResponse(overview);

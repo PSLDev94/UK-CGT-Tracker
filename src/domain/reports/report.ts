@@ -43,6 +43,8 @@ export interface ReportSnapshot {
   accounts?: { label: string; broker: string; confirmed: boolean }[];
   result: Calculation;
 }
+export const statementSaleLimit = 5;
+
 export type ReportKind = "csv" | "summary" | "evidence";
 type ReportCell = string | { decimal: string };
 const numberCell = (value: string | null): ReportCell =>

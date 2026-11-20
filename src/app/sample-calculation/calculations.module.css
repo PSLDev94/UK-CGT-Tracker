@@ -1,17 +1,23 @@
 .page {
   container-type: inline-size;
-  width: min(70rem, calc(100% - 5rem));
+  width: min(78rem, calc(100% - clamp(2rem, 9vw, 8rem)));
   margin: 0 auto;
   padding: 2.8rem 0 4.5rem;
   color: var(--color-ink);
   font-variant-numeric: tabular-nums;
 }
 
+.sheet {
+  background: white;
+}
+
 .heading h1 {
   margin: 0;
-  font-size: 2.35rem;
-  font-weight: 670;
-  letter-spacing: -0.038em;
+  font-family: var(--font-statement);
+  font-size: clamp(2.75rem, 5.6vw, 5.25rem);
+  line-height: 1.03;
+  font-weight: 500;
+  letter-spacing: -0.049em;
 }
 
 .heading p {
@@ -26,9 +32,8 @@
   gap: 2.75rem;
   margin: 1.9rem 0 2.9rem;
   padding: 1.8rem 2rem;
-  border: 1px solid #d4dfef;
-  border-radius: var(--radius-panel);
-  background: #f4f8ff;
+  border-block: 1px solid #b9c2c5;
+  background: #eff2f2;
 }
 
 .outcome h2,
@@ -41,16 +46,17 @@
 
 .amount {
   margin: 0.22rem 0 0;
-  color: #142747;
-  font-size: 3.35rem;
-  font-weight: 650;
+  color: #192830;
+  font-family: var(--font-statement);
+  font-size: clamp(3.25rem, 5vw, 4.55rem);
+  font-weight: 500;
   letter-spacing: -0.04em;
   line-height: 1.13;
 }
 
 .allowance {
   margin: 0.5rem 0 0;
-  color: #465b78;
+  color: #4b5960;
   font-size: 0.91rem;
 }
 
@@ -70,7 +76,7 @@
 
 .totals dt,
 .coverage dt {
-  color: #465b78;
+  color: #4b5960;
   font-size: 0.87rem;
 }
 
@@ -109,7 +115,7 @@
   padding: 0.55rem 0.95rem;
   color: white;
   background: var(--color-primary);
-  border-radius: var(--radius-control);
+  border-radius: 3px;
   font-weight: 610;
   font-size: 0.9rem;
   line-height: 1.35;
@@ -134,8 +140,9 @@
 
 .ledgerHeading h2 {
   margin: 0;
-  font-size: 1.55rem;
-  font-weight: 650;
+  font-family: var(--font-statement);
+  font-size: 2rem;
+  font-weight: 500;
 }
 
 .ledgerHeading > span,
@@ -163,10 +170,10 @@
 }
 
 .sale {
-  scroll-margin-top: 1rem;
+  scroll-margin-top: 6rem;
 }
 .sale[data-open="true"] {
-  background: #edf4ff;
+  background: #eef2f3;
 }
 .sale > :is(th, td) {
   padding: 0.85rem 0.7rem;
@@ -238,7 +245,7 @@
   grid-template-columns: 1fr 1fr;
   gap: 3.75rem;
   padding: 1.65rem 2rem 2rem;
-  background: #f8faff;
+  background: #f6f7f6;
   border-bottom: 1px solid #c7d2df;
 }
 .evidence h3 {
@@ -249,7 +256,7 @@
 .explanation {
   max-width: 47ch;
   margin: 0.45rem 0 0.9rem;
-  color: #415371;
+  color: #3f5058;
   font-size: 0.88rem;
 }
 .working {
@@ -263,7 +270,7 @@
   padding: 0.18rem 0;
 }
 .working dt {
-  color: #415371;
+  color: #3f5058;
 }
 .working dd {
   margin: 0;
@@ -286,7 +293,7 @@
 }
 .sources li {
   padding: 0.6rem 0;
-  color: #415371;
+  color: #3f5058;
   font-size: 0.84rem;
 }
 .sources li + li {
@@ -361,7 +368,7 @@
 
 @container (max-width: 48em) {
   .heading h1 {
-    font-size: 1.85rem;
+    font-size: 2.5rem;
   }
   .heading p {
     font-size: 0.9rem;
@@ -408,7 +415,7 @@
     max-width: none;
   }
   .ledgerHeading h2 {
-    font-size: 1.32rem;
+    font-size: 1.65rem;
   }
   .ledgerHeading > span {
     font-size: 0.8rem;

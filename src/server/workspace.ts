@@ -1,6 +1,7 @@
 import { reviewedCalculationInputs } from "./reviewed-opening-pools";
 import { createHash } from "node:crypto";
 import { evidenceIssue, purchaseIssue, type ReportIssue } from "../domain/reports/eligibility";
+import { statementSaleLimit } from "../domain/reports/report";
 import type { ReportDestination } from "../domain/reports/destination";
 import { BROKERS, type BrokerId } from "../domain/imports/brokers";
 import {
@@ -400,7 +401,7 @@ export class Workspace {
     includeImportCount = false,
     includeReportEligibility = false,
     receiptId?: string,
-    includeInstrumentNames = false,
+    namedInstruments: boolean | "statement-sales" = false,
   ) {
     return this.db.run(identity, async (tx) => {
       // Unique owner index serialises concurrent first visits; no advisory key collisions.
@@ -533,10 +534,21 @@ export class Workspace {
         "SELECT id, account_id, created_at, expires_at, display_summary FROM cgt.import_drafts WHERE expires_at > now() ORDER BY created_at DESC, id",
       );
       let instrumentNames: Record<string, string> | undefined;
-      if (includeInstrumentNames) {
-        const holdings = [...new Set(calculations.flatMap(run => run.result.pools.map(pool => pool.securityId)))];
-        const names = holdings.length ? await query<{ security: string; name: string }>(tx, `
-          SELECT t.security_id AS security, min(n.name) AS name
+      let statementSaleNames: Record<string, string> | undefined;
+      if (namedInstruments) {
+        // A statement label belongs to a saved disposal, including where a company changed names.
+        // Large groups keep their stable security ID and all their source rows in the evidence.
+        const statementSales = namedInstruments === "statement-sales"
+          ? calculations.flatMap(run => run.result.disposals.slice(0, statementSaleLimit))
+              .filter(sale => sale.sourceIds.length > 0 && sale.sourceIds.length <= 25)
+          : [];
+        const bySource = namedInstruments === "statement-sales";
+        const keyColumn = bySource ? "t.source_key" : "t.security_id";
+        const keys = [...new Set(bySource
+          ? statementSales.flatMap(sale => sale.sourceIds)
+          : calculations.flatMap(run => run.result.pools.map(pool => pool.securityId)))];
+        const names = keys.length ? await query<{ key: string; name: string }>(tx, `
+          SELECT ${keyColumn} AS key, min(n.name) AS name
           FROM cgt.transactions t
           CROSS JOIN LATERAL (SELECT t.provenance->'native'->'fields' AS fields) f
           CROSS JOIN LATERAL (SELECT coalesce(nullif(btrim(f.fields->>'Name'),''),
@@ -544,17 +556,30 @@ export class Workspace {
             nullif(btrim(CASE WHEN t.provenance#>>'{native,format}' LIKE 'ii-%'
               THEN regexp_replace(f.fields->>'Description', '^(purchase|bought|buy|sale|sold|sell)([[:space:]]+of)?([[:space:]]+|$)', '', 'i')
               ELSE f.fields->>'Description' END),'')) AS name) n
-          WHERE t.active AND t.security_id = ANY($1::text[]) AND n.name IS NOT NULL
-          GROUP BY t.security_id HAVING count(DISTINCT lower(n.name)) = 1 AND length(min(n.name)) <= 200
-        `, [holdings]) : [];
-        instrumentNames = Object.fromEntries(names.map(row => [row.security, row.name]));
+          WHERE t.active AND ${keyColumn} = ANY($1::text[]) AND n.name IS NOT NULL
+          GROUP BY ${keyColumn} HAVING count(DISTINCT lower(n.name)) = 1 AND length(min(n.name)) <= 200
+        `, [keys]) : [];
+        const byKey = Object.fromEntries(names.map(row => [row.key, row.name]));
+        if (bySource) {
+          statementSaleNames = {};
+          for (const sale of statementSales) {
+            const firstSource = sale.sourceIds[0]!;
+            const name = byKey[firstSource];
+            if (name && sale.sourceIds.every(key => byKey[key]?.toLowerCase() === name.toLowerCase())) {
+              statementSaleNames[firstSource] = name;
+            }
+          }
+        } else {
+          instrumentNames = byKey;
+        }
       }
       return {
         portfolio: portfolios[0]!,
         accounts,
         imports,
         hasActiveTrades,
-        ...(includeInstrumentNames && { instrumentNames }),
+        ...(instrumentNames && { instrumentNames }),
+        ...(statementSaleNames && { statementSaleNames }),
         ...(receiptId && { savedReceipt }),
         ...(includeImportCount && { importCount }),
         drafts,

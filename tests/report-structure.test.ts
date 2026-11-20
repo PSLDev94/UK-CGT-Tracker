@@ -79,9 +79,10 @@ it.each([false, true])(
         .lookup(key("K"), PDFArray)
         .asArray()
         .map((ref) => pdf.context.lookup(ref, PDFDict));
-      expect(rows.map(role)).toEqual(["TR", "TR"]);
+      expect(rows.length).toBeGreaterThanOrEqual(2);
+      expect(rows.every((row) => role(row) === "TR")).toBe(true);
       const columns = rows[0]!.lookup(key("K"), PDFArray);
-      expect(columns.size()).toBe(rows[1]!.lookup(key("K"), PDFArray).size());
+      for (const row of rows.slice(1)) expect(columns.size()).toBe(row.lookup(key("K"), PDFArray).size());
       expect(columns.size()).toBeGreaterThan(1);
       for (const [rowIndex, row] of rows.entries()) {
         for (const cellRef of row.lookup(key("K"), PDFArray).asArray()) {
@@ -127,10 +128,29 @@ it.each([false, true])(
     expect(text).toContain(
       "Matched acquisition cost\n£62.00\nTotal allowable costs\n£67.00",
     );
-    expect(text).toContain("Net gain  £33.00");
+    expect(text).toContain("Net gain\n£33.00");
     if (evidence) expect(text).toContain("Import reference: file-2");
   },
 );
+
+it("keeps the annual ledger bounded and preserves long instrument names in the tagged text", async () => {
+  const instrument = "Very long investment trust name ".repeat(9).trim();
+  const disposals = Array.from({ length: 6 }, (_, index) => ({
+    ...result.disposals[0]!,
+    gainGBP: index === 0 ? "-12.30" : "33.00",
+  }));
+  const snapshot = {
+    ...saved,
+    result: { ...result, disposals },
+    sources: [{ ...saved.sources[0]!, instrument }],
+  };
+  const pdf = await PDFDocument.load(await reportPdf(snapshot));
+  const firstPage = reportPageText(pdf, 0);
+  expect(firstPage).toContain("First 5 of 6 disposal groups.");
+  expect(firstPage).toContain("-£12.30");
+  expect(firstPage).toContain("+£33.00");
+  expect(reportPageText(pdf, 0, true)).toContain(instrument);
+});
 
 it("explains missing sale information in older snapshots without inferring a zero fee", async () => {
   const legacy = {

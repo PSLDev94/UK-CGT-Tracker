@@ -271,7 +271,7 @@ describe("auditable report exports", () => {
           await PDFDocument.load(await reportPdf(saved, evidence)),
         );
         expect(text).toContain(
-          `${net === "0.00" ? "Break-even" : net.startsWith("-") ? "Net loss" : "Net gain"}  £${net.replace("-", "")}`,
+          `${net === "0.00" ? "Break-even" : net.startsWith("-") ? "Net loss" : "Net gain"}\n£${net.replace("-", "")}`,
         );
         if (evidence)
           for (const gain of gains)

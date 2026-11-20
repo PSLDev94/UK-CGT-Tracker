@@ -64,7 +64,7 @@ jobs:
           trap 'docker rm --force cgt-smoke >/dev/null' EXIT
           curl --fail --retry 20 --retry-all-errors --retry-delay 1 --max-time 3 http://127.0.0.1:3300/api/health
           curl --fail http://127.0.0.1:3300/ --output /tmp/cgt-home.html
-          node -e 'if (!require("node:fs").readFileSync("/tmp/cgt-home.html", "utf8").includes("Calculate gains on your")) process.exit(1)'
+          node -e 'if (!require("node:fs").readFileSync("/tmp/cgt-home.html", "utf8").includes("Which purchase counts")) process.exit(1)'
           test "$(curl --silent --output /tmp/cgt-setup.json --write-out '%{http_code}' http://127.0.0.1:3300/api/v2/auth/get-session)" = "503"
           test "$(curl --silent --output /tmp/cgt-ready.json --write-out '%{http_code}' http://127.0.0.1:3300/api/ready)" = "503"
           for path in design-preview design-preview/calculations design-preview/report.pdf; do

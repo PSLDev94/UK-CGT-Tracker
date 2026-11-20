@@ -31,6 +31,7 @@ export interface Overview {
   imports: SavedImport[];
   hasActiveTrades?: boolean;
   instrumentNames?: Record<string, string>;
+  statementSaleNames?: Record<string, string>;
   savedReceipt?: SavedReceipt | null;
   importCount?: number;
   drafts: { id: string; account_id: string; expires_at: string; created_at?: string; display_summary?: DraftSummary | null }[];

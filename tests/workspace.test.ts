@@ -767,7 +767,7 @@ it("persists native classification confirmation through resume and server-side c
   expect(earliestReceipt.records[0]?.tradeDetail?.executionReference).toBe("SYNTHETIC-T-001");
 });
 
-it("returns the imported instrument name for scenario holdings only", async () => {
+it("returns the imported instrument name only for the requested holdings or statement sources", async () => {
   const { user, portfolio, account } = await setup("holding-names");
   const csv = readFileSync(new URL("./fixtures/brokers/trading212-gbp.csv", import.meta.url), "utf8");
   const prepared = await workspace.prepareImport(user, { accountId: account.id, format: "native", ordinarySharesConfirmed: true, csv });
@@ -781,6 +781,31 @@ it("returns the imported instrument name for scenario holdings only", async () =
   expect((await workspace.overview(user, false, false, undefined, true)).instrumentNames).toEqual({
     GB0008706128: "Synthetic ordinary share",
   });
+  const statements = await workspace.overview(user, false, true, undefined, "statement-sales");
+  expect(statements).not.toHaveProperty("instrumentNames");
+  expect(statements.statementSaleNames).toEqual({
+    [run.result.disposals[0]!.sourceIds[0]!]: "Synthetic ordinary share",
+  });
+});
+
+it("uses only matching saved sale records to name a statement disposal", async () => {
+  const { user, portfolio, account } = await setup("statement-names");
+  const [headers, buy, originalSale] = readFileSync(new URL("./fixtures/brokers/trading212-gbp.csv", import.meta.url), "utf8").trim().split(/\r?\n/);
+  const groupedSale = originalSale!.replace("Synthetic ordinary share", "Conflicting name").replace("SYNTHETIC-T-002", "GROUPED-SELL");
+  const laterBuy = buy!.replace("2024-06-01", "2025-06-01").replace("SYNTHETIC-T-001", "LATER-BUY").replace("Synthetic ordinary share", "Later name");
+  const laterSale = originalSale!.replace("2024-08-01", "2025-08-01").replace("SYNTHETIC-T-002", "LATER-SELL").replace("Synthetic ordinary share", "Later name");
+  const csv = [headers, buy, originalSale, groupedSale, laterBuy, laterSale].join("\n");
+  const draft = await workspace.prepareImport(user, { accountId: account.id, format: "native", ordinarySharesConfirmed: true, csv });
+  expect((await workspace.commitImport(user, draft.draftId, draft.revision)).outcome).toBe("committed");
+  const calculate = (taxYear: string, historyThrough: string) => workspace.calculate(user, {
+    portfolioId: portfolio.id, taxYear, historyThrough, personalScopeConfirmed: true,
+    scopeDeclaration: CURRENT_SCOPE_DECLARATION, confirmedAccountIds: [account.id],
+  });
+  const earlier = await calculate("2024-25", "2025-05-05");
+  const later = await calculate("2025-26", "2026-05-05");
+  expect(earlier.result.disposals[0]!.sourceIds).toHaveLength(2);
+  const result = await workspace.overview(user, false, true, undefined, "statement-sales");
+  expect(result.statementSaleNames).toEqual({ [later.result.disposals[0]!.sourceIds[0]!]: "Later name" });
 });
 
 describe("report ownership and assisted draft concurrency", () => {

@@ -1,11 +1,5 @@
-import type { Metadata } from "next";
-import HomePreview from "./HomePreview";
-import { samplePreview } from "./preview-model";
-
-export const metadata: Metadata = {
-  title: "Share gains, worked through · Design preview",
-};
+import { redirect } from "next/navigation";
 
 export default function PreviewHomePage() {
-  return <HomePreview model={samplePreview()} />;
+  redirect("/");
 }

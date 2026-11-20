@@ -2,12 +2,12 @@
 
 import { Fragment, useSyncExternalStore } from "react";
 import { ArrowDownToLine, ChevronDown, FileText } from "lucide-react";
-import type { PreviewModel } from "../preview-model";
+import type { PreviewModel } from "@/domain/reports/sample-view";
 import styles from "./calculations.module.css";
 
 type Sale = PreviewModel["sales"][number];
 
-const reportUrl = "/design-preview/report.pdf";
+const reportUrl = "/samples/cgt-evidence.pdf";
 
 function subscribeToFragment(callback: () => void) {
   window.addEventListener("hashchange", callback);
@@ -80,7 +80,7 @@ function SaleDetail({ sale }: { sale: Sale }) {
             </li>
           ))}
         </ul>
-        <a href={`${reportUrl}#page=2`} className={styles.evidenceLink}>
+        <a href={reportUrl} className={styles.evidenceLink}>
           View the evidence in the PDF
         </a>
       </section>
@@ -88,7 +88,7 @@ function SaleDetail({ sale }: { sale: Sale }) {
   );
 }
 
-export default function CalculationPreview({ model }: { model: PreviewModel }) {
+export default function SampleCalculation({ model }: { model: PreviewModel }) {
   const activeId = useSyncExternalStore(
     subscribeToFragment,
     selectedSale,
@@ -99,10 +99,10 @@ export default function CalculationPreview({ model }: { model: PreviewModel }) {
   return (
     <main id="main" className={styles.page}>
       <header className={styles.heading}>
-        <h1>{model.year} calculation</h1>
+        <h1>Capital gains statement</h1>
         <p>
-          Sample portfolio <span aria-hidden="true">·</span> AJ Bell dealing
-          account
+          Illustrative {model.year} tax year <span aria-hidden="true">·</span>{" "}
+          {model.broker} dealing account
         </p>
       </header>
 
@@ -139,9 +139,9 @@ export default function CalculationPreview({ model }: { model: PreviewModel }) {
               <dd>{model.saved}</dd>
             </div>
           </dl>
-          <a className={styles.report} href={reportUrl}>
+          <a className={styles.report} href="/samples/cgt-summary.pdf">
             <FileText size={17} aria-hidden="true" />
-            Open sample PDF
+            Open annual statement PDF
           </a>
         </div>
       </section>
@@ -238,9 +238,9 @@ export default function CalculationPreview({ model }: { model: PreviewModel }) {
           </tbody>
         </table>
         <div className={styles.download}>
-          <a href={`${reportUrl}?download=1`} download>
+          <a href={reportUrl} download>
             <ArrowDownToLine size={16} aria-hidden="true" />
-            Download sample PDF
+            Download evidence PDF
           </a>
         </div>
       </section>

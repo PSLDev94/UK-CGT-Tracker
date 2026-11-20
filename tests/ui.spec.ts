@@ -366,7 +366,7 @@ test("home and broker support are honest, responsive and accessible", async ({
   test.slow();
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
-    "Calculate gains on your",
+    "Which purchase counts",
   );
   expect(
     (
@@ -1137,7 +1137,7 @@ test("restored reports export saved evidence and settings retain edits after fai
 
 test("original menus restore keyboard focus on Escape", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/");
+  await page.goto("/pricing");
   await page.getByRole("button", { name: "Free Tools" }).click();
   await page
     .getByRole("navigation", { name: "Main navigation" })
@@ -1439,7 +1439,7 @@ test("HTML has fresh script nonces and blocks injected inline script", async ({
     `nonce-${first}`,
   );
   await page
-    .getByRole("link", { name: "Log in", exact: false })
+    .getByRole("link", { name: "Sign in", exact: true })
     .first()
     .click();
   await expect(

@@ -18,6 +18,8 @@ typography:
     fontFamily: '"Inter Variable", system-ui, sans-serif'
   body:
     fontFamily: '"Inter Variable", system-ui, sans-serif'
+  statement:
+    fontFamily: '"STIX Two Text", Georgia, serif'
   mono:
     fontFamily: 'ui-monospace, "SFMono-Regular", monospace'
 rounded:
@@ -37,7 +39,7 @@ components:
 
 ## Overview
 
-The user explicitly requested restoration of the original website and every original page, including logos, and specified that all new functionality must follow that original UI/UX. Git revision `9ded8c0` is the visual source of truth. The November redesign is superseded. Restore original source markup, layouts, blue pie-chart branding, public navigation/footer, guides, tools, pricing and dashboard. Preserve rebuilt business rules, authentication, strict import review and sandbox Stripe integration.
+Git revision `9ded8c0` supplies the original pie-chart mark, wordmark and application branding. The approved Trade records homepage and Annual statement report treatments apply to those specific surfaces. The guides, tools, pricing, account and dashboard retain their original navigation and visual conventions.
 
 ## Colors
 
@@ -49,15 +51,17 @@ Inter, as on the original site, is self-hosted through Fontsource. Original Tail
 
 ## Layout
 
-Original centred landing-page hero, dashboard illustration, feature grids and footer. Original 16rem desktop sidebar and narrow-screen menu. Dashboard content uses white bordered cards on gray-50; new account and import review screens use the same controls and card language. Document scrolling with labelled horizontal table regions.
+The homepage opens with a charcoal field pairing the investor’s question with an interactive sale and its dated source records. Original 16rem desktop sidebar and narrow-screen menu. Dashboard content uses white bordered cards on gray-50; new account and import review screens use the same controls and card language. Document scrolling with labelled horizontal table regions.
 
 ## Elevation & Depth
 
 Retain original shadows, gradients and borders. New screens use matching small card shadows.
 
-## Staging design study
+## Homepage and reports
 
-The three review views under `/design-preview` share the public sample portfolio. The homepage introduces one sale, Calculations opens its matching and source records, and the A4 statement presents the year followed by the evidence. The original pie mark, Inter web typography and blue actions tie the views together. At phone widths, group the asset, signed result and rule before the optional cost breakdown. These layouts are awaiting review for broader use.
+The Trade records homepage opens on the Tesla sale and its 30-day repurchase. Selecting Apple or Lloyds changes the dates, monetary figures and link to the corresponding source records. The public sample, the report screen and the PDFs use the same calculation data for their respective portfolios.
+
+Annual statements use serif headings and a prominent annual result, fine rules and right-aligned amounts. On screen the statement typeface is the locally licensed STIX Two Text. Original blue identifies the brand and actions. Printable reports retain their source records, scope and filing guidance.
 
 ## Shapes
 

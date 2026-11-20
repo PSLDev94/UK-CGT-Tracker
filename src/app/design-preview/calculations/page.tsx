@@ -1,11 +1,5 @@
-import type { Metadata } from "next";
-import CalculationPreview from "./CalculationPreview";
-import { samplePreview } from "../preview-model";
-
-export const metadata: Metadata = {
-  title: "Sample calculation · Design preview",
-};
+import { redirect } from "next/navigation";
 
 export default function PreviewCalculationPage() {
-  return <CalculationPreview model={samplePreview()} />;
+  redirect("/sample-calculation");
 }

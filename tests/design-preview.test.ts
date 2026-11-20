@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { samplePreview } from "../src/app/design-preview/preview-model";
+import { samplePreview } from "../src/domain/reports/sample-view";
 import { sampleReport } from "../src/domain/reports/sample";
 
-describe("staging design specimen", () => {
+describe("illustrative share statement", () => {
   const model = samplePreview();
   it("keeps the annual outcome separate from the individual sale and its fee", () => {
     expect(model).toMatchObject({

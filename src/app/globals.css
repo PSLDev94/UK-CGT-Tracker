@@ -1,5 +1,12 @@
 @import "tailwindcss" source(none);
 @source "../";
+@font-face {
+  font-family: "STIX Two Text";
+  src: url("/fonts/stix-two-text-latin.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+}
 @theme inline {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
 }
@@ -13,6 +20,7 @@
     --color-border: #e5e7eb;
     --color-danger: #a12d2b;
     --color-warning: #805300;
+    --font-statement: "STIX Two Text", Georgia, serif;
     --font-display: "Inter Variable", system-ui, sans-serif;
     --font-body: "Inter Variable", system-ui, sans-serif;
     --font-mono: ui-monospace, "SFMono-Regular", monospace;

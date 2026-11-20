@@ -1,4 +1,5 @@
-import { sampleReport } from "../../domain/reports/sample";
+import { BROKERS } from "../imports/brokers";
+import { sampleReport } from "./sample";
 import { displayDate, money } from "../../ui/format";
 
 const ruleNames = {
@@ -16,10 +17,22 @@ const saleAnchors: Record<string, string> = {
 export function samplePreview() {
   const { result, sources, created_at } = sampleReport;
   const byKey = new Map(sources!.map((source) => [source.key, source]));
-  function receipt(key: string, date: string, role: string) {
+  type RecordKind =
+    "sale" | "matched-purchase" | "pool-addition" | "pool-retained";
+  function receipt(
+    key: string,
+    date: string,
+    kind: RecordKind,
+    amountGBP: string,
+    role: string,
+  ) {
     const source = byKey.get(key)!;
     return {
       ref: source.reference!,
+      kind,
+      isoDate: date,
+      row: source.record,
+      amount: money(amountGBP),
       label: `${source.statementReference} · CSV row ${source.record}`,
       date: displayDate(date),
       role,
@@ -29,11 +42,19 @@ export function samplePreview() {
   const sales = result.disposals.map((sale) => {
     const breakdown = sale.saleBreakdown!;
     const receipts = sale.sourceIds.map((key) =>
-      receipt(key, sale.date, "Sale"),
+      receipt(key, sale.date, "sale", breakdown.grossProceedsGBP, "Sale"),
     );
     for (const match of sale.matches) {
       for (const key of match.acquisitionIds ?? []) {
-        receipts.push(receipt(key, match.acquisitionDate!, "Matched purchase"));
+        receipts.push(
+          receipt(
+            key,
+            match.acquisitionDate!,
+            "matched-purchase",
+            match.costGBP,
+            "Matched purchase",
+          ),
+        );
       }
     }
     // The sample has one earlier pool purchase per pooled holding. The Tesla
@@ -54,6 +75,8 @@ export function samplePreview() {
           receipt(
             key,
             movement.date,
+            inPool ? "pool-addition" : "pool-retained",
+            movement.costChangeGBP,
             `${role} · ${money(movement.costChangeGBP)}`,
           ),
         );
@@ -78,7 +101,10 @@ export function samplePreview() {
     };
   });
   const summary = result.summary!;
+  const account = sampleReport.accounts![0]!;
+  const broker = BROKERS.find((entry) => entry.id === account.broker)?.name ?? account.broker;
   return {
+    broker,
     year: result.taxYear.replace("-", "–"),
     net: money(summary.netGainGBP),
     gains: money(summary.gainsGBP),

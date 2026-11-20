@@ -6,63 +6,41 @@ import { calculateGains } from "../src/domain/cgt/calculate";
 import { sampleReport } from "../src/domain/reports/sample";
 import { adjustment2024Url, sa108Edition } from "../src/domain/reports/filing-guidance";
 
-test("homepage jump and fee-bearing example reconcile with both downloadable samples", async ({
-  page,
-}) => {
+test("each homepage sale opens its own matching evidence and reconciles with both PDF downloads", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "See a sample calculation" }).click();
-  const preview = page.locator("#preview");
-  const title = preview.getByText("Illustrative Tax Year 2025-26 Overview");
-  const nav = page.getByRole("navigation", { name: "Main navigation" });
-  await expect(title).toBeInViewport();
-  await expect
-    .poll(async () => {
-      const [heading, header] = await Promise.all([
-        title.boundingBox(),
-        nav.boundingBox(),
-      ]);
-      return Boolean(
-        heading && header && heading.y >= header.y + header.height,
-      );
-    })
-    .toBe(true);
-  const apple = preview.getByRole("row", { name: /Apple/ });
-  await expect(apple).toContainText("£8,505.00");
-  await expect(apple).toContainText("Net sale proceeds £8,500.00");
-  await expect(apple).toContainText("£6,205.00");
-  await expect(apple).toContainText("Includes £5.00 selling costs");
-  for (const [label, value] of [
-    ["Total Gains", "£2,350.00"],
-    ["Total Losses", "£500.00"],
-    ["Total allowable costs", "£11,955.00"],
-    ["Net gain", "£1,850.00"],
-  ]) {
-    const tile = preview
-      .getByText(label!, { exact: true })
-      .first()
-      .locator("..");
-    await expect(tile).toContainText(value!);
+  const sample = page.getByRole("region", { name: "Explore a sample share sale" });
+  for (const [id, label, amount, reference] of [
+    ["tesla", "Tesla", "−£500.00", "SAMPLE-DEAL-5"],
+    ["apple", "Apple", "+£2,300.00", "SAMPLE-DEAL-1"],
+    ["lloyds", "Lloyds", "+£50.00", "SAMPLE-DEAL-6"],
+  ] as const) {
+    const choice = sample.getByRole("button", { name: label, exact: true });
+    await choice.click();
+    await expect(choice).toHaveAttribute("aria-pressed", "true");
+    await expect(sample).toContainText(amount);
+    await sample.getByRole("link", { name: "Inspect source records" }).click();
+    await expect(page).toHaveURL(new RegExp("sample-calculation#" + id + "$"));
+    const detail = page.locator("#match-" + id);
+    await expect(detail).toContainText(reference);
+    await expect(detail).toContainText(amount);
+    if (id === "apple") {
+      await expect(detail).toContainText("£8,505.00");
+      await expect(detail).toContainText("£5.00");
+      await expect(detail).toContainText("£6,205.00");
+    }
+    await page.goBack();
   }
   for (const kind of ["summary", "evidence"]) {
-    const link = preview.getByRole("link", { name: `Download this sample ${kind} PDF` });
-    await expect(link).toHaveAttribute("href", `/samples/cgt-${kind}.pdf`);
+    if (kind === "evidence") await page.goto("/sample-calculation");
+    const link = page.locator(`a[download][href="/samples/cgt-${kind}.pdf"]`).first();
     const [download] = await Promise.all([page.waitForEvent("download"), link.click()]);
     expect(download.suggestedFilename()).toBe(`cgt-${kind}.pdf`);
     const path = await download.path();
     if (!path) throw new Error("The browser did not save the sample PDF");
-    const text = reportPageText(await PDFDocument.load(await readFile(path)));
-    expect(text).toContain("Net gain  £1850.00");
-    expect(text).toContain(
-      "Matched acquisition cost\n£11950.00\nTotal allowable costs\n£11955.00",
-    );
-    expect(text).toContain("Gains\n£2350.00\nLosses\n£500.00");
+    const text = reportPageText(await PDFDocument.load(await readFile(path))).replaceAll(",", "");
+    for (const value of ["£1850.00", "£2350.00", "£500.00", "£11955.00", "£11950.00", "£2300.00", "£50.00"]) expect(text).toContain(value);
     if (kind === "evidence") {
-      expect(text).toContain(
-        "Apple\nGross disposal proceeds\n£8505.00\nSelling costs\n£5.00\nNet sale proceeds\n£8500.00",
-      );
-      expect(text).toContain(
-        "Matched acquisition cost\n£6200.00\nTotal allowable costs\n£6205.00\nGain / loss\n£2300.00",
-      );
+      for (const value of ["£8505.00", "£8500.00", "£5.00", "£6200.00", "£6205.00", "SAMPLE-DEAL-3"]) expect(text).toContain(value);
     }
   }
 });

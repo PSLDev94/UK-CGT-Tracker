@@ -1,6 +1,6 @@
 import { adjustment2024Note, confirmedRatePeriods, filingReview, ratePeriodsNote } from "./filing-guidance";
 import { noDisposalsLabel, reportIssueMessage, scopeStatement, unresolvedPoolIssues } from "./eligibility";
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { LineCapStyle, PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { annualRoundingNote, componentRoundingNotes, roundingComparisonLabel, roundingDifferences } from "./rounding";
 import { Money, netOutcome } from "../values";
 import { reportStructure } from "./pdf-structure";
@@ -8,6 +8,7 @@ import { saleBreakdownUnavailable, type SaleBreakdown } from "../cgt/types";
 import { BROKERS } from "../imports/brokers";
 import {
   reportStatus,
+  statementSaleLimit,
   type ReportSnapshot,
 } from "./report";
 
@@ -16,8 +17,11 @@ const humanDate = new Intl.DateTimeFormat("en-GB", {
   timeZone: "UTC",
 });
 const date = (value: string | Date) => humanDate.format(new Date(value));
-const pounds = (value: string) =>
-  value.startsWith("-") ? "-£" + value.slice(1) : "£" + value;
+const pounds = (value: string) => {
+  const [whole, fraction] = value.replace(/^-/, "").split(".");
+  const grouped = whole!.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return (value.startsWith("-") ? "-£" : "£") + grouped + (fraction === undefined ? "" : "." + fraction);
+};
 const shares = (quantity: string) =>
   `${quantity} ${quantity === "1" || quantity === "-1" ? "share" : "shares"}`;
 // Only narrative values are shortened. The CSV retains the full matching ledger.
@@ -45,6 +49,7 @@ export async function reportPdf(
   const tags = reportStructure(doc);
   const regular = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const serif = await doc.embedFont(StandardFonts.TimesRoman);
   const glyphs = new Set(regular.getCharacterSet());
   // Keep references printable on any device. Marked-content ActualText preserves
   // the original Unicode when copied/extracted, even for glyphs outside WinAnsi.
@@ -54,7 +59,7 @@ export async function reportPdf(
     const code = char.codePointAt(0)!;
     return glyphs.has(code) ? char : "\\u{" + code.toString(16).toUpperCase() + "}";
   }
-  const title = evidence ? "Calculation evidence" : "Capital gains summary";
+  const title = evidence ? "Calculation evidence" : "Capital gains statement";
   doc.setTitle(
     `CGT Tracker - ${sample ? "Synthetic sample - " : ""}${title} ${r.taxYear}`,
     { showInWindowTitleBar: true },
@@ -66,7 +71,7 @@ export async function reportPdf(
   doc.setAuthor("CGT Tracker");
   doc.setLanguage("en-GB");
   const ink = rgb(0.067, 0.094, 0.153),
-    blue = rgb(0.145, 0.388, 0.86),
+    blue = rgb(37 / 255, 99 / 255, 235 / 255),
     muted = rgb(0.25, 0.3, 0.37),
     border = rgb(0.84, 0.87, 0.9);
   let page = doc.addPage([595.28, 841.89]);
@@ -75,14 +80,21 @@ export async function reportPdf(
   const left = 44,
     right = 551;
   function header() {
-    page.drawText(sample ? "CGT Tracker  /  Synthetic sample" : "CGT Tracker", {
-      x: left,
-      y: 802,
-      size: 14,
-      font: bold,
-      color: blue,
+    // The two pie paths and blue square are the vector mark in public/logo.svg.
+    const scale = 0.65;
+    page.drawSvgPath("M8 0H24A8 8 0 0 1 32 8V24A8 8 0 0 1 24 32H8A8 8 0 0 1 0 24V8A8 8 0 0 1 8 0Z", {
+      x: left, y: 817, scale, color: blue,
     });
-    const label = `${r.taxYear}  /  ${title}`;
+    page.drawSvgPath("M21.21 15.89A10 10 0 1 1 8 2.83 M22 12A10 10 0 0 0 12 2v10z", {
+      x: left + 4 * scale, y: 817 - 4 * scale, scale,
+      borderColor: rgb(1, 1, 1), borderWidth: 2.5, borderLineCap: LineCapStyle.Round,
+    });
+    const wordmarkX = left + 26;
+    page.drawText("CGT", { x: wordmarkX, y: 801, size: 15, font: bold, color: ink });
+    page.drawText("Tracker", {
+      x: wordmarkX + bold.widthOfTextAtSize("CGT", 15), y: 801, size: 15, font: bold, color: blue,
+    });
+    const label = `${sample ? "Sample portfolio  /  " : ""}${r.taxYear}  /  ${evidence ? title : "Annual statement"}`;
     page.drawText(label, {
       x: right - regular.widthOfTextAtSize(label, 9),
       y: 803,
@@ -96,7 +108,7 @@ export async function reportPdf(
       thickness: 0.75,
       color: border,
     });
-    y = 762;
+    y = 750;
   }
   tags.artifact(page, header);
   const sources = new Map(
@@ -160,7 +172,7 @@ export async function reportPdf(
     color = ink,
     role: "P" | "H1" | "H2" | "H3" = "P",
   ) {
-    const font = strong ? bold : regular;
+    const font = role === "H1" || role === "H2" ? serif : strong ? bold : regular;
     const item = tags.element(role, tags.document);
     for (const { printed, original } of wrap(text, font, size)) {
       if (printed !== original) escapedText = true;
@@ -231,33 +243,32 @@ export async function reportPdf(
       });
     }
     const height = entries.reduce(
-      (total, entry) =>
-        total + wrap(entry.text, regular, entry.size).length * (entry.size + 5),
+      (total, entry, index) =>
+        total + wrap(entry.text, index === 0 ? bold : regular, entry.size).length * (entry.size + 5),
       0,
     );
-    space(Math.min(712, height + 3));
-    for (const entry of entries) line(entry.text, false, entry.size);
-    y -= 3;
+    space(Math.min(712, height + 11));
+    tags.artifact(page, () => page.drawLine({
+      start: { x: left, y: y + 6 }, end: { x: right, y: y + 6 }, thickness: 0.45, color: border,
+    }));
+    y -= 6;
+    for (const [index, entry] of entries.entries())
+      line(entry.text, index === 0, entry.size, entry.size < 9 ? muted : ink);
+    y -= 5;
   }
   function heading(text: string, reserve = 48) {
     continuedSection = "";
     space(reserve);
     y -= 8;
     tags.bookmark(text, page, y + 16);
-    line(text, true, 13, ink, "H2");
+    line(text, true, 17, ink, "H2");
     continuedSection = text;
   }
   function amounts(labels: string[], values: string[]) {
     const col = (right - left) / labels.length;
     space(41);
     tags.artifact(page, () =>
-      page.drawRectangle({
-        x: left,
-        y: y - 24,
-        width: right - left,
-        height: 37,
-        color: rgb(0.96, 0.97, 0.98),
-      }),
+      page.drawLine({ start: { x: left, y: y + 12 }, end: { x: right, y: y + 12 }, thickness: 0.55, color: border }),
     );
     const table = tags.element("Table", tags.document);
     const labelRow = tags.element("TR", table);
@@ -337,24 +348,93 @@ export async function reportPdf(
     for (const note of componentRoundingNotes(net, matched, gain, basis, summary)) line(note, false, 9, muted);
   }
 
-  line(`${r.taxYear}  ${title}`, true, 19, ink, "H1");
-  if (!r.disposals.length) {
-    line(noDisposalsLabel(r, snapshot.coverage_confirmed), true, 17);
-  } else if (r.summary) {
+  line(title, true, 32, ink, "H1");
+  y += 8;
+  line(`Tax year ${r.taxYear}  ·  ${reportStatus(snapshot)}`, true, 10, muted);
+  if (sample) line("Illustration using a fictional account and trades.", false, 9, muted);
+  y -= 10;
+  if (r.disposals.length && r.summary) {
+    const tableLeft = left + 238;
+    const shown = r.disposals.slice(0, statementSaleLimit);
+    const truncated = shown.length < r.disposals.length;
+    const bandHeight = Math.max(81, 34 + shown.length * 27 + (truncated ? 15 : 0));
+    const top = y;
+    tags.artifact(page, () => page.drawRectangle({
+      x: left - 10, y: top - bandHeight, width: right - left + 20, height: bandHeight,
+      color: rgb(0.944, 0.954, 0.955),
+    }));
     const net = r.summary.netGainGBP;
-    line(`${netOutcome(net)}  ${pounds(net.replace(/^-/, ""))}`, true, 22);
+    const amount = pounds(net.replace(/^-/, ""));
+    const netSize = Math.min(35, 210 / serif.widthOfTextAtSize(amount, 1));
+    y -= 20;
+    line(netOutcome(net), true, 11);
+    tags.mark(page, tags.element("P", tags.document), () =>
+      page.drawText(amount, { x: left, y: y - 22, font: serif, size: netSize, color: ink }));
+    y -= 37;
+    line("Before personal allowances and prior losses.", false, 8, muted);
+
+    const ledger = tags.element("Table", tags.document);
+    const header = tags.element("TR", ledger);
+    function cell(
+      row: typeof header,
+      type: "TH" | "TD",
+      text: string,
+      x: number,
+      baseline: number,
+      width: number,
+      align: "left" | "right",
+      font: typeof regular,
+      size: number,
+    ) {
+      const tag = tags.element(type, row);
+      let printed = Array.from(text, printableChar).join("");
+      if (printed !== text) escapedText = true;
+      if (align === "left" && font.widthOfTextAtSize(printed, size) > width) {
+        // A long broker instrument name is available in full in the tagged text and evidence.
+        const maximum = width - font.widthOfTextAtSize("…", size);
+        let measure = 0;
+        let prefix = "";
+        for (const character of printed) {
+          measure += font.widthOfTextAtSize(character, size);
+          if (measure > maximum) break;
+          prefix += character;
+        }
+        printed = prefix + "…";
+      }
+      // Keep monetary values whole, including unusually wide historic amounts.
+      const fitted = Math.min(size, width / Math.max(font.widthOfTextAtSize(printed, 1), 1));
+      tags.mark(page, tag, () => page.drawText(printed, {
+        x: align === "right" ? x - font.widthOfTextAtSize(printed, fitted) : x,
+        y: baseline, font, size: fitted, color: type === "TH" ? muted : ink,
+      }), printed !== text ? text : undefined);
+      return tag;
+    }
+    const columnWidth = right - tableLeft - 83;
+    cell(header, "TH", "Share sold", tableLeft, top - 15, columnWidth, "left", regular, 8);
+    cell(header, "TH", "Gain / loss", right, top - 15, 80, "right", regular, 8);
+    for (const [index, d] of shown.entries()) {
+      const baseline = top - 36 - 27 * index;
+      tags.artifact(page, () => page.drawLine({
+        start: { x: tableLeft, y: baseline + 13 }, end: { x: right, y: baseline + 13 }, thickness: 0.45, color: border,
+      }));
+      const row = tags.element("TR", ledger);
+      const name = d.sourceIds.find(key => sources.get(key)?.instrument);
+      const nameCell = cell(row, "TD", (name && sources.get(name)?.instrument) || d.securityId,
+        tableLeft, baseline, columnWidth, "left", bold, 10);
+      tags.mark(page, nameCell, () => page.drawText(date(d.date), { x: tableLeft, y: baseline - 10, font: regular, size: 8, color: muted }));
+      const value = d.gainGBP === null ? "Unresolved" : (new Money(d.gainGBP).gt(0) ? "+" : "") + pounds(d.gainGBP);
+      cell(row, "TD", value, right, baseline, 80, "right", regular, 11);
+    }
+    if (truncated) {
+      tags.mark(page, tags.element("P", tags.document), () => page.drawText(
+        `First ${shown.length} of ${r.disposals.length} disposal groups. See the CSV for all sales.`,
+        { x: tableLeft, y: top - bandHeight + 9, font: regular, size: 8, color: muted },
+      ));
+    }
+    y = top - bandHeight - 20;
   } else {
-    line("Total pending review", true, 17);
+    line(r.disposals.length ? "Total pending review" : noDisposalsLabel(r, snapshot.coverage_confirmed), true, 17);
   }
-  line(reportStatus(snapshot), true, 10, blue);
-  if (sample)
-    line(
-      "Illustration using a fictional account and trades.",
-      false,
-      10,
-      muted,
-    );
-  y -= 4;
   if (r.summary) {
     saleAmounts(
       r.saleBreakdown,
@@ -533,14 +613,12 @@ export async function reportPdf(
     line("Printed reference notation: unsupported characters appear as Unicode code points in braces after a backslash and the letter u. Two backslashes represent one literal backslash. The original text is available in the CSV.", false, 9, muted);
   }
   const pages = doc.getPages();
-  pages.forEach((p, index) =>
-    tags.artifact(p, () =>
-      p.drawText(
-        `CGT Tracker  |  ${r.taxYear}  |  Page ${index + 1} of ${pages.length}`,
-        { x: left, y: 29, size: 9, font: regular, color: muted },
-      ),
-    ),
-  );
+  pages.forEach((p, index) => tags.artifact(p, () => {
+    const folio = `Page ${index + 1} of ${pages.length}`;
+    p.drawLine({ start: { x: left, y: 43 }, end: { x: right, y: 43 }, thickness: 0.55, color: border });
+    p.drawText(`CGT Tracker  /  ${r.taxYear}`, { x: left, y: 28, size: 9, font: regular, color: muted });
+    p.drawText(folio, { x: right - regular.widthOfTextAtSize(folio, 9), y: 28, size: 9, font: regular, color: muted });
+  }));
   tags.finish();
   return doc.save();
 }

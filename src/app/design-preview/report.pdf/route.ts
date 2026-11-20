@@ -1,7 +1,8 @@
-import { designPreviewPdf } from "@/domain/reports/design-preview-pdf";
+import { reportPdf } from "@/domain/reports/pdf";
+import { sampleReport } from "@/domain/reports/sample";
 
 export async function GET(request: Request) {
-  const pdf = await designPreviewPdf();
+  const pdf = await reportPdf(sampleReport, true, { sample: true });
   const mode =
     new URL(request.url).searchParams.get("download") === "1"
       ? "attachment"
