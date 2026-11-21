@@ -28,12 +28,20 @@ export interface BillingEvent {
   type: string;
   customerId: string | null;
   riskReason?: string;
+  contract?: ContractConfirmation;
+}
+export interface ContractConfirmation {
+  invoiceId: string;
+  recipient: string;
+  reference: string;
+  paidAt: string;
+  text: string;
 }
 export interface BillingGateway {
   createCustomer(key: string): Promise<string>;
   subscriptions(customerId: string): Promise<SubscriptionState[]>;
   createCheckout(customerId: string, key: string): Promise<CheckoutState>;
-  checkout(id: string): Promise<CheckoutState>;
+  checkout(id: string, customerId: string): Promise<CheckoutState>;
   portal(customerId: string): Promise<string>;
 }
 interface BillingRow {
@@ -65,6 +73,7 @@ export class Billing {
     private readonly db: Database,
     private readonly gateway: BillingGateway,
     private readonly config: BillingConfig,
+    private readonly sendConfirmation?: (confirmation: ContractConfirmation) => Promise<void>,
   ) {}
 
   private checkRow(row: Pick<BillingRow, "stripe_account_id" | "livemode">) {
@@ -289,7 +298,9 @@ export class Billing {
       return (await this.reconcile(tx, row)).status;
     });
   }
-  async checkout(identity: Identity): Promise<{ url: string }> {
+  async checkout(identity: Identity, immediateAccess = false): Promise<{ url: string }> {
+    if (this.config.livemode && !immediateAccess)
+      throw new AppError(400, "IMMEDIATE_ACCESS_REQUEST_REQUIRED", "Confirm when you want your PDF subscription to start before opening checkout.");
     await this.ensureCustomer(identity);
     for (let retry = 0; retry < 2; retry++) {
       const result = await this.locked(identity.ownerId, async (tx, row) => {
@@ -307,7 +318,7 @@ export class Billing {
           );
         }
         if (row.checkout_session_id) {
-          const existing = await this.gateway.checkout(row.checkout_session_id);
+          const existing = await this.gateway.checkout(row.checkout_session_id, row.stripe_customer_id!);
           if (existing.status === "open" && existing.url)
             return { url: existing.url };
           if (
@@ -369,6 +380,33 @@ export class Billing {
       return { url: await this.gateway.portal(row.stripe_customer_id) };
     });
   }
+
+  private async confirmInvoice(ownerId: string, contract: ContractConfirmation) {
+    const start = "contract-start:" + contract.invoiceId;
+    const done = "contract:" + contract.invoiceId;
+    // This starts the provider's retry window before making a network request.
+    // It survives a process crash even if the email was accepted before our commit.
+    await query(this.db,
+      `INSERT INTO cgt.stripe_events(stripe_account_id,livemode,event_id,event_type)
+       VALUES($1,true,$2,'cgt.contract_started') ON CONFLICT DO NOTHING`,
+      [this.config.accountId, start]);
+    await this.locked(ownerId, async (tx) => {
+      const receipts = await query<{ event_id: string; processed_at: Date | string }>(tx,
+        `SELECT event_id,processed_at FROM cgt.stripe_events
+         WHERE stripe_account_id=$1 AND livemode AND event_id IN ($2,$3)`,
+        [this.config.accountId, start, done]);
+      if (receipts.some(receipt => receipt.event_id === done)) return;
+      const started = receipts.find(receipt => receipt.event_id === start);
+      if (!started || Date.now() - new Date(started.processed_at).getTime() >= 23 * 3600000)
+        throw new Error("Subscription confirmation needs delivery reconciliation");
+      if (!this.sendConfirmation) throw new Error("The contract mailer is unavailable");
+      await this.sendConfirmation(contract);
+      await query(tx,
+        `INSERT INTO cgt.stripe_events(stripe_account_id,livemode,event_id,event_type)
+         VALUES($1,true,$2,'cgt.contract_confirmation')`, [this.config.accountId, done]);
+    });
+  }
+
   async event(event: BillingEvent) {
     const [account] = event.customerId
       ? await query<{ owner_id: string }>(
@@ -377,8 +415,23 @@ export class Billing {
           [event.customerId, this.config.accountId, this.config.livemode],
         )
       : [];
-    if (!account) return { received: true, outcome: "unmapped" };
-    return this.locked(account.owner_id, async (tx, row) => {
+    if (!account) {
+      if (this.config.livemode && event.contract)
+        throw new Error("The subscription confirmation needs a verified customer mapping");
+      return { received: true, outcome: "unmapped" };
+    }
+    try {
+      return await this.applyEvent(account.owner_id, event);
+    } finally {
+      // A provider lookup failure must not withhold the buyer's signed invoice
+      // terms. A replay must still finish delivery after entitlement committed.
+      if (this.config.livemode && event.contract)
+        await this.confirmInvoice(account.owner_id, event.contract);
+    }
+  }
+
+  private async applyEvent(ownerId: string, event: BillingEvent) {
+    return this.locked(ownerId, async (tx, row) => {
       const existing = await query(
         tx,
         "SELECT event_id FROM cgt.stripe_events WHERE stripe_account_id=$1 AND livemode=$2 AND event_id=$3",

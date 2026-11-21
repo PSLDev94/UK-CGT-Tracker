@@ -4,6 +4,7 @@ import { ArrowRight, ChevronRight } from "lucide-react";
 import { PublicNav } from "@/components/public-nav";
 import { PublicFooter } from "@/components/public-footer";
 import { Metadata } from "next";
+import { isProductionSite } from "@/server/public-site";
 
 export const metadata: Metadata = {
   title: "UK Capital Gains Tax Guide for Investors",
@@ -130,9 +131,9 @@ export default function GuidePage() {
           >
             Create a free account
           </Link>
-          <p className="text-sm text-gray-600 mt-3">
-            Relaunch preview. No live payments.
-          </p>
+          {!isProductionSite() && (
+            <p className="text-sm text-gray-600 mt-3">Relaunch preview. No live payments.</p>
+          )}
         </section>
       </main>
 

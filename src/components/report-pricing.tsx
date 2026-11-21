@@ -13,8 +13,10 @@ import {
 
 export function ReportPricing({
   heading: Heading = "h2",
+  mode,
 }: {
   heading?: "h2" | "h3";
+  mode: "live" | "preview" | "unavailable";
 }) {
   const signedIn = usePublicAccount();
   return (
@@ -35,7 +37,7 @@ export function ReportPricing({
           features: PDF_FEATURES,
           href: signedIn ? "/billing" : authHref("/signup", "/billing"),
           action: signedIn
-            ? "View sandbox billing"
+            ? mode === "preview" ? "View sandbox billing" : "View billing"
             : "Create an account for annual reports",
         },
       ].map((plan) => (

@@ -2,6 +2,7 @@ import { Kysely, PostgresDialect } from "kysely";
 import { Pool } from "pg";
 import { Billing } from "../src/server/billing";
 import { StripeGateway, stripeClient } from "../src/server/stripe-gateway";
+import { stripeSettings } from "../src/server/billing-config";
 import { assertRuntimeRole } from "../src/server/database";
 const required = (key: string) => {
   const value = process.env[key];
@@ -10,17 +11,7 @@ const required = (key: string) => {
   return value;
 };
 async function main() {
-  const key = required("STRIPE_SECRET_KEY");
-  if (!/^[rs]k_test_/.test(key))
-    throw new Error(
-      "Live reconciliation is locked until production qualification",
-    );
-  const config = {
-    origin: required("APP_ORIGIN"),
-    accountId: required("STRIPE_ACCOUNT_ID"),
-    priceId: required("STRIPE_PRICE_ID"),
-    livemode: false,
-  };
+  const { key, config, portalConfiguration } = stripeSettings(process.env);
   const db = new Kysely<Record<string, never>>({
     dialect: new PostgresDialect({
       pool: new Pool({
@@ -36,7 +27,7 @@ async function main() {
     const gateway = new StripeGateway(
       stripeClient(key),
       config,
-      required("STRIPE_PORTAL_CONFIGURATION_ID"),
+      portalConfiguration,
     );
     await assertRuntimeRole(db, "cgt_billing");
     await gateway.validate();

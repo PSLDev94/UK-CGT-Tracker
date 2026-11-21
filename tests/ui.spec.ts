@@ -89,6 +89,44 @@ test("billing keeps test status explicit and recovers from interrupted requests"
   ).toEqual([]);
 });
 
+for (const path of ["/billing", "/billing?year=2024-25&format=summary"]) {
+  test(`live billing requires the buyer's request to start PDF access on ${path}`, async ({ page }) => {
+    await mockWorkspace(page);
+    const checkout = "https://checkout.stripe.com/c/pay/fixture";
+    await page.route("https://checkout.stripe.com/**", route => route.fulfill({ body: "Checkout fixture" }));
+    const purchaseRequests: Record<string, unknown>[] = [];
+    await page.route("**/api/v2/billing", route => {
+      const input = route.request().postDataJSON();
+      if (input.action === "checkout") {
+        purchaseRequests.push(input);
+        return route.fulfill({ json: { url: checkout } });
+      }
+      return route.fulfill({ json: {
+        status: "none", entitled: false, needsReview: false, canManage: false,
+        periodEnd: null, cancelAtPeriodEnd: false, testMode: false,
+        checkedReport: input.year ? { year: input.year, format: input.format } : null,
+      } });
+    });
+    await page.goto(path);
+    const requestAccess = page.getByRole("checkbox", { name: /I want PDF access to start as soon as I pay.*14-day right to cancel/ });
+    const continueButton = page.getByRole("button", { name: "Continue to Stripe checkout" });
+    await expect(page.getByText("£49 per year")).toBeVisible();
+    await expect(page.getByText(/no real money/i)).toHaveCount(0);
+    await expect(requestAccess).not.toBeChecked();
+    await expect(continueButton).toBeDisabled();
+    await requestAccess.check();
+    await expect(continueButton).toBeEnabled();
+    await requestAccess.uncheck();
+    await expect(continueButton).toBeDisabled();
+    expect(purchaseRequests).toHaveLength(0);
+    await requestAccess.check();
+    await continueButton.click();
+    await expect(page).toHaveURL(checkout);
+    const selection = path === "/billing" ? {} : { year: "2024-25", format: "summary" };
+    expect(purchaseRequests).toEqual([{ action: "checkout", tab: expect.any(String), immediateAccess: true, ...selection }]);
+  });
+}
+
 test("billing shows cancellation and prevents duplicate checkout while a request is pending", async ({
   page,
 }) => {
@@ -1710,6 +1748,7 @@ test("oversized evidence shows usable alternatives before payment and after a re
         status: paid ? "active" : "none",
         entitled: paid,
         canManage: paid,
+        testMode: true,
         checkedReport: input.year
           ? { year: input.year, format: input.format }
           : null,

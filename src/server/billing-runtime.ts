@@ -2,6 +2,9 @@ import { Kysely, PostgresDialect } from "kysely";
 import { Pool } from "pg";
 import { Billing } from "./billing";
 import { StripeGateway, stripeClient } from "./stripe-gateway";
+import { stripeSettings } from "./billing-config";
+import { productionTrader } from "./public-site";
+import { resendContractMailer } from "./mail";
 import { assertRuntimeRole } from "./database";
 import { AppError } from "./errors";
 import { runtime } from "./runtime";
@@ -27,17 +30,10 @@ async function initialise() {
       "BILLING_UNAVAILABLE",
       "Billing is not available yet. Your saved records are unaffected.",
     );
-  const key = required("STRIPE_SECRET_KEY");
-  // Live checkout remains locked until legacy entitlement migration, VAT treatment
-  // and full release qualification are complete. A copied live key fails closed.
-  if (!/^[rs]k_test_/.test(key))
-    throw new Error("This preview only supports Stripe sandbox keys");
-  const config = {
-    origin: required("APP_ORIGIN"),
-    accountId: required("STRIPE_ACCOUNT_ID"),
-    priceId: required("STRIPE_PRICE_ID"),
-    livemode: false,
-  };
+  const { key, config, portalConfiguration } = stripeSettings(process.env);
+  const signingSecret = required("STRIPE_WEBHOOK_SECRET");
+  if (!signingSecret.startsWith("whsec_"))
+    throw new Error("A Stripe endpoint signing secret is required");
   const url = required("BILLING_DATABASE_URL");
   if (
     [process.env.APP_DATABASE_URL, process.env.AUTH_DATABASE_URL].includes(url)
@@ -46,7 +42,7 @@ async function initialise() {
   const gateway = new StripeGateway(
     stripeClient(key),
     config,
-    required("STRIPE_PORTAL_CONFIGURATION_ID"),
+    portalConfiguration,
   );
   const db = new Kysely<Record<string, never>>({
     dialect: new PostgresDialect({
@@ -65,7 +61,8 @@ async function initialise() {
       assertRuntimeRole(db, "cgt_billing"),
       gateway.validate(),
     ]);
-    const billing = new Billing(db, gateway, config);
+    const billing = new Billing(db, gateway, config,
+      config.livemode ? resendContractMailer(required("RESEND_API_KEY"), required("AUTH_EMAIL_FROM")) : undefined);
     const application = await runtime();
     return {
       billing,
@@ -76,11 +73,12 @@ async function initialise() {
         (identity, bucket) =>
           application.workspace.consumeRequest(identity, bucket),
         (identity, target, purpose) => application.workspace.selectedReportIssue(identity, target, purpose),
+        () => !config.livemode || !!productionTrader(),
       ),
       webhook: createStripeWebhookHandler(
         billing,
         gateway,
-        required("STRIPE_WEBHOOK_SECRET"),
+        signingSecret,
       ),
     };
   } catch (error) {

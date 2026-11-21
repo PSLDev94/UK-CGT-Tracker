@@ -123,6 +123,42 @@ describe("billing ownership, retries and reconciliation", () => {
     expect(s.gateway.createCheckout).toHaveBeenCalledTimes(1);
     expect((await s.billing.status(s.identity)).entitled).toBe(false);
   });
+  it("keeps new checkout closed when the seller is unavailable while status and the existing portal work", async () => {
+    const s = await setup();
+    await s.billing.checkout(s.identity);
+    const readSession = async () => ({
+      user: { id: s.identity.ownerId, emailVerified: true },
+      session: { expiresAt: new Date(Date.now() + 3600000) },
+    });
+    const handler = createBillingHandler(s.billing, readSession, config.origin,
+      async () => {}, async () => null, () => false);
+    const post = (action: string) => handler(new Request(config.origin + "/api/v2/billing", {
+      method: "POST", headers: { "content-type": "application/json", origin: config.origin },
+      body: JSON.stringify({ action }),
+    }));
+    expect((await post("checkout")).status).toBe(503);
+    expect((await post("status")).status).toBe(200);
+    expect((await post("portal")).status).toBe(200);
+    expect(s.gateway.createCheckout).toHaveBeenCalledTimes(1);
+  });
+  it.each([{}, { year: "2024-25", format: "evidence" }])("requires an explicit start request at every live checkout entry point, including retry, %j", async (target) => {
+    const s = await setup();
+    const live = new Billing(database.db, s.gateway, { ...config, livemode: true });
+    const handle = createBillingHandler(live, async () => ({ user: { id: s.identity.ownerId, emailVerified: true },
+      session: { expiresAt: new Date(Date.now() + 60000) } }), config.origin, async () => {}, async () => null);
+    const post = (choice: object) => handle(new Request(config.origin + "/api/v2/billing", {
+      method: "POST", headers: { origin: config.origin, "content-type": "application/json" },
+      body: JSON.stringify({ action: "checkout", ...target, ...choice }),
+    }));
+    for (const choice of [{}, { immediateAccess: false }, { immediateAccess: "yes" }]) {
+      expect((await post(choice)).status).toBe(400);
+    }
+    expect(s.gateway.createCustomer).not.toHaveBeenCalled();
+    expect((await post({ immediateAccess: true })).status).toBe(200);
+    expect((await post({})).status).toBe(400);
+    expect((await post({ immediateAccess: true })).status).toBe(200);
+    expect(s.gateway.createCheckout).toHaveBeenCalledTimes(1);
+  });
   it("does not accept forged identities or let a customer select another account/price/redirect", async () => {
     const s = await setup();
     await expect(
@@ -347,6 +383,51 @@ describe("billing ownership, retries and reconciliation", () => {
       type: "customer.subscription.updated",
     });
     expect((await s.billing.status(s.identity)).entitled).toBe(false);
+  });
+  it("retries first-invoice confirmation separately from entitlement and sends once per mapped live invoice", async () => {
+    const s = await setup();
+    const send = vi.fn().mockRejectedValueOnce(new Error("Mail unavailable")).mockResolvedValue(undefined);
+    const live = new Billing(database.db, s.gateway, { ...config, livemode: true }, send);
+    await expect(live.checkout(s.identity)).rejects.toMatchObject({ code: "IMMEDIATE_ACCESS_REQUEST_REQUIRED" });
+    await live.checkout(s.identity, true);
+    s.state.subscriptions = [active()];
+    const contract = {
+      invoiceId: "in_contract_retry", reference: "EX-01", recipient: "buyer@example.test",
+      paidAt: "2026-01-10T12:31:00.000Z", text: "Terms as originally issued",
+    };
+    const event = { id: "evt_contract_retry", type: "invoice.paid", customerId: s.customerId, contract };
+    await expect(live.event({ ...event, customerId: "cus_unmapped" })).rejects.toThrow("verified customer mapping");
+    expect((await s.billing.event(event)).outcome).toBe("unmapped");
+    expect(send).not.toHaveBeenCalled();
+    await expect(live.event(event)).rejects.toThrow("Mail unavailable");
+    expect((await live.reportAccess(s.identity)).entitled).toBe(true);
+    expect((await live.event(event)).outcome).toBe("duplicate");
+    await live.event({ ...event, id: "evt_second_for_same_invoice" });
+    expect(send.mock.calls).toEqual([[contract], [contract]]);
+
+    const other = { ...contract, invoiceId: "in_during_outage" };
+    vi.mocked(s.gateway.subscriptions).mockRejectedValueOnce(new Error("Stripe lookup unavailable"));
+    const failedLookup = { ...event, id: "evt_during_outage", contract: other };
+    await expect(live.event(failedLookup)).rejects.toThrow("Stripe lookup unavailable");
+    expect(send).toHaveBeenLastCalledWith(other);
+    await live.event(failedLookup);
+    expect(send).toHaveBeenCalledTimes(3);
+  });
+  it("holds a delivery with an ambiguous old attempt for review before attempting a second email", async () => {
+    const s = await setup();
+    const send = vi.fn().mockResolvedValue(undefined);
+    const live = new Billing(database.db, s.gateway, { ...config, livemode: true }, send);
+    await live.checkout(s.identity, true);
+    const invoiceId = "in_contract_old";
+    await query(database.db,
+      `INSERT INTO cgt.stripe_events(stripe_account_id,livemode,event_id,event_type,processed_at)
+       VALUES($1,true,$2,'cgt.contract_started',now()-interval '25 hours')`,
+      [config.accountId, "contract-start:" + invoiceId]);
+    const event = { id: "evt_old_contract", type: "invoice.paid", customerId: s.customerId,
+      contract: { invoiceId, reference: "EX-02", recipient: "buyer@example.test",
+        paidAt: "2026-01-10T12:31:00.000Z", text: "Original terms" } };
+    await expect(live.event(event)).rejects.toThrow("delivery reconciliation");
+    expect(send).not.toHaveBeenCalled();
   });
   it("retains risk holds across later paid events and never maps unknown customers by metadata/email", async () => {
     const s = await setup();

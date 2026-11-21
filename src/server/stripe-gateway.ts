@@ -1,4 +1,6 @@
 import { ANNUAL_REPORT_PRICE_PENCE } from "../domain/reports/access";
+import { contractTitle, invoiceContractText } from "../domain/reports/subscription-terms";
+import { productionTrader } from "./public-site";
 import Stripe from "stripe";
 import { createHash } from "node:crypto";
 import type {
@@ -43,24 +45,34 @@ export class StripeGateway implements BillingGateway {
     readonly client: Stripe,
     private readonly config: BillingConfig,
     private readonly portalConfiguration: string,
+    private readonly invoiceTerms = () => {
+      const trader = productionTrader();
+      if (!trader) throw new Error("Live checkout requires seller disclosures");
+      return invoiceContractText(trader);
+    },
   ) {}
   async validate() {
     const [account, price] = await Promise.all([
-      this.client.accounts.retrieve(this.config.accountId),
+      this.client.accounts.retrieve(null),
       this.client.prices.retrieve(this.config.priceId, { expand: ["product"] }),
     ]);
     if (
       account.id !== this.config.accountId ||
+      (this.config.livemode && !account.charges_enabled) ||
+      price.id !== this.config.priceId ||
       price.livemode !== this.config.livemode ||
       !price.active ||
       price.type !== "recurring" ||
       price.currency !== "gbp" ||
       price.unit_amount !== ANNUAL_REPORT_PRICE_PENCE ||
+      price.billing_scheme !== "per_unit" ||
+      price.transform_quantity !== null ||
       price.recurring?.interval !== "year" ||
       price.recurring.interval_count !== 1 ||
       price.recurring.usage_type !== "licensed" ||
       typeof price.product === "string" ||
       price.product.deleted ||
+      price.product.livemode !== this.config.livemode ||
       !price.product.active
     )
       throw new Error("Unexpected Stripe account or price configuration");
@@ -70,9 +82,11 @@ export class StripeGateway implements BillingGateway {
     if (
       !portal.active ||
       portal.livemode !== this.config.livemode ||
-      !portal.features.subscription_cancel.enabled
+      (this.config.livemode && !portal.features.invoice_history?.enabled) ||
+      !portal.features.subscription_cancel.enabled ||
+      portal.features.subscription_cancel.mode !== "at_period_end"
     )
-      throw new Error("Stripe portal cancellation must be available");
+      throw new Error("Stripe portal configuration does not support the required billing features");
   }
   async createCustomer(key: string) {
     const customer = await this.client.customers.create(
@@ -96,6 +110,8 @@ export class StripeGateway implements BillingGateway {
       if (subscriptions.length >= 1000)
         throw new Error("Subscription history requires review");
       this.mode(subscription.livemode);
+      if (objectId(subscription.customer) !== customerId)
+        throw new Error("Unexpected subscription customer");
       const item = subscription.items.data[0];
       const eligible =
         subscription.items.data.length === 1 &&
@@ -115,6 +131,7 @@ export class StripeGateway implements BillingGateway {
         this.mode(invoice.livemode);
         paid =
           invoice.status === "paid" &&
+          invoice.currency === "gbp" &&
           invoice.amount_paid > 0 &&
           invoice.amount_remaining === 0 &&
           objectId(invoice.customer) === customerId &&
@@ -177,8 +194,10 @@ export class StripeGateway implements BillingGateway {
     }
     return subscriptions;
   }
-  private session(session: Stripe.Checkout.Session): CheckoutState {
+  private session(session: Stripe.Checkout.Session, customerId: string): CheckoutState {
     this.mode(session.livemode);
+    if (session.mode !== "subscription" || objectId(session.customer) !== customerId)
+      throw new Error("Unexpected Checkout subscription or customer");
     if (
       session.status !== "open" &&
       session.status !== "expired" &&
@@ -204,6 +223,16 @@ export class StripeGateway implements BillingGateway {
     };
   }
   async createCheckout(customerId: string, key: string) {
+    if (this.config.livemode) {
+      const footer = this.invoiceTerms();
+      const customer = await this.client.customers.update(customerId, {
+        invoice_settings: { footer },
+      }, { idempotencyKey: key + "-terms" });
+      this.mode(customer.livemode);
+      if (customer.id !== customerId || customer.invoice_settings.footer !== footer) {
+        throw new Error("The invoice terms could not be confirmed");
+      }
+    }
     // Stable per-operation label keeps idempotent retries byte-for-byte identical.
     const suffix = [...createHash("sha256").update(key).digest().subarray(0, 8)]
       .map((n) => String.fromCharCode(97 + (n % 26)))
@@ -214,17 +243,22 @@ export class StripeGateway implements BillingGateway {
           mode: "subscription",
           customer: customerId,
           line_items: [{ price: this.config.priceId, quantity: 1 }],
+          ...(this.config.livemode && {
+            currency: "gbp",
+            adaptive_pricing: { enabled: false },
+            subscription_data: { metadata: { cgt_contract: "annual-pdf", cgt_price: this.config.priceId, cgt_access_requested: "immediate" } },
+          }),
           integration_identifier: `cgt-tracker-${suffix}`,
           success_url: `${this.config.origin}/billing?checkout=returned`,
           cancel_url: `${this.config.origin}/billing?checkout=cancelled`,
-          // Tax configuration is intentionally not changed until business registration is confirmed.
         },
         { idempotencyKey: key },
       ),
+      customerId,
     );
   }
-  async checkout(id: string) {
-    return this.session(await this.client.checkout.sessions.retrieve(id));
+  async checkout(id: string, customerId: string) {
+    return this.session(await this.client.checkout.sessions.retrieve(id), customerId);
   }
   async portal(customerId: string) {
     const session = await this.client.billingPortal.sessions.create({
@@ -232,7 +266,8 @@ export class StripeGateway implements BillingGateway {
       configuration: this.portalConfiguration,
       return_url: `${this.config.origin}/billing?checkout=portal`,
     });
-    if (new URL(session.url).origin !== "https://billing.stripe.com")
+    this.mode(session.livemode);
+    if (session.customer !== customerId || new URL(session.url).origin !== "https://billing.stripe.com")
       throw new Error("Unexpected portal destination");
     return session.url;
   }
@@ -287,6 +322,22 @@ export class StripeGateway implements BillingGateway {
       object.object === "checkout.session"
     )
       customerId = objectId(object.customer);
-    return { id: event.id, type: event.type, customerId, riskReason };
+    const parsed: BillingEvent = { id: event.id, type: event.type, customerId, riskReason };
+    if (this.config.livemode && event.type === "invoice.paid" && object.object === "invoice" &&
+        object.billing_reason === "subscription_create" && object.status === "paid" && object.currency === "gbp") {
+      const details = object.parent?.subscription_details;
+      if (details?.metadata?.cgt_contract === "annual-pdf" && details.metadata.cgt_price === this.config.priceId) {
+        if (!customerId || !object.customer_email || !object.footer?.startsWith(contractTitle))
+          throw new Error("The original invoice terms or buyer address is missing");
+        parsed.contract = {
+          invoiceId: object.id,
+          recipient: object.customer_email,
+          reference: object.number ?? object.id,
+          paidAt: new Date((object.status_transitions.paid_at ?? object.created) * 1000).toISOString(),
+          text: object.footer,
+        };
+      }
+    }
+    return parsed;
   }
 }

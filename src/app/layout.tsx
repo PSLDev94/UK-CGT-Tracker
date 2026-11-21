@@ -1,20 +1,25 @@
 import { connection } from "next/server";
+import { headers } from "next/headers";
+import { isProductionSite, productionOrigin } from "@/server/public-site";
 import { hasPublicSession } from "@/server/public-session";
 import { PublicAccountProvider } from "@/ui/public-account";
 import type { Metadata } from "next";
 import "@fontsource-variable/inter";
 import "./globals.css";
 
-export const metadata: Metadata = {
-  title: {
-    default: "CGT Tracker · Know how your share gains add up",
-    template: "%s · CGT Tracker",
-  },
-  description:
-    "Review your trading records and trace UK share gains across your taxable broker accounts. CGT Tracker relaunch preview.",
-  metadataBase: new URL("https://www.cgttracker.com"),
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const indexable = (await headers()).get("x-cgt-public-index") === "allow";
+  const description = "Review your trading records and trace UK share gains across your taxable broker accounts.";
+  return {
+    title: {
+      default: "CGT Tracker · Know how your share gains add up",
+      template: "%s · CGT Tracker",
+    },
+    description: isProductionSite() ? description : description + " CGT Tracker relaunch preview.",
+    metadataBase: new URL(productionOrigin),
+    robots: { index: indexable, follow: indexable },
+  };
+}
 
 export default async function RootLayout({
   children,

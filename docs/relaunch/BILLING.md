@@ -1,6 +1,6 @@
 # Billing integration
 
-The relaunch uses the existing Stripe accounts and recurring prices. This implementation is sandbox-only: the runtime rejects live keys. Existing live customers and subscriptions are untouched. Verified ownership reconciliation of legacy customers is still required before enabling live checkout; email matching alone is not sufficient.
+Staging uses the existing Stripe test account. Production uses the original live Stripe account and its £49 annual price. A shared server-side configuration check isolates the two environments for both the web service and the reconciliation worker. Stripe customer IDs are linked to a verified application owner. An email match never establishes that link.
 
 ## Provider contract
 
@@ -18,7 +18,7 @@ Customer and Checkout operation UUIDs are committed before provider calls. Owner
 
 Webhook receipts and state changes commit together. Failure leaves the event retryable. Duplicates are ignored; delayed events fetch the customer's current subscriptions rather than replaying old payload state. All subscription pages are read, with a safety cap that fails closed. Browser status refresh also reconciles current state. The success URL grants no access.
 
-For sandbox qualification, entitlement requires exactly one current subscription for the configured price/quantity, `active` status, a future period end, a paid current invoice belonging to that customer/subscription and current successful, non-refunded, undisputed payment evidence. Pending, overdue, unpaid, paused, trial and ambiguous subscriptions do not grant paid access. Scheduled cancellation keeps access through the paid period, capped at an earlier explicit cancellation date. Flexible billing portal cancellations use `cancel_at` even when `cancel_at_period_end` is false; the gateway normalizes both representations. See [Stripe billing-mode differences](https://docs.stripe.com/billing/subscriptions/billing-mode/compare#cancellations-in-the-customer-portal). Refund/dispute/fraud events place a persistent review hold, including after a later paid event; no automatic refund or cancellation is performed. Partial refunds also require review. These conservative rules must be reviewed with the business policy before live release.
+Entitlement requires exactly one current subscription for the configured price/quantity, `active` status, a future period end, a paid current invoice belonging to that customer/subscription and current successful, non-refunded, undisputed payment evidence. Pending, overdue, unpaid, paused, trial and ambiguous subscriptions do not grant paid access. Scheduled cancellation keeps access through the paid period, capped at an earlier explicit cancellation date. Flexible billing portal cancellations use `cancel_at` even when `cancel_at_period_end` is false; the gateway normalizes both representations. See [Stripe billing-mode differences](https://docs.stripe.com/billing/subscriptions/billing-mode/compare#cancellations-in-the-customer-portal). Refund/dispute/fraud events place a persistent review hold, including after a later paid event; no automatic refund or cancellation is performed. Partial refunds also require review. These conservative rules must be reviewed with the business policy before live release.
 
 The synchronous webhook reconciler uses bounded provider timeouts and returns failure for retry. The hourly operator job described below reconciles stale accounts independently of browser visits. Durable queue processing and alerting remain production scale/recovery work. PDF downloads reconcile entitlement on the server; billing does not lock customers out of their investment records or CSV evidence.
 
@@ -32,21 +32,30 @@ The synchronous webhook reconciler uses bounded provider timeouts and returns fa
 
 ## Runtime configuration
 
-Add to staging web only after migration `0006_billing_checkout.sql`:
+Configure the web service after applying the database migrations. Use distinct production database credentials, API key and webhook signing secret.
 
 | Variable | Value/purpose |
 | --- | --- |
-| `BILLING_ENABLED` | `true` enables sandbox billing |
-| `BILLING_DATABASE_URL` | Reference to the setup job's separate billing login |
-| `STRIPE_SECRET_KEY` | Existing restricted sandbox key, stored only in Railway |
-| `STRIPE_ACCOUNT_ID` | Sandbox account above |
-| `STRIPE_PRICE_ID` | Existing sandbox annual price above |
-| `STRIPE_PORTAL_CONFIGURATION_ID` | Existing sandbox portal configuration above |
+| `BILLING_ENABLED` | `true` enables billing on the web service |
+| `STRIPE_MODE` | `live` in Railway production with `APP_ORIGIN=https://www.cgttracker.com`. Test deployments default to `test`. Mismatched environment names, origins or key prefixes stop initialization. |
+| `BILLING_DATABASE_URL` | Billing-only login for this environment |
+| `STRIPE_SECRET_KEY` | Restricted key for this environment’s Stripe account, stored in Railway |
+| `STRIPE_ACCOUNT_ID` | In production use `acct_1TKoVLJO9SvFmbaJ`. In staging use the sandbox account above. |
+| `STRIPE_PRICE_ID` | In production use the existing annual price `price_1TKoc2JO9SvFmbaJernhSETZ`. In staging use the sandbox annual price above. |
+| `STRIPE_PORTAL_CONFIGURATION_ID` | Active configuration in the same mode, with cancellation at period end and, in production, downloadable invoice history. |
 | `STRIPE_WEBHOOK_SECRET` | New endpoint's signing secret, never in Git or logs |
 
-The key needs account, product/price, portal configuration, subscriptions, invoices, invoice payments, payment intents and charges read permissions; Customer, Checkout Session and Portal Session creation permissions. Use the narrowest available permissions. Startup validates account identity, price currency/amount/interval/mode and portal cancellation. The ordinary readiness endpoint remains independent of optional billing.
+The key needs account, product/price, portal configuration, subscriptions, invoices, invoice payments, payment intents and charges read permissions; Customer, Checkout Session and Portal Session creation permissions. Use the narrowest available permissions. Startup validates account identity, price currency/amount/interval/mode and portal cancellation. The ordinary readiness endpoint remains independent of billing. An unauthenticated POST with a same-origin Origin header and JSON payload `{"action":"status"}` to `/api/v2/billing` returns `401 SIGN_IN_REQUIRED` after billing initialization succeeds. A setup failure returns an error before authentication. An unsigned POST to `/api/v2/stripe/webhook` returns `400 INVALID_SIGNATURE` when the handler is initialized. Neither check creates a payment.
 
 The owner confirmed PSL Digital is not VAT-registered on 17 November 2026. Retain £49/year with no VAT added. Automatic tax is not enabled and no live price is changed.
+
+### Live purchase confirmation
+
+Production requires the public seller identity, geographical address and any applicable registration disclosures. Include the verified business name in `TRADER_LEGAL_NAME`, the address in `TRADER_GEOGRAPHIC_ADDRESS` and any applicable registry, registration number and place of registration in `TRADER_REGISTRATION_DETAILS`. Before the first sale, verify the service terms and support address on the canonical website. The billing screen requires the buyer to request immediate PDF access while retaining their statutory cancellation rights. The request is recorded on the subscription. The public terms and invoice wording share one source. [UK distance selling](https://www.gov.uk/online-and-distance-selling-for-businesses/distance-selling) and [consumer contract confirmation](https://www.legislation.gov.uk/uksi/2013/3134/regulation/16).
+
+The web credential needs Customer updates as well as creation. Before opening a live checkout, the app sets and verifies the buyer's invoice footer. The first paid invoice is downloadable from the portal and supplies the frozen wording for a separate transactional confirmation email, including its invoice reference and date. The web service uses its verified authentication sender and Resend credential for this message. Renewals, test invoices and unrelated products do not trigger the purchase email. [Stripe invoice customisation](https://docs.stripe.com/invoicing/customize) and [portal invoice history](https://docs.stripe.com/customer-management).
+
+If a tagged invoice has lost its local customer mapping, resolve the account using the ownership procedure above and replay its signed delivery in Stripe. If a confirmation fails, the webhook returns an error for retry independently of report access. The billing database records a start and completion per invoice. The app reuses the invoice-specific Resend idempotency key for up to 23 hours. If an older attempt has no completion record, inspect the original invoice and the provider's email logs for the recipient, timestamp and reference before sending anything. If acceptance is confirmed, retain that evidence. If the provider confirms the email was never accepted, submit the original dated invoice terms once and retain the provider message ID. An authorised operator then records the completion marker (`contract:<invoice ID>`, event type `cgt.contract_confirmation`) for the verified live account in `cgt.stripe_events` and replays the failed event. Leave ambiguous cases for provider investigation. [Resend idempotency window](https://resend.com/docs/dashboard/emails/idempotency-keys).
 
 ## Verification
 
@@ -61,9 +70,9 @@ On 16 November 2026, the real staging application completed sandbox Checkout, re
 
 PDF reports call `Billing.status` server-side and reconcile current provider state on every download. CSV evidence remains available without a subscription. An unavailable provider or a risk hold never grants PDF access.
 
-The portable image includes `jobs/reconcile-billing.cjs`. Run it hourly with only BILLING_DATABASE_URL, STRIPE_SECRET_KEY, STRIPE_ACCOUNT_ID, STRIPE_PRICE_ID, STRIPE_PORTAL_CONFIGURATION_ID and APP_ORIGIN. It validates the billing-only role and sandbox account, processes stale accounts in bounded batches, retains risk holds, reports counts without customer details, and exits non-zero on failure/incomplete traversal. No public route exposes this operator action.
+Run the portable image’s `jobs/reconcile-billing.cjs` hourly in each environment with BILLING_DATABASE_URL, STRIPE_SECRET_KEY, STRIPE_ACCOUNT_ID, STRIPE_PRICE_ID, STRIPE_PORTAL_CONFIGURATION_ID, APP_ORIGIN and the corresponding STRIPE_MODE. The worker reads Railway’s environment name and does not need the endpoint signing secret. It validates the billing-only role and configured account, processes stale accounts in bounded batches, retains risk holds, reports counts without customer details, and exits non-zero on failure/incomplete traversal. No public route exposes this operator action.
 
-Owner confirmed PSL Digital is not VAT-registered, 17 November 2026. Retain £49/year with no VAT added; automatic tax remains off. Live keys stay locked pending production qualification and legacy-customer ownership reconciliation.
+The production Checkout Session fixes the charge currency to GBP and disables adaptive pricing. The billing status supplies the display mode to the page. Test-payment copy appears only for verified test mode. New live Checkout requests also require the seller disclosures configured for the public pages. The existing billing portal, reconciliation and signed webhook handlers remain available independently of that new-purchase check.
 
 
 ### 17 November provider inventory and additional test setup
@@ -83,3 +92,8 @@ A second unmapped/no-email customer `cus_Ve4HG1rbFxEtHz` exercised `pm_card_auth
 Read-only inspection of the same sandbox found the original subscription and invoice events for an annual renewal, a failed renewal, successful recovery, a 3DS challenge, a rejected attempt and a successful retry. The test fixture contains the recorded event types, subscription states, invoice statuses, billing reasons and amounts. Customer IDs and payment details are omitted. [Recorded fields](../../tests/fixtures/billing-sandbox.json)
 
 The PostgreSQL 18 test replays those states through the Stripe SDK's HTTP transport with fixture payment objects and locally signed deliveries. It creates a mapped customer through Checkout, imports the £5.25 Trading 212 example using the application database role and checks the actual summary PDF, evidence PDF and CSV after each transition. Both PDFs unlock after authentication or renewal succeeds and return HTTP 402 for incomplete authentication and overdue renewal. The CSV remains downloadable throughout. The test also covers duplicate and late events, access until scheduled cancellation, and a simulated dispute during a subscription lookup outage. The sandbox event feed had no dispute for this rehearsal. A hosted provider-delivered dispute and a full mapped-account test-clock run remain staging acceptance items. [Mapped report qualification](../../qualification/billing-lifecycle.ts)
+
+
+### Production inventory, 21 November 2026
+
+A read-only check of the original live account returned zero subscriptions across all statuses, with no subsequent page. The original active recurring price was £49 per year. If restoring from an earlier database or reopening sales after the live account changes, inventory live subscriptions and existing database mappings together before taking orders. Preserve active subscriptions and verify ownership through the account-access process if a mapping is missing. Do not import staging customer IDs. Existing mapped accounts reuse an open checkout session only after checking its customer and mode. Any nonterminal subscription blocks another purchase.

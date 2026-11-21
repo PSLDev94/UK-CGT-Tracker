@@ -5,6 +5,7 @@ import { ReportPricing } from "@/components/report-pricing";
 import { PublicFooter } from "@/components/public-footer";
 import { PublicNav } from "@/components/public-nav";
 import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
+import { publicBillingMode } from "@/server/public-site";
 
 export const metadata: Metadata = {
   title: `Pricing | ${ANNUAL_REPORT_PRICE} per year`,
@@ -13,6 +14,7 @@ export const metadata: Metadata = {
 };
 
 export default async function PricingPage() {
+  const mode = publicBillingMode();
   return (
     <div className={styles.page}>
       <PublicNav />
@@ -29,10 +31,13 @@ export default async function PricingPage() {
             Import and calculate for free. Download PDF reports for {ANNUAL_REPORT_PRICE} per year.
           </p>
         </div>
-        <ReportPricing />
+        <ReportPricing mode={mode} />
         <p className={styles.meta}>
-          The subscription renews annually until cancelled. Checkout uses
-          Stripe test payments in this preview. PDF access covers reports on
+          The subscription renews annually until cancelled.{" "}
+          {mode === "preview" && "Checkout uses Stripe test payments in this preview. "}
+          {mode === "live" && "Stripe handles payments and subscription management. "}
+          {mode === "unavailable" && "New subscriptions are currently unavailable. "}
+          PDF access covers reports on
           the records you supply. Arrange independent tax advice separately if you need it.
           {" "}<Link className="text-blue-700 underline" href="/terms">Read the service terms</Link>.
         </p>

@@ -65,6 +65,7 @@ export function BillingPanel({
   const [busy, setBusy] = useState<Action | null>("status");
   const [error, setError] = useState("");
   const [signIn, setSignIn] = useState(false);
+  const [immediateAccess, setImmediateAccess] = useState(false);
   const controller = useRef<AbortController | null>(null);
   const destination = target ?? (outcome ? status?.returnReport : null);
   const targetYear = target?.year,
@@ -117,7 +118,7 @@ export function BillingPanel({
         } else {
           const result = await api<{ url: string }>(
             "/api/v2/billing",
-            { action, tab, ...report },
+            { action, tab, ...report, ...(action === "checkout" && immediateAccess && { immediateAccess }) },
             request.signal,
           );
           const url = new URL(result.url);
@@ -165,7 +166,7 @@ export function BillingPanel({
         }
       }
     },
-    [acceptStatus, showError, statusTarget],
+    [acceptStatus, immediateAccess, showError, statusTarget],
   );
   useEffect(() => {
     const request = new AbortController();
@@ -220,9 +221,9 @@ export function BillingPanel({
           PDF access does not include a tax adviser’s review.{" "}
           <Link className="text-blue-700 underline" href="/terms">Service terms and support</Link>.
         </p>
-        <p className="caption">
-          Staging uses Stripe test payments. No real money is charged.
-        </p>
+        {status?.testMode && (
+          <p className="caption">Staging uses Stripe test payments. No real money is charged.</p>
+        )}
       </div>
     </div>
   );
@@ -311,6 +312,9 @@ export function BillingPanel({
             {status.entitled && (
               <Notice tone="success">Your PDF access is active.</Notice>
             )}
+            {status.canManage && status.testMode === false && (status.entitled || status.status === "canceled") && (
+              <p>To save a copy of your invoice and purchase terms, open Manage subscription and choose your invoice in billing history.</p>
+            )}
             {status.periodEnd && (
               <p>
                 {status.cancelAtPeriodEnd
@@ -351,14 +355,20 @@ export function BillingPanel({
                 </Notice>
               )
             )}
+            {canCheckout && status.testMode === false && (
+              <label className="checkbox-label">
+                <input type="checkbox" checked={immediateAccess} onChange={(event) => setImmediateAccess(event.target.checked)} />
+                <span>I want PDF access to start as soon as I pay. I keep my 14-day right to cancel.</span>
+              </label>
+            )}
             <div className="actions">
               {canCheckout && (
                 <Button
                   busy={busy === "checkout"}
-                  disabled={!!busy}
+                  disabled={!!busy || (status.testMode === false && !immediateAccess)}
                   onClick={() => userAction("checkout", destination)}
                 >
-                  Open test checkout
+                  {status.testMode ? "Open test checkout" : "Continue to Stripe checkout"}
                 </Button>
               )}
               {status.canManage &&

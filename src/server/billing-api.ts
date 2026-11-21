@@ -30,6 +30,7 @@ export function createBillingHandler(
     target: ReportDestination,
     purpose: "purchase" | "download",
   ) => Promise<ReportIssue | null>,
+  checkoutAvailable: () => boolean = () => true,
 ) {
   return async (request: Request) => {
     try {
@@ -46,10 +47,13 @@ export function createBillingHandler(
           ? ["action"]
           : input.action === "status"
             ? ["action", "tab", "year", "format", "returning"]
-            : ["action", "tab", "year", "format"];
+            : input.action === "checkout"
+              ? ["action", "tab", "year", "format", "immediateAccess"]
+              : ["action", "tab", "year", "format"];
       const target = reportDestination(input.year, input.format);
       if (
         ("returning" in input && typeof input.returning !== "boolean") ||
+        ("immediateAccess" in input && typeof input.immediateAccess !== "boolean") ||
         Object.keys(input).some((key) => !allowed.includes(key)) ||
         (("year" in input || "format" in input) && !target) ||
         (input.tab !== undefined &&
@@ -93,11 +97,16 @@ export function createBillingHandler(
         });
       }
       if (input.action === "checkout" || input.action === "portal") {
+        if (input.action === "checkout" && !checkoutAvailable()) {
+          throw new AppError(503, "CHECKOUT_UNAVAILABLE", "New subscriptions are temporarily unavailable. Please try again later.");
+        }
         if (input.action === "checkout" && target) {
           const issue = await selectedReportIssue(identity, target, "purchase");
           if (issue) throw new AppError(409, issue.code, issue.message);
         }
-        const response = privateResponse(await billing[input.action](identity));
+        const response = privateResponse(input.action === "checkout"
+          ? await billing.checkout(identity, input.immediateAccess === true)
+          : await billing.portal(identity));
         if (input.action === "checkout") recordJourney("checkout_opened");
         const value = target ? `${owner}.${target.year}.${target.format}` : "";
         response.headers.append(
