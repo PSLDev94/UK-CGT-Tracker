@@ -23,7 +23,11 @@ export default function Terms() {
         </h1>
         {production ? (
           <>
-            {publicBillingMode() === "unavailable" && <p>New subscriptions are currently unavailable.</p>}
+            {publicBillingMode() === "unavailable" && <>
+              <h2 className="text-xl font-semibold text-gray-900">Your free workspace</h2>
+              <p>Import supported broker files, calculate gains and losses on ordinary shares and download the evidence as a CSV. New PDF subscriptions are currently unavailable.</p>
+              <p>Check your trades, costs and account history against your broker statements. The calculation covers the records you supply. A qualified tax adviser can help with your personal tax liability and filing obligations.</p>
+            </>}
             {trader && <>
               <p>{contractTitle}</p>
               {subscriptionTerms(trader).map(({ heading, text }) => (

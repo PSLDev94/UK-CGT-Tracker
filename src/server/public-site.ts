@@ -19,6 +19,10 @@ export function publicBillingMode(): "live" | "preview" | "unavailable" {
     process.env.BILLING_ENABLED === "true" ? "live" : "unavailable";
 }
 
+export function workspaceBillingEnabled() {
+  return process.env.RAILWAY_ENVIRONMENT_NAME !== "production" || process.env.BILLING_ENABLED === "true";
+}
+
 export function publicSearchHost(host: string | null) {
   return isProductionSite() && host?.toLowerCase() === "www.cgttracker.com";
 }

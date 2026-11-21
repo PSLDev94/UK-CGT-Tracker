@@ -19,6 +19,7 @@ import { adjustment2024Note, adjustment2024Url, confirmedRatePeriods, ratePeriod
 import { SaleAmounts } from "./sale-amounts";
 import { ReportRecovery } from "./report-recovery";
 import { DashboardShell } from "./dashboard-shell";
+import { useSubscriptionSalesOpen, useWorkspaceBillingEnabled } from "./public-account";
 import { calculationSourceHref } from "./disposal-location";
 import styles from "./annual-statement.module.css";
 
@@ -99,6 +100,11 @@ function ReportContents({
   const [error, setError] = useState("");
   const [reloadAttempt, setReloadAttempt] = useState(0);
   const [entitlement, setEntitlement] = useState<BillingStatus | null>(null);
+  const billingEnabled = useWorkspaceBillingEnabled();
+  const salesOpen = useSubscriptionSalesOpen();
+  const recoveringAccess = entitlement && !entitlement.entitled &&
+    (entitlement.needsReview || !["none", "canceled", "incomplete_expired"].includes(entitlement.status));
+  const pdfSalesClosed = !billingEnabled || (!salesOpen && entitlement !== null && !entitlement.entitled && !recoveringAccess);
   const [billingError, setBillingError] = useState("");
   const [lastFeedback, setFeedback] = useState<Feedback | null>(null);
   const feedback = lastFeedback?.year === year ? lastFeedback : null;
@@ -134,7 +140,7 @@ function ReportContents({
     }), [setDefaultYear]);
   useEffect(() => {
     const controller = new AbortController();
-    void checkBilling(controller.signal);
+    if (billingEnabled) void checkBilling(controller.signal);
     void loadOverview(controller.signal).catch((e) => {
       if (!controller.signal.aborted) setError(e.message);
     });
@@ -142,18 +148,18 @@ function ReportContents({
       controller.abort();
       request.current?.abort();
     };
-  }, [checkBilling, loadOverview, reloadAttempt]);
+  }, [billingEnabled, checkBilling, loadOverview, reloadAttempt]);
   const focusedTarget = useRef("");
   useEffect(() => {
     if (!requestedFormat) {
       focusedTarget.current = "";
       return;
     }
-    if (!data || (!entitlement && !billingError)) return;
+    if (!data || (billingEnabled && !entitlement && !billingError)) return;
     const key = year + requestedFormat + (outcome ?? "");
     if (focusedTarget.current === key) return;
     focusedTarget.current = key;
-    document.getElementById(`report-${requestedFormat}`)?.focus();
+    document.getElementById(pdfSalesClosed ? "report-pdf-availability" : `report-${requestedFormat}`)?.focus();
   }, [
     requestedFormat,
     year,
@@ -161,6 +167,8 @@ function ReportContents({
     data,
     entitlement,
     billingError,
+    billingEnabled,
+    pdfSalesClosed,
   ]);
   const calculation = data?.calculations.find((c) => c.tax_year === year);
   const staleYears = data?.staleReportYears ?? [];
@@ -276,8 +284,6 @@ function ReportContents({
   const evidenceProblem = calculation?.evidenceIssue === undefined && result
     ? evidenceIssue(result)
     : calculation?.evidenceIssue;
-  const recoveringAccess = entitlement && !entitlement.entitled &&
-    (entitlement.needsReview || !["none", "canceled", "incomplete_expired"].includes(entitlement.status));
   const recoveryCard = requestedFormat === "evidence" && !evidenceProblem ? "evidence" : "summary";
   return (
     <div className={styles.page}>
@@ -404,7 +410,10 @@ function ReportContents({
                 {purchaseBlock?.code === "REPORT_INCOMPLETE" && !entitlement?.entitled && !draft && (
                   <Notice tone="warning">{purchaseBlock.message}{" "}<Link className={linkClass} href={calculationPath}>Review calculation</Link></Notice>
                 )}
-                {calculation && !draft && (!purchaseBlock || entitlement?.entitled) && (
+                {pdfSalesClosed && !draft && (
+                  <p id="report-pdf-availability" tabIndex={-1}>New PDF subscriptions are currently closed.</p>
+                )}
+                {!pdfSalesClosed && calculation && !draft && (!purchaseBlock || entitlement?.entitled) && (
                   <div role="group" aria-label="PDF reports" className="flex flex-wrap items-start gap-x-3 gap-y-2">
                     {cards.map((card) => {
                       const target = { year, format: card.kind };
@@ -519,7 +528,7 @@ function ReportContents({
                     })}
                   </div>
                 )}
-                {!draft && (!purchaseBlock || entitlement?.entitled) && (
+                {!pdfSalesClosed && !draft && (!purchaseBlock || entitlement?.entitled) && (
                   <details className="text-sm">
                     <summary>What each PDF includes</summary>
                     <dl className="mt-2 space-y-2">

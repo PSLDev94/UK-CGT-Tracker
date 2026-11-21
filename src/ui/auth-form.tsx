@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useHydrated } from "./use-hydrated";
+import { useSubscriptionSalesOpen } from "./public-account";
 import { authHref, brokerUploadDestination, safeReturnPath } from "./return-path";
 import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
 import { authApi, ApiError } from "./api";
@@ -85,6 +86,7 @@ export function AuthForm({
   verificationNotice?: "failed" | "complete";
 }) {
   const router = useRouter();
+  const subscriptionsOpen = useSubscriptionSalesOpen();
   const ready = useHydrated();
   const destination = safeReturnPath(nextPath);
   const broker = brokerUploadDestination(destination);
@@ -247,7 +249,11 @@ export function AuthForm({
     );
   }
   let description = copy[mode].description;
-  if (annualBilling && (mode === "sign-in" || mode === "sign-up")) {
+  if (!subscriptionsOpen && mode === "sign-up" && !broker) {
+    description = "Verify your email to upload broker trades, calculate gains and losses, and export your evidence as a free CSV.";
+  } else if (!subscriptionsOpen && annualBilling && mode === "sign-in") {
+    description = "Sign in to manage your existing subscription.";
+  } else if (annualBilling && (mode === "sign-in" || mode === "sign-up")) {
     description = `Continue to billing for annual PDF reports (${ANNUAL_REPORT_PRICE} per year). You’ll review the subscription in checkout.`;
   } else if (broker && mode === "sign-up") {
     description = `Verify your email, then sign in to upload your ${broker.name} CSV and calculate for free.`;

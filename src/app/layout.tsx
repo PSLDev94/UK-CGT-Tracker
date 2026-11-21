@@ -1,6 +1,6 @@
 import { connection } from "next/server";
 import { headers } from "next/headers";
-import { isProductionSite, productionOrigin } from "@/server/public-site";
+import { isProductionSite, productionOrigin, publicBillingMode, workspaceBillingEnabled } from "@/server/public-site";
 import { hasPublicSession } from "@/server/public-session";
 import { PublicAccountProvider } from "@/ui/public-account";
 import type { Metadata } from "next";
@@ -31,7 +31,8 @@ export default async function RootLayout({
         <a className="skip-link" href="#main">
           Skip to content
         </a>
-        <PublicAccountProvider signedIn={await hasPublicSession()}>
+        <PublicAccountProvider signedIn={await hasPublicSession()}
+          subscriptionsOpen={publicBillingMode() !== "unavailable"} billingEnabled={workspaceBillingEnabled()}>
           {children}
         </PublicAccountProvider>
       </body>

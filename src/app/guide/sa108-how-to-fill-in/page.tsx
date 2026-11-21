@@ -1,6 +1,7 @@
 import styles from "@/components/public-pages.module.css";
 import Link from "next/link";
 import { Metadata } from "next";
+import { publicBillingMode } from "@/server/public-site";
 import { sa108Edition } from "@/domain/reports/filing-guidance";
 import { GuideLayout } from "@/components/guide-layout";
 import { CgtReportingGuidance } from "@/components/cgt-reporting-guidance";
@@ -112,9 +113,9 @@ export default function SA108GuidePage() {
 
       <h2>How CGT Tracker Helps with SA108</h2>
       <p>
-        Download the disposal and share-matching evidence as a free CSV. The
-        annual subscription also includes a summary PDF and a detailed evidence
-        PDF. Use these records with the current HMRC form and notes for your
+        Download the disposal and share-matching evidence as a free CSV.{" "}
+        {publicBillingMode() !== "unavailable" && "The annual subscription also includes a summary PDF and a detailed evidence PDF. "}
+        Use these records with the current HMRC form and notes for your
         tax year to complete your own return.
       </p>
 

@@ -16,6 +16,7 @@ import type { ReportIssue } from "@/domain/reports/eligibility";
 import type { BillingStatus } from "@/server/billing";
 import { api, ApiError } from "./api";
 import { Button, Notice } from "./primitives";
+import { useSubscriptionSalesOpen, useWorkspaceBillingEnabled } from "./public-account";
 
 const labels: Record<string, string> = {
   none: "No subscription",
@@ -59,6 +60,29 @@ export function BillingPanel({
 }: {
   target: ReportDestination | null;
   outcome: Outcome;
+}) {
+  const billingEnabled = useWorkspaceBillingEnabled();
+  const salesOpen = useSubscriptionSalesOpen();
+  if (!billingEnabled) {
+    return (
+      <div className={styles.page}>
+        <WorkspaceMasthead title="Your subscription">New PDF subscriptions are currently closed.</WorkspaceMasthead>
+        <section className={styles.billingStatus} aria-label="Report access">
+          <p>Your saved calculations and CSV evidence are available in Reports.</p>
+          <Link className="button secondary" href={target ? `/dashboard/reports?year=${target.year}#report-csv` : "/dashboard/reports"}>
+            {target ? `View ${target.year} reports` : "View reports"}
+          </Link>
+        </section>
+      </div>
+    );
+  }
+  return <SubscriptionBilling target={target} outcome={outcome} salesOpen={salesOpen} />;
+}
+
+function SubscriptionBilling({ target, outcome, salesOpen }: {
+  target: ReportDestination | null;
+  outcome: Outcome;
+  salesOpen: boolean;
 }) {
   const router = useRouter();
   const [status, setStatus] = useState<Status | null>(null);
@@ -200,6 +224,7 @@ export function BillingPanel({
   const awaiting =
     outcome === "returned" && status?.status === "none" && !status.needsReview;
   const canCheckout =
+    salesOpen &&
     status &&
     (!destination ||
       (status.checkedReport?.year === destination.year &&
@@ -208,7 +233,7 @@ export function BillingPanel({
     !awaiting &&
     !status.needsReview &&
     ["none", "canceled", "incomplete_expired"].includes(status.status);
-  const showPlanFirst = status?.status === "none" && !status.needsReview && !awaiting;
+  const showPlanFirst = salesOpen && status?.status === "none" && !status.needsReview && !awaiting;
   const plan = (
     <div className={styles.plan}>
       <p className={styles.price}>
@@ -230,7 +255,8 @@ export function BillingPanel({
   return (
     <div className={styles.page}>
       <WorkspaceMasthead title="Your subscription">
-        {showPlanFirst && "Download PDF summaries and matching evidence with CGT Tracker annual reports."}
+        {showPlanFirst ? "Download PDF summaries and matching evidence with CGT Tracker annual reports."
+          : !salesOpen && !status?.entitled ? "New PDF subscriptions are currently closed." : null}
       </WorkspaceMasthead>
       {showPlanFirst && plan}
       <section aria-label="Subscription status" className={styles.billingStatus}>
@@ -272,7 +298,7 @@ export function BillingPanel({
                   Summary PDF{" "}
                   {status.entitled
                     ? "(included)"
-                    : `(${ANNUAL_REPORT_PRICE}/year)`}
+                    : salesOpen ? `(${ANNUAL_REPORT_PRICE}/year)` : ""}
                 </Link>
               </>
             )}
@@ -402,7 +428,7 @@ export function BillingPanel({
           {destination ? `Back to ${destination.year} report` : "View reports"}
         </Link>
       </div>
-      {!showPlanFirst && plan}
+      {!showPlanFirst && (salesOpen || status?.entitled) && plan}
     </div>
   );
 }

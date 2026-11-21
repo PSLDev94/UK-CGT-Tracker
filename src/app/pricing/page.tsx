@@ -7,11 +7,14 @@ import { PublicNav } from "@/components/public-nav";
 import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
 import { publicBillingMode } from "@/server/public-site";
 
-export const metadata: Metadata = {
-  title: `Pricing | ${ANNUAL_REPORT_PRICE} per year`,
-  description:
-    "Compare free share-gain calculations and CSV evidence with the £49 annual PDF subscription.",
-};
+export function generateMetadata(): Metadata {
+  if (publicBillingMode() === "unavailable") return {
+    title: "Free workspace",
+    description: "Import broker trades, calculate share gains and losses, and export your calculation evidence for free.",
+  };
+  return { title: `Pricing | ${ANNUAL_REPORT_PRICE} per year`,
+    description: "Compare free share-gain calculations and CSV evidence with the £49 annual PDF subscription." };
+}
 
 export default async function PricingPage() {
   const mode = publicBillingMode();
@@ -28,17 +31,17 @@ export default async function PricingPage() {
             Simple pricing
           </h1>
           <p className={styles.intro}>
-            Import and calculate for free. Download PDF reports for {ANNUAL_REPORT_PRICE} per year.
+            {mode === "unavailable" ? "Import your trades, calculate gains and losses, and download CSV evidence for free."
+              : <>Import and calculate for free. Download PDF reports for {ANNUAL_REPORT_PRICE} per year.</>}
           </p>
         </div>
         <ReportPricing mode={mode} />
         <p className={styles.meta}>
-          The subscription renews annually until cancelled.{" "}
+          {mode !== "unavailable" && "The subscription renews annually until cancelled. "}
           {mode === "preview" && "Checkout uses Stripe test payments in this preview. "}
           {mode === "live" && "Stripe handles payments and subscription management. "}
-          {mode === "unavailable" && "New subscriptions are currently unavailable. "}
-          PDF access covers reports on
-          the records you supply. Arrange independent tax advice separately if you need it.
+          {mode === "unavailable" ? "Calculations cover the trading records you supply." : "PDF access covers reports on the records you supply."}
+          {" "}Arrange independent tax advice separately if you need it.
           {" "}<Link className="text-blue-700 underline" href="/terms">Read the service terms</Link>.
         </p>
       </main>

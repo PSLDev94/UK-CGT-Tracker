@@ -11,6 +11,7 @@ import { WorkspaceMasthead } from "./workspace-masthead";
 import styles from "./workspace-records.module.css";
 import { authApi } from "./api";
 import { DashboardShell } from "./dashboard-shell";
+import { useWorkspaceBillingEnabled } from "./public-account";
 import { LeaveDialog, useNavigationGuard } from "./navigation-guard";
 import {
   Button,
@@ -57,6 +58,7 @@ function SettingsEditor({
   sessionId?: string;
   guard: RefObject<SignOutGuard | null>;
 }) {
+  const billingEnabled = useWorkspaceBillingEnabled();
   const [editedName, setEditedName] = useState<string | null>(() => {
     if (!profileDraft || !sessionId || profileDraft.session !== sessionId)
       return null;
@@ -228,18 +230,17 @@ function SettingsEditor({
       </section>
       <section className={styles.settingsSection}>
         <h2>Subscription</h2>
-        <p>View your plan, checkout status and Stripe customer portal.</p>
-        <Link href="/billing" className="button primary">
-          Manage subscription
-        </Link>
+        {billingEnabled ? <>
+          <p>View your plan, checkout status and Stripe customer portal.</p>
+          <Link href="/billing" className="button primary">Manage subscription</Link>
+        </> : <p>New PDF subscriptions are currently closed. You can download your free CSV evidence in <Link href="/dashboard/reports" className="underline">Reports</Link>.</p>}
       </section>
       <section className={styles.settingsSection}>
         <h2>Account data and deletion</h2>
         <p>
           Reverse individual imports from Import history. Permanent data
           deletion requests are handled by support after verifying account
-          ownership and any record-retention requirements. Subscription
-          cancellation is separate.
+          ownership and any record-retention requirements.{billingEnabled && " Subscription cancellation is separate."}
         </p>
         <Link
           className="button secondary"

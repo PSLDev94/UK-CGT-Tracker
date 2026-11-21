@@ -42,18 +42,24 @@ export function ReportPricing({
         },
       ].map((plan) => (
         <section key={plan.name} className={styles.offer}>
-          <Heading className={styles.subheading}>{plan.name}</Heading>
-          <p className={styles.offerPrice}>
-            {plan.amount}
-            {plan.paid && <span> / year</span>}
-          </p>
-          <ul>
-            {plan.features.map((item) => (
-              <li key={item}>
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
+          <Heading className={styles.subheading}>{plan.paid && mode === "unavailable" ? "Sample PDF reports" : plan.name}</Heading>
+          {plan.paid && mode === "unavailable" ? (
+            <p>New PDF subscriptions are currently unavailable.</p>
+          ) : (
+            <>
+              <p className={styles.offerPrice}>
+                {plan.amount}
+                {plan.paid && <span> / year</span>}
+              </p>
+              <ul>
+                {plan.features.map((item) => (
+                  <li key={item}>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
           {plan.paid && (
             <div className="mb-6 text-sm text-gray-700">
               <p>See what each report includes using synthetic trades.</p>
@@ -73,13 +79,12 @@ export function ReportPricing({
               </div>
             </div>
           )}
-          <Link
-            className={plan.paid ? styles.action : styles.actionSecondary}
-            href={plan.href}
-          >
-            {plan.action}
-          </Link>
-          {plan.paid && !signedIn && (
+          {(!plan.paid || mode !== "unavailable") && (
+            <Link className={plan.paid ? styles.action : styles.actionSecondary} href={plan.href}>
+              {plan.action}
+            </Link>
+          )}
+          {plan.paid && mode !== "unavailable" && !signedIn && (
             <Link
               className="mt-2 self-start py-2 text-sm text-blue-700 underline"
               href={authHref("/login", "/billing")}

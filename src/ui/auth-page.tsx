@@ -5,6 +5,7 @@ import { samplePreview } from "@/domain/reports/sample-view";
 import styles from "./auth-frame.module.css";
 import { redirect } from "next/navigation";
 import { hasPublicSession } from "@/server/public-session";
+import { publicBillingMode, workspaceBillingEnabled } from "@/server/public-site";
 import { authBackLink, safeReturnPath } from "./return-path";
 
 export async function AuthPage({
@@ -18,17 +19,20 @@ export async function AuthPage({
   token?: string;
   verificationNotice?: "failed" | "complete";
 }) {
+  const requested = safeReturnPath(next);
+  const destination = requested.split("?")[0] === "/billing" && publicBillingMode() === "unavailable" &&
+    (mode === "sign-up" || !workspaceBillingEnabled()) ? "/dashboard" : requested;
   if (
     (mode === "sign-in" || mode === "sign-up") &&
     !verificationNotice &&
     (await hasPublicSession())
   ) {
-    redirect(safeReturnPath(next));
+    redirect(destination);
   }
   return (
-    <AuthFrame back={authBackLink(safeReturnPath(next))} aside={mode === "sign-up" && <SampleStatement />}>
+    <AuthFrame back={authBackLink(destination)} aside={mode === "sign-up" && <SampleStatement />}>
       <AuthForm
-        nextPath={next}
+        nextPath={destination}
         mode={mode}
         token={token}
         verificationNotice={verificationNotice}

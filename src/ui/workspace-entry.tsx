@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AuthFrame } from "./auth-frame";
+import { useSubscriptionSalesOpen, useWorkspaceBillingEnabled } from "./public-account";
 import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
 import { authBackLink, authHref, brokerUploadDestination, safeReturnPath } from "./return-path";
 
@@ -10,7 +11,10 @@ export function WorkspaceEntry({
   next: string;
   message?: string;
 }) {
-  const destination = safeReturnPath(next);
+  const subscriptionsOpen = useSubscriptionSalesOpen();
+  const billingEnabled = useWorkspaceBillingEnabled();
+  const requested = safeReturnPath(next);
+  const destination = !billingEnabled && requested.split("?")[0] === "/billing" ? "/dashboard" : requested;
   const annualBilling = destination.split("?")[0] === "/billing";
   const broker = brokerUploadDestination(destination);
   return (
@@ -21,7 +25,7 @@ export function WorkspaceEntry({
         </h1>
         <p>
           {annualBilling
-            ? `The annual PDF plan is ${ANNUAL_REPORT_PRICE} per year. Sign in or create an account to continue to billing.`
+            ? subscriptionsOpen ? `The annual PDF plan is ${ANNUAL_REPORT_PRICE} per year. Sign in or create an account to continue to billing.` : "Sign in to manage your existing subscription."
             : broker
               ? `Sign in or create a free account to continue to your ${broker.name} CSV upload.`
               : "Sign in to open your personal portfolio, or create a free account to get started."}
@@ -36,7 +40,7 @@ export function WorkspaceEntry({
           </Link>
           <Link
             className="button secondary"
-            href={authHref("/signup", destination)}
+            href={authHref("/signup", annualBilling && !subscriptionsOpen ? "/dashboard" : destination)}
           >
             Create account
           </Link>

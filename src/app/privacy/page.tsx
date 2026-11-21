@@ -2,12 +2,13 @@ import styles from "@/components/public-pages.module.css";
 import Link from "next/link";
 import { PublicNav } from "@/components/public-nav";
 import { PublicFooter } from "@/components/public-footer";
-import { isProductionSite, productionTrader } from "@/server/public-site";
+import { isProductionSite, productionTrader, workspaceBillingEnabled } from "@/server/public-site";
 export const metadata = { title: "Privacy and your data" };
 
 export default function Privacy() {
   const production = isProductionSite();
   const trader = productionTrader();
+  const billing = workspaceBillingEnabled();
   return (
     <div className={styles.page}>
       <PublicNav />
@@ -46,20 +47,19 @@ export default function Privacy() {
           Your name, email, password hash and sessions support sign-in and
           account recovery. Broker account labels, imported transactions,
           supporting references and calculation snapshots let the application
-          calculate and explain share gains. Stripe manages payment details; CGT
-          Tracker stores billing references and subscription status, not card
-          numbers.
+          calculate and explain share gains.{" "}
+          {billing && "Stripe manages payment details; CGT Tracker stores billing references and subscription status, not card numbers."}
         </p>
         {production && (
           <p>
-            We use your account details, trades and subscription information to
+            We use your account details, trades{billing ? " and subscription information" : " and calculations"} to
             provide the service under our contract with you. Your broker data comes
-            from the files and supporting details you supply. Stripe sends billing
-            updates so we can grant or end paid access. We need these records to
+            from the files and supporting details you supply.{" "}
+            {billing && "Stripe sends billing updates so we can grant or end paid access. "}We need these records to
             provide the functions you request. We use security logs, support
             correspondence and abuse controls in our legitimate interests in keeping
             the service reliable, investigating faults and preventing misuse.
-            We keep billing records where required by accounting or tax law.
+            {billing && " We keep billing records where required by accounting or tax law."}
           </p>
         )}
         <h2 className="text-xl font-semibold text-gray-900">
@@ -88,7 +88,7 @@ export default function Privacy() {
         <p>
           {production ? (
             <>We use Railway to host the application and database, Resend for verification,
-              recovery and support emails, Stripe for payments and Cloudflare R2 for
+              recovery and support emails{billing && ", Stripe for payments"} and Cloudflare R2 for
               encrypted backups in a private EU bucket. Our retention schedule makes
               archives eligible for automatic deletion after 14 days. We reapply
               completed deletion requests before reopening a restored database.</>
@@ -99,7 +99,7 @@ export default function Privacy() {
               An archive expires after 14 days. If we restore a backup, we reapply
               completed deletion requests before reopening access.</>
           )}{" "}
-          Essential cookies keep your session secure and return you to the selected report after checkout.
+          Essential cookies keep your session secure{billing && " and return you to the selected report after checkout"}.
           We count completed steps such as file reviews, repairs and report downloads in our service logs.
           These usage events contain the step and, for file reviews and repairs, a broker category.
           They omit names, account identifiers, amounts and file contents. The application
@@ -114,8 +114,8 @@ export default function Privacy() {
             for UK data. Ask support for a copy of the safeguards relevant to your data.
             See the terms for{" "}
             <a className="underline" href="https://railway.com/legal/dpa">Railway</a>,{" "}
-            <a className="underline" href="https://resend.com/legal/dpa">Resend</a>,{" "}
-            <a className="underline" href="https://stripe.com/gb/legal/dpa">Stripe</a> and{" "}
+            <a className="underline" href="https://resend.com/legal/dpa">Resend</a>
+            {billing && <>, <a className="underline" href="https://stripe.com/gb/legal/dpa">Stripe</a></>} and{" "}
             <a className="underline" href="https://www.cloudflare.com/cloudflare-customer-dpa/">Cloudflare</a>.
           </p>
         )}
@@ -132,8 +132,9 @@ export default function Privacy() {
           You can change your name and password in Settings, reverse incorrect
           imports, and download calculation evidence from Reports. Contact
           support for a copy of your other account information, corrections, or
-          an account-deletion request. You can also ask for a portable copy or for us to restrict processing where those rights apply. We verify ownership before providing a copy or deleting personal records. We explain any information that must be retained for billing or legal reasons. Deletion is reviewed separately from
-          subscription cancellation and is not immediate.
+          an account-deletion request. You can also ask for a portable copy or for us to restrict processing where those rights apply. We verify ownership before providing a copy or deleting personal records. {billing
+            ? "We explain any information that must be retained for billing or legal reasons. Deletion is reviewed separately from subscription cancellation and is not immediate."
+            : "We explain any information that must be retained for legal reasons."}
         </p>
         <h2 className="text-xl font-semibold text-gray-900">Your right to object</h2>
         <p>

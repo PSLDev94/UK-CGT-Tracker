@@ -1,6 +1,7 @@
 import styles from "@/components/public-pages.module.css";
 import Link from "next/link";
 import { Metadata } from "next";
+import { publicBillingMode } from "@/server/public-site";
 import { GuideLayout } from "@/components/guide-layout";
 
 export const metadata: Metadata = {
@@ -203,7 +204,7 @@ export default function Trading212CGTPage() {
             same-day and 30-day matching
           </Link>
           , Section 104 pooling, and calculation evidence for supported layouts.
-          The CSV and PDF evidence show gains and losses on the trades you imported.
+          {publicBillingMode() === "unavailable" ? "The CSV shows" : "The CSV and PDF evidence show"} gains and losses on the trades you imported.
         </p>
       </div>
     </GuideLayout>

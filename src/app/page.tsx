@@ -6,6 +6,7 @@ import { BROKERS, IMPORT_PATH_LABEL } from "@/domain/imports/brokers";
 import { ANNUAL_REPORT_PRICE } from "@/domain/reports/access";
 import { samplePreview } from "@/domain/reports/sample-view";
 import { hasPublicSession } from "@/server/public-session";
+import { publicBillingMode } from "@/server/public-site";
 import { HomeMenu, TradeSelector } from "@/ui/trade-records";
 import styles from "@/ui/trade-records.module.css";
 
@@ -103,11 +104,10 @@ export default async function LandingPage() {
               <h2 id="year-title">All three sales, one tax year.</h2>
               <p>
                 The annual statement brings the trades together and includes the
-                records behind each match. Printable reports are included in{" "}
-                <Link href="/pricing">
-                  the {ANNUAL_REPORT_PRICE} annual plan
-                </Link>
-                .
+                records behind each match.{" "}
+                {publicBillingMode() === "unavailable"
+                  ? "Explore the sample PDFs below. In your workspace, you can download your own matching records as a free CSV."
+                  : <>Printable reports are included in <Link href="/pricing">the {ANNUAL_REPORT_PRICE} annual plan</Link>.</>}
               </p>
               <div className={styles.yearLinks}>
                 <a

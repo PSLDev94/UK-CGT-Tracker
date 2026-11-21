@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { proxy } from "../src/proxy";
-import { productionOrigin, productionTrader, publicBillingMode } from "../src/server/public-site";
+import { productionOrigin, productionTrader, publicBillingMode, workspaceBillingEnabled } from "../src/server/public-site";
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -49,5 +49,17 @@ describe("production public site", () => {
     vi.stubEnv("STRIPE_MODE", "live");
     vi.stubEnv("APP_ORIGIN", "https://preview.up.railway.app");
     expect(publicBillingMode()).toBe("unavailable");
+  });
+  it("keeps an intentional free launch distinct from blocking new sales on an existing paid service", () => {
+    production();
+    vi.stubEnv("TRADER_GEOGRAPHIC_ADDRESS", "");
+    expect(publicBillingMode()).toBe("unavailable");
+    expect(workspaceBillingEnabled()).toBe(true);
+    vi.stubEnv("BILLING_ENABLED", "false");
+    expect(workspaceBillingEnabled()).toBe(false);
+    expect(publicBillingMode()).toBe("unavailable");
+    vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", "staging");
+    expect(workspaceBillingEnabled()).toBe(true);
+    expect(publicBillingMode()).toBe("preview");
   });
 });

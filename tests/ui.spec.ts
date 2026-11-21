@@ -1086,15 +1086,8 @@ test("restored tools handle band boundaries, oversells and same-day matching", a
   ).toBeVisible();
 });
 
-test("restored reports export saved evidence and settings retain edits after failure", async ({
-  page,
-}) => {
+async function savedReportWorkspace(page: Page) {
   const { state } = await mockWorkspace(page, { account: true });
-  let paid = true;
-  await page.route("**/api/v2/billing", route => route.fulfill({json:{
-    status: paid ? "active" : "none", entitled: paid, needsReview: false, canManage: paid,
-    periodEnd: null, cancelAtPeriodEnd: false, testMode: true,
-  }}));
   const result = calculateGains(
     tradesFromReview(
       reviewCsv(csv, {
@@ -1127,6 +1120,71 @@ test("restored reports export saved evidence and settings retain edits after fai
           : Buffer.from(await reportPdf(snapshot, input.kind === "evidence")),
     });
   });
+  return result;
+}
+
+test("closed PDF sales keep the saved statement and CSV available without a billing connection", async ({ page }) => {
+  const result = await savedReportWorkspace(page);
+  let billingRequests = 0;
+  await page.route("**/api/v2/billing", route => {
+    billingRequests++;
+    return route.abort();
+  });
+  const origin = "http://127.0.0.1:33201";
+  await page.goto(origin + "/billing?year=2024-25&format=summary");
+  await expect(page.getByText("New PDF subscriptions are currently closed.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /checkout|refresh billing status/i })).toHaveCount(0);
+  await page.getByRole("link", { name: "View 2024-25 reports" }).click();
+  await expect(page.getByRole("heading", { name: /Annual statement/ })).toBeVisible();
+  await expect(page.getByText("New PDF subscriptions are currently closed.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /retry PDF access|download .* PDF/i })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /get .* PDF/i })).toHaveCount(0);
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download CSV evidence" }).click();
+  const downloaded = await downloading;
+  expect(downloaded.suggestedFilename()).toBe("CGT-csv-2024-25.csv");
+  expect(readFileSync((await downloaded.path())!, "utf8")).toContain(result.disposals[0]!.securityId);
+  await page.goto(origin + "/tools/cgt-allowance-checker");
+  await page.getByLabel("Total gains for 2025–26").fill("10000");
+  await page.getByLabel("Total allowable losses for 2025–26").fill("1000");
+  await page.getByLabel("Taxable income after").fill("36700");
+  await expect(page.getByText("£1,380.00", { exact: true })).toBeVisible();
+  expect(billingRequests).toBe(0);
+});
+
+test("closed new sales preserve existing customers' PDFs and subscription management", async ({ page }) => {
+  await savedReportWorkspace(page);
+  let paid = true;
+  await page.route("**/api/v2/billing", route => route.fulfill({ json: {
+    status: paid ? "active" : "none", entitled: paid, canManage: paid, needsReview: false,
+    periodEnd: null, cancelAtPeriodEnd: false, testMode: false,
+  } }));
+  const origin = "http://127.0.0.1:33202";
+  await page.goto(origin + "/billing");
+  await expect(page.getByRole("button", { name: "Manage subscription" })).toBeVisible();
+  await page.goto(origin + "/dashboard/reports?year=2024-25&format=evidence");
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download evidence PDF" }).click();
+  const pdf = await downloading;
+  expect(readFileSync((await pdf.path())!).subarray(0, 5).toString()).toBe("%PDF-");
+  paid = false;
+  await page.goto(origin + "/dashboard/reports?year=2024-25&format=evidence");
+  await expect(page.getByText("New PDF subscriptions are currently closed.")).toBeFocused();
+  await expect(page.getByRole("link", { name: /get .* PDF/i })).toHaveCount(0);
+  await page.goto(origin + "/billing");
+  await expect(page.getByRole("heading", { name: "No subscription" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /checkout/i })).toHaveCount(0);
+});
+
+test("restored reports export saved evidence and settings retain edits after failure", async ({
+  page,
+}) => {
+  const result = await savedReportWorkspace(page);
+  let paid = true;
+  await page.route("**/api/v2/billing", route => route.fulfill({json:{
+    status: paid ? "active" : "none", entitled: paid, needsReview: false, canManage: paid,
+    periodEnd: null, cancelAtPeriodEnd: false, testMode: true,
+  }}));
   await page.goto("/dashboard/reports");
   for (const name of ["Download summary PDF", "Download evidence PDF"]) {
     await expect(page.getByRole("button", { name, exact: true })).toBeInViewport();
